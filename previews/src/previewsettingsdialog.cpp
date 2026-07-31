@@ -9,9 +9,12 @@
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QScreen>
+#include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -23,6 +26,11 @@ PreviewSettingsDialog::PreviewSettingsDialog(PreviewManager *manager, QWidget *p
 {
     setWindowTitle(tr("Dock Preview — Configuración"));
     setMinimumWidth(460);
+    // Default size that fits every group on a typical screen, clamped so it never
+    // exceeds the monitor — the scroll area takes over from there.
+    QScreen *scr = QGuiApplication::primaryScreen();
+    const int availH = scr ? scr->availableGeometry().height() : 800;
+    resize(755, qMin(972, availH - 40));
 
     auto *layout = new QVBoxLayout(this);
 
@@ -47,7 +55,14 @@ PreviewSettingsDialog::PreviewSettingsDialog(PreviewManager *manager, QWidget *p
     m_controls = new QWidget(this);
     m_controlsLayout = new QVBoxLayout(m_controls);
     m_controlsLayout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(m_controls, 1);
+
+    // New groups are appended to m_controlsLayout, so the panel scrolls instead
+    // of growing past the screen; the monitor selector and the Close button stay
+    // pinned above and below the scroll area.
+    auto *scroll = new QScrollArea(this);
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(m_controls);
+    layout->addWidget(scroll, 1);
 
     buildControls();
 
