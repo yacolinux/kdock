@@ -27,6 +27,11 @@ class PreviewConfig : public QObject
     Q_PROPERTY(int stripThicknessPx READ stripThicknessPx NOTIFY stripThicknessChanged)
     Q_PROPERTY(int cardWidthPx READ cardWidthPx NOTIFY stripThicknessChanged)
     Q_PROPERTY(int pad READ pad CONSTANT)
+    // Auto-fit: when many windows are open, the cards shrink so they all fit in
+    // the strip's length instead of overflowing into a scroll. fitMinCardWidth
+    // is the floor the shrink stops at (the strip thickness itself never moves).
+    Q_PROPERTY(bool autoFitCards READ autoFitCards WRITE setAutoFitCards NOTIFY autoFitCardsChanged)
+    Q_PROPERTY(int fitMinCardWidth READ fitMinCardWidth WRITE setFitMinCardWidth NOTIFY fitMinCardWidthChanged)
     Q_PROPERTY(int stripLength READ stripLength WRITE setStripLength NOTIFY stripLengthChanged)
     Q_PROPERTY(int screenMargin READ screenMargin WRITE setScreenMargin NOTIFY screenMarginChanged)
     Q_PROPERTY(bool reserveSpace READ reserveSpace WRITE setReserveSpace NOTIFY reserveSpaceChanged)
@@ -98,6 +103,8 @@ public:
     // The card fills the strip minus the padding on both sides.
     int cardWidthPx() const { return qMax(32, m_stripThickness - 2 * pad()); }
     int pad() const { return 8; }
+    bool autoFitCards() const { return m_autoFitCards; }
+    int fitMinCardWidth() const { return m_fitMinCardWidth; }
 
     // Length along the anchored edge, as a percentage of the screen edge.
     // 0 = stretch the whole edge (panel mode).
@@ -127,6 +134,8 @@ public:
     void setAutohide(bool autohide);
     void setShowTitles(bool show);
     void setCardSpacing(int spacing);
+    void setAutoFitCards(bool fit);
+    void setFitMinCardWidth(int px);
     void setCaptureMode(int mode);
     void setRefreshInterval(int ms);
     void setActiveRefreshInterval(int ms);
@@ -147,6 +156,8 @@ signals:
     void autohideChanged();
     void showTitlesChanged();
     void cardSpacingChanged();
+    void autoFitCardsChanged();
+    void fitMinCardWidthChanged();
     void captureModeChanged();
     void refreshIntervalChanged();
     void activeRefreshIntervalChanged();
@@ -171,6 +182,8 @@ private:
     bool m_autohide = false;
     bool m_showTitles = true;
     int m_cardSpacing = 10;
+    bool m_autoFitCards = true;
+    int m_fitMinCardWidth = 96;
     int m_captureMode = OnceOnFocus;
     int m_refreshInterval = 4000;
     int m_activeRefreshInterval = 1500;

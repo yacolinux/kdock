@@ -60,6 +60,8 @@ private:
     QCheckBox *m_autohide = nullptr;
     QCheckBox *m_showTitles = nullptr;
     QSpinBox *m_cardSpacing = nullptr;
+    QCheckBox *m_autoFit = nullptr;
+    QSpinBox *m_fitMin = nullptr;
     QComboBox *m_captureMode = nullptr;
     QSpinBox *m_refresh = nullptr;
     QSpinBox *m_activeRefresh = nullptr;

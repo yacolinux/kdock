@@ -116,6 +116,9 @@ void PreviewConfig::load()
     m_autohide = m_settings.value(QStringLiteral("autohide"), false).toBool();
     m_showTitles = m_settings.value(QStringLiteral("showTitles"), true).toBool();
     m_cardSpacing = qBound(0, m_settings.value(QStringLiteral("cardSpacing"), 10).toInt(), 60);
+    m_autoFitCards = m_settings.value(QStringLiteral("autoFitCards"), true).toBool();
+    m_fitMinCardWidth =
+        qBound(48, m_settings.value(QStringLiteral("fitMinCardWidth"), 96).toInt(), 800);
     m_captureMode = qBound(int(OnceOnFocus),
                            m_settings.value(QStringLiteral("captureMode"), OnceOnFocus).toInt(),
                            int(Periodic));
@@ -246,6 +249,25 @@ void PreviewConfig::setCardSpacing(int spacing)
     m_cardSpacing = spacing;
     m_settings.setValue(QStringLiteral("cardSpacing"), spacing);
     emit cardSpacingChanged();
+}
+
+void PreviewConfig::setAutoFitCards(bool fit)
+{
+    if (m_autoFitCards == fit)
+        return;
+    m_autoFitCards = fit;
+    m_settings.setValue(QStringLiteral("autoFitCards"), fit);
+    emit autoFitCardsChanged();
+}
+
+void PreviewConfig::setFitMinCardWidth(int px)
+{
+    px = qBound(48, px, 800);
+    if (m_fitMinCardWidth == px)
+        return;
+    m_fitMinCardWidth = px;
+    m_settings.setValue(QStringLiteral("fitMinCardWidth"), px);
+    emit fitMinCardWidthChanged();
 }
 
 void PreviewConfig::setCaptureMode(int mode)

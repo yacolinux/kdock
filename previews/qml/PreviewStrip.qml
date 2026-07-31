@@ -102,12 +102,39 @@ Item {
             model: previews
             // Cards are large: flicking with a wheel or a drag both make sense.
             boundsBehavior: Flickable.StopAtBounds
+            // Faster scrolling: one wheel notch moves ~2-3 cards (Qt's default
+            // ~100 px is under half a card), drags glide further and a hard
+            // flick goes faster.
+            mouseWheelVelocity: 600
+            flickDeceleration: 800
+            maximumFlickVelocity: 6000
 
-            delegate: PreviewCard {
-                crossSize: config.cardWidthPx
-                horizontal: root.horizontal
-                showTitle: config.showTitles
+            delegate: Item {
+                // The cross axis fills the viewport so a card shrunk by the
+                // auto-fit stays centered in the strip instead of hugging an
+                // edge; the card's own extent drives the main axis.
+                height: root.horizontal ? list.height : card.height
+                width: root.horizontal ? card.width : list.width
+
+                PreviewCard {
+                    id: card
+                    anchors.centerIn: parent
+                    crossSize: Math.round(config.cardWidthPx * previews.cardScale)
+                    horizontal: root.horizontal
+                    showTitle: config.showTitles
+                }
             }
+
+            // The auto-fit shrinks the cards until their total main-axis extent
+            // fits in the viewport, so it needs to know how much room there is.
+            function reportAvailable() {
+                if (previews)
+                    previews.setAvailableLength(root.horizontal ? width : height)
+            }
+
+            onWidthChanged: reportAvailable()
+            onHeightChanged: reportAvailable()
+            onOrientationChanged: reportAvailable()
 
             // Only the cards actually on screen are worth capturing; the model's
             // scheduler skips everything outside this range.
@@ -136,7 +163,10 @@ Item {
             onCountChanged: reportRange()
             onWidthChanged: reportRange()
             onHeightChanged: reportRange()
-            Component.onCompleted: reportRange()
+            Component.onCompleted: {
+                reportRange()
+                reportAvailable()
+            }
         }
 
         // Nothing open: say so instead of showing an empty rectangle.

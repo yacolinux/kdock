@@ -25,6 +25,11 @@ class PreviewModel : public QAbstractListModel
 {
     Q_OBJECT
     Q_PROPERTY(int count READ rowCount NOTIFY countChanged)
+    // Auto-fit: 1.0 = cards at the configured size; < 1.0 when so many windows
+    // are open that they no longer fit in the strip's length and the cards
+    // shrink so they all do (PreviewStrip multiplies crossSize by this). Driven
+    // by PreviewConfig::autoFitCards / fitMinCardWidth.
+    Q_PROPERTY(qreal cardScale READ cardScale NOTIFY cardScaleChanged)
 public:
     enum Roles {
         UuidRole = Qt::UserRole + 1,
@@ -49,6 +54,8 @@ public:
     QVariant data(const QModelIndex &index, int role) const override;
     QHash<int, QByteArray> roleNames() const override;
 
+    qreal cardScale() const { return m_cardScale; }
+
     Q_INVOKABLE void activate(int row);
     Q_INVOKABLE void closeWindow(int row);
     Q_INVOKABLE void toggleMinimize(int row);
@@ -60,6 +67,12 @@ public:
     // Rows the ListView currently has on screen (inclusive). Rows outside the
     // range are never captured. Called from QML on scroll.
     Q_INVOKABLE void setVisibleRange(int first, int last);
+
+    // The strip's usable length along its main axis, in px (the ListView's own
+    // width/height, already excluding the padding). The auto-fit shrinks the
+    // cards until their total extent fits inside this. Reported from QML on any
+    // size or orientation change.
+    Q_INVOKABLE void setAvailableLength(int px);
 
     // Whole strip hidden by autohide: no captures at all while it is.
     void setStripVisible(bool visible);
@@ -75,6 +88,7 @@ public slots:
 
 signals:
     void countChanged();
+    void cardScaleChanged();
 
 private:
     struct Row {
@@ -100,6 +114,16 @@ private:
     void tick();
     void restartTimer();
 
+    // ---- Auto-fit ----------------------------------------------------------
+    // Re-derive m_cardScale from the current rows, the config and the reported
+    // available length. Called whenever any of its inputs change; cheap enough
+    // to run inside sync().
+    void recomputeCardScale();
+    // Total main-axis extent the cards would occupy at `crossSize` (the card's
+    // cross-axis size), using the same floors PreviewCard.qml applies so the
+    // computed fit is exact, not an approximation.
+    int mainAxisNeeded(int crossSize) const;
+
     PreviewConfig *m_config;
     KWinWindows *m_windows;
     VirtualDesktops *m_desktops;
@@ -113,4 +137,6 @@ private:
     int m_lastVisible = -1; // -1 = QML has not reported a range yet: assume all
     bool m_stripVisible = true;
     qreal m_targetScale = 1.0;
+    qreal m_cardScale = 1.0;
+    int m_availableLength = 0; // px; 0 until QML reports the strip's length
 };

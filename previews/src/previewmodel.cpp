@@ -46,6 +46,19 @@ PreviewModel::PreviewModel(PreviewConfig *config, KWinWindows *windows,
         // stopped (and back).
         connect(m_config, &PreviewConfig::captureModeChanged, this,
                 &PreviewModel::restartTimer);
+        // Anything that changes the auto-fit formula or its floor re-derives
+        // the card scale (the row list does too, inside sync()).
+        connect(m_config, &PreviewConfig::edgeChanged, this, &PreviewModel::recomputeCardScale);
+        connect(m_config, &PreviewConfig::stripThicknessChanged, this,
+                &PreviewModel::recomputeCardScale);
+        connect(m_config, &PreviewConfig::cardSpacingChanged, this,
+                &PreviewModel::recomputeCardScale);
+        connect(m_config, &PreviewConfig::showTitlesChanged, this,
+                &PreviewModel::recomputeCardScale);
+        connect(m_config, &PreviewConfig::autoFitCardsChanged, this,
+                &PreviewModel::recomputeCardScale);
+        connect(m_config, &PreviewConfig::fitMinCardWidthChanged, this,
+                &PreviewModel::recomputeCardScale);
     }
     if (m_desktops)
         connect(m_desktops, &VirtualDesktops::currentChanged, this, &PreviewModel::sync);
@@ -266,6 +279,8 @@ void PreviewModel::sync()
 
     if (m_rows.size() != before)
         emit countChanged();
+
+    recomputeCardScale();
 }
 
 void PreviewModel::activate(int row)
@@ -300,7 +315,10 @@ void PreviewModel::toggleMinimize(int row)
 QSize PreviewModel::captureTarget(int row) const
 {
     Q_UNUSED(row);
-    const int cardW = m_config ? m_config->cardWidthPx() : 240;
+    // Scaled with the card: with auto-fit shrinking the cards down to fit many
+    // windows, the stored thumbnails stay at (roughly) the size they are drawn,
+    // instead of every card caching a full-size capture.
+    const int cardW = m_config ? qRound(m_config->cardWidthPx() * m_cardScale) : 240;
     const int px = qMax(32, qRound(cardW * m_targetScale));
     // A box, not an exact size: KeepAspectRatio fits the window inside it, so
     // only the *cross* axis of the strip really constrains the result, and the
@@ -385,6 +403,74 @@ void PreviewModel::setStripVisible(bool visible)
 void PreviewModel::setTargetScale(qreal scale)
 {
     m_targetScale = scale > 0 ? scale : 1.0;
+}
+
+void PreviewModel::setAvailableLength(int px)
+{
+    if (m_availableLength == px)
+        return;
+    m_availableLength = px;
+    recomputeCardScale();
+}
+
+void PreviewModel::recomputeCardScale()
+{
+    const qreal previous = m_cardScale;
+    m_cardScale = 1.0;
+
+    // Few windows, no fit, or no length reported yet: full size (the strip
+    // scrolls, exactly like before the feature existed).
+    if (m_config && m_config->autoFitCards() && m_rows.size() > 1
+        && m_availableLength > 0) {
+        const int base = m_config->cardWidthPx();
+        int cross = base;
+        // Fixed-point fit, the same shape as Dock.qml's fitScale: the needed
+        // length is affine in `cross` (each card's main axis = aspect * cross
+        // plus small floors), so `cross * avail / need` converges in a few
+        // passes. A little under-shoot (×0.99) keeps the last card from kissing
+        // the edge.
+        for (int i = 0; i < 10; ++i) {
+            const int need = mainAxisNeeded(cross);
+            if (need <= m_availableLength)
+                break;
+            cross = qMax(1, int(qreal(cross) * m_availableLength * 0.99 / need));
+        }
+        cross = qBound(m_config->fitMinCardWidth(), cross, base);
+        m_cardScale = qreal(cross) / base;
+    }
+
+    if (!qFuzzyCompare(m_cardScale, previous))
+        emit cardScaleChanged();
+}
+
+int PreviewModel::mainAxisNeeded(int crossSize) const
+{
+    // Mirror of PreviewCard.qml's geometry, floors included: on a horizontal
+    // strip the main axis is the width = (crossSize - titleHeight) * aspect
+    // (32 px floor); on a vertical one it is the height = crossSize / aspect +
+    // titleHeight (24 px floor, aspect floored at 0.2). The titleHeight is the
+    // same 16 px the card hardcodes.
+    const bool horizontal = m_config
+        && (m_config->edge() == PreviewConfig::Bottom || m_config->edge() == PreviewConfig::Top);
+    const int titleH = m_config && m_config->showTitles() ? 16 : 0;
+
+    int total = 0;
+    for (const Row &row : m_rows) {
+        KWinWindow *w = row.window;
+        qreal aspect = qreal(16) / qreal(9); // nothing reported yet
+        if (w) {
+            const QRect g = w->geometry();
+            if (g.width() > 0 && g.height() > 0)
+                aspect = qreal(g.width()) / qreal(g.height());
+        }
+        if (horizontal)
+            total += qMax(32, qRound((crossSize - titleH) * aspect));
+        else
+            total += qMax(24, qRound(crossSize / qMax(0.2, aspect))) + titleH;
+    }
+    if (m_config && m_rows.size() > 1)
+        total += (m_rows.size() - 1) * m_config->cardSpacing();
+    return total;
 }
 
 void PreviewModel::restartTimer()

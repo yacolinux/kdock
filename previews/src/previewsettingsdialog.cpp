@@ -223,6 +223,25 @@ void PreviewSettingsDialog::buildControls()
         updateThumbControls();
     });
 
+    m_autoFit = new QCheckBox(
+        tr("Ajustar el tamaño de las tarjetas al contenido (con muchas ventanas se achican)"),
+        thumbs);
+    thumbsForm->addRow(QString(), m_autoFit);
+    connect(m_autoFit, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_config)
+            m_config->setAutoFitCards(on);
+        updateThumbControls();
+    });
+
+    m_fitMin = new QSpinBox(thumbs);
+    m_fitMin->setRange(48, 800);
+    m_fitMin->setSuffix(tr(" px"));
+    thumbsForm->addRow(tr("Tamaño mínimo de tarjeta:"), m_fitMin);
+    connect(m_fitMin, &QSpinBox::valueChanged, this, [this](int v) {
+        if (m_config)
+            m_config->setFitMinCardWidth(v);
+    });
+
     m_refresh = new QSpinBox(thumbs);
     m_refresh->setRange(500, 60000);
     m_refresh->setSingleStep(500);
@@ -286,7 +305,8 @@ void PreviewSettingsDialog::selectScreen(const QString &screenName)
         QSignalBlocker(m_autohide),           QSignalBlocker(m_refresh),
         QSignalBlocker(m_activeRefresh),      QSignalBlocker(m_includeMinimized),
         QSignalBlocker(m_currentDesktopOnly), QSignalBlocker(m_thisMonitorOnly),
-        QSignalBlocker(m_captureMode),
+        QSignalBlocker(m_captureMode),        QSignalBlocker(m_autoFit),
+        QSignalBlocker(m_fitMin),
     };
     Q_UNUSED(blockers);
 
@@ -302,6 +322,8 @@ void PreviewSettingsDialog::selectScreen(const QString &screenName)
     m_reserveSpace->setChecked(m_config->reserveSpace());
     m_autohide->setChecked(m_config->autohide());
     m_captureMode->setCurrentIndex(m_config->captureMode());
+    m_autoFit->setChecked(m_config->autoFitCards());
+    m_fitMin->setValue(m_config->fitMinCardWidth());
     m_refresh->setValue(m_config->refreshInterval());
     m_activeRefresh->setValue(m_config->activeRefreshInterval());
     m_includeMinimized->setChecked(m_config->includeMinimized());
@@ -316,6 +338,8 @@ void PreviewSettingsDialog::updateThumbControls()
     const bool periodic = m_config && m_config->captureMode() == PreviewConfig::Periodic;
     m_refresh->setEnabled(periodic);
     m_activeRefresh->setEnabled(periodic);
+    // The minimum size only means something while auto-fit is on.
+    m_fitMin->setEnabled(m_autoFit && m_autoFit->isChecked());
 }
 
 void PreviewSettingsDialog::updateColorButton()

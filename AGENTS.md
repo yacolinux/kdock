@@ -322,6 +322,30 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
   de un bug de render si no lo dice.
 - **Ventanas minimizadas**: se capturan igual, con contenido completo (verificado
   2026-07-30); KWin las re-renderiza aunque no estén visibles.
+- **Scroll rápido**: el `ListView` de la tira usa `mouseWheelVelocity: 600` (un notch de
+  rueda ≈ 2-3 tarjetas; el default de Qt ~100 px es media tarjeta), `flickDeceleration: 800`
+  y `maximumFlickVelocity: 6000` (más inercia y velocidad al soltar un arrastre).
+- **Auto-fit de tarjetas** (`config.autoFitCards`, default on, + `config.fitMinCardWidth`,
+  default 96 px): con muchas ventanas las tarjetas se achican para entrar en el largo de la
+  tira en vez de desbordar a scroll, y vuelven al tamaño configurado al quedar pocas. El
+  **grosor de la tira y la zona exclusiva no se mueven** (solo se achican las tarjetas; quedan
+  centradas en la tira — el delegate es un wrapper del tamaño del viewport con `anchors.centerIn`).
+  - La escala la calcula **`PreviewModel::cardScale`** (Q_PROPERTY qreal, 1.0 = tamaño
+    configurado), no el QML: el modelo conoce las filas y sus `aspect`. El largo útil lo
+    reporta el QML con `previews.setAvailableLength(px)` (el width/height del `ListView`,
+    ya sin padding) desde `onWidthChanged`/`onHeightChanged`/`onOrientationChanged`. Sin
+    bucle: el largo disponible no depende del tamaño de tarjeta.
+  - `recomputeCardScale()` ajusta `cross` por iteraciones (≤10, factor `avail/need × 0.99`
+    como el `fitScale` del dock) hasta que `mainAxisNeeded(cross) ≤ available`, acotado a
+    `[fitMinCardWidth, cardWidthPx]`. `mainAxisNeeded()` replica **exactamente** la
+    geometría de `PreviewCard.qml` (pisos de 32/24 px, `aspect` real, título 16 px,
+    `cardSpacing`), para que el fit sea exacto y no aproximado.
+  - Se recalcula en `sync()` (filas/geometría) y ante cambios de `edge`/`stripThickness`/
+    `cardSpacing`/`showTitles`/`autoFitCards`/`fitMinCardWidth`. `captureTarget()` usa el
+    tamaño escalado ⇒ con muchas ventanas las miniaturas cacheadas son más chicas (menos RAM).
+  - En el panel: checkbox "Ajustar el tamaño de las tarjetas al contenido" + spinbox
+    "Tamaño mínimo de tarjeta" (habilitado solo con el checkbox), en el grupo Miniaturas.
+
 - **Fuente de ventanas propia** (`previews/src/kwinwindows.cpp`), KWin-only, en vez de
   generalizar `WindowMonitor`/`PlasmaWindow`: necesita uuid + `geometry` + escritorios
   virtuales, y agregar el evento `geometry` al `PlasmaWindow` compartido haría que
@@ -471,8 +495,8 @@ still render and work; they just can't be toggled from the UI anymore).
 | `VolumeControl` | `volume` | `available`, `volume`, `muted`, `iconName`, `setVolume(v)`, `toggleMute()`, `refresh()` (called on hover to avoid acting on a stale cache) |
 | `AudioControl` | (no context property) | Mixer backend for Settings → Audio only: `available`, `maxVolume`; devices/streams via C++ API |
 | `IconProvider` | `image://icon/name@rev[@themeId]` | `theme.revision` appended to bust cache on theme change; optional `themeId` resolves that icon against another icon set (widget icons adapted to the dock color) |
-| `PreviewConfig` | `config.*` (binario `kdock-previews`) | Contexto de `PreviewStrip.qml`: `edge`, `alignment`, `opacity`, `panelColor`/`panelColorSet`/`panelPresetColors`/`resetPanelColor()`, `stripThickness` + read-only `stripThicknessPx`/`cardWidthPx`/`pad`, `stripLength` (0=todo el borde), `screenMargin`, `reserveSpace`, `autohide`, `showTitles`, `cardSpacing`, `captureMode` (0=una captura al primer foco/default, 1=periódico), `refreshInterval`, `activeRefreshInterval` (solo en modo 1), `includeMinimized`, `currentDesktopOnly`, `thisMonitorOnly`, `screenName` |
-| `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)` |
+| `PreviewConfig` | `config.*` (binario `kdock-previews`) | Contexto de `PreviewStrip.qml`: `edge`, `alignment`, `opacity`, `panelColor`/`panelColorSet`/`panelPresetColors`/`resetPanelColor()`, `stripThickness` + read-only `stripThicknessPx`/`cardWidthPx`/`pad`, `stripLength` (0=todo el borde), `screenMargin`, `reserveSpace`, `autohide`, `showTitles`, `cardSpacing`, `autoFitCards`, `fitMinCardWidth`, `captureMode` (0=una captura al primer foco/default, 1=periódico), `refreshInterval`, `activeRefreshInterval` (solo en modo 1), `includeMinimized`, `currentDesktopOnly`, `thisMonitorOnly`, `screenName` |
+| `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; read-only `cardScale` (auto-fit); `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)`, `setAvailableLength(px)` (auto-fit) |
 | `PreviewWindow` | `previewWindow` | `setHidden(bool)`, `openSettings()`, `restart()`, `quit()` |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
