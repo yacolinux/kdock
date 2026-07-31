@@ -91,6 +91,8 @@ propio multimonitor; corre *junto* al dock, que solo lo prende, lo apaga y le ab
 desde *Configuración → Previews*. Usa `org.kde.KWin.ScreenShot2`, así que es **solo para
 KWin**.
 
+- **Clic en una tarjeta** = toggle de foco como una barra de tareas: restaura y enfoca la
+  ventana, y un segundo clic sobre la que ya está al frente la minimiza. Clic medio = cerrar.
 - **Auto-ajuste de tarjetas**: con muchas ventanas las tarjetas se encogen para entrar en el
   largo de la tira en vez de desbordar a scroll, y vuelven al tamaño configurado al cerrarlas
   (con un tamaño mínimo regulable).

@@ -287,7 +287,15 @@ void PreviewModel::activate(int row)
 {
     if (row < 0 || row >= m_rows.size())
         return;
-    if (KWinWindow *w = m_rows.at(row).window)
+    KWinWindow *w = m_rows.at(row).window;
+    if (!w)
+        return;
+    // Toggle-minimize like a taskbar button: a click on the window that is
+    // already in the foreground minimizes it instead of raising it again.
+    // activate() already unminimizes first, so a minimized window is restored.
+    if (w->active() && !w->minimized())
+        w->minimize();
+    else
         w->activate();
 }
 

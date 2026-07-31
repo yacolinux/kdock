@@ -256,6 +256,11 @@ contenido, clic para activarla. **No es parte de kdock**: es un segundo binario,
 propio árbol (`previews/`), su propia config y su propio multimonitor, que corre *junto* al
 dock. kdock solo lo prende, lo apaga y le abre su panel.
 
+- **Clic en una tarjeta** = toggle de foco como la barra de tareas
+  (`PreviewModel::activate`): si la ventana ya está en primer plano (y no minimizada), el
+  clic la **minimiza**; si está minimizada o detrás, la restaura y enfoca
+  (`KWinWindow::activate()` ya desminimiza primero). Clic medio = cerrar la ventana.
+
 - **Target aparte** (`previews/CMakeLists.txt`, incluido con `add_subdirectory(previews)`).
   Reusa sin modificar `src/layershell.{cpp,h}`, `src/desktopentry.{cpp,h}`,
   `src/iconprovider.{cpp,h}`, `src/theme.{cpp,h}` y `src/dockconfig.{cpp,h}`, listándolos en
