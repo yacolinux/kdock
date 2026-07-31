@@ -1,5 +1,9 @@
 # kdock
 
+![Ejemplo de configuración de Kdock, Kdock visible en borde superior](image.png)
+
+*Ejemplo de configuración de Kdock, Kdock visible en borde superior*
+
 **Dock y panel para escritorios Wayland**, escrito 100 % en Qt 6.
 
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
