@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=kdock
+Comment=Standalone Qt dock (Wayland layer-shell)
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock
+Icon=preferences-desktop-icons
+Categories=Utility;
+NoDisplay=true
+X-KDE-Wayland-Interfaces=org_kde_plasma_window_management

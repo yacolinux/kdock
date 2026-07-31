@@ -1,0 +1,27 @@
+# Artefactos de compilación (regenerables)
+build/
+
+# Backups sueltos
+*.bak
+
+# Temporales de editor / compilación
+*~
+*.o
+*.swp
+
+# Configuración local de asistentes de código (es del entorno, no del proyecto)
+.claude/
+.commandcode/
+
+# Capturas de pantalla: las que se usaban para documentar bugs mostraban el
+# escritorio entero (sesiones abiertas, historial del navegador). Si alguna vez
+# hace falta una imagen para el README, agregarla a mano con `git add -f`.
+*.png
+*.jpg
+*.jpeg
+
+# Transcripts y volcados de sesiones de IA (traen rutas locales y session ids).
+# La excepción importa: `previews/CMakeLists.txt` cae bajo el patrón y sin el
+# `!` quedaría fuera del repo, con lo que el segundo binario no compilaría.
+*.txt
+!CMakeLists.txt
