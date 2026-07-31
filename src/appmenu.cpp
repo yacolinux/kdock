@@ -3,6 +3,7 @@
 #include "desktopentry.h"
 #include "dockconfig.h"
 
+#include <QProcess>
 #include <QVariantMap>
 
 #include <array>
@@ -29,6 +30,13 @@ const std::array<CategoryDef, 11> kCategories = {{
     {"Utilities",   {"Utility", "Accessories", nullptr, nullptr}},
 }};
 const char *kOther = "Other";
+
+// Section-key prefixes. Keys are not translated (unlike the labels shown), so
+// the current selection survives a language change.
+const QLatin1String kCatPrefix("cat:");
+const QLatin1String kMenuPrefix("menu:");
+const QLatin1String kFavoritesKey("cat:__favorites__");
+const QLatin1String kAllKey("cat:__all__");
 } // namespace
 
 AppMenu::AppMenu(DesktopEntryIndex *apps, DockConfig *config, QObject *parent)
@@ -55,6 +63,8 @@ QString AppMenu::primaryCategory(const QStringList &cats) const
 
 void AppMenu::rebuild()
 {
+    m_tree = loadXdgMenuTree();
+
     QStringList present;
     bool hasOther = false;
     for (const DesktopEntry &e : m_apps->all()) {
@@ -76,11 +86,62 @@ void AppMenu::rebuild()
     emit changed();
 }
 
-QStringList AppMenu::categories() const
+void AppMenu::appendMenuSections(QVariantList &out, const QList<XdgMenuNode> &nodes,
+                                const QString &parentKey, int depth) const
 {
-    QStringList result{tr("Favorites"), tr("All Applications")};
-    result += m_presentCategories;
-    return result;
+    for (const XdgMenuNode &node : nodes) {
+        const QString path = parentKey.isEmpty() ? node.name
+                                                 : parentKey + QLatin1Char('/') + node.name;
+        QVariantMap m;
+        m[QStringLiteral("key")] = kMenuPrefix + path;
+        m[QStringLiteral("label")] = node.label;
+        m[QStringLiteral("icon")] = node.icon;
+        m[QStringLiteral("depth")] = depth;
+        out.append(m);
+        appendMenuSections(out, node.children, path, depth + 1);
+    }
+}
+
+QVariantList AppMenu::sections() const
+{
+    const auto row = [](const QString &key, const QString &label, const QString &icon) {
+        QVariantMap m;
+        m[QStringLiteral("key")] = key;
+        m[QStringLiteral("label")] = label;
+        m[QStringLiteral("icon")] = icon;
+        m[QStringLiteral("depth")] = 0;
+        return QVariant(m);
+    };
+
+    // Favorites and All Applications stay text-only: they are not menus, and
+    // giving them an icon narrows the row enough to elide "All Applications".
+    QVariantList list;
+    list.append(row(kFavoritesKey, tr("Favorites"), QString()));
+    list.append(row(kAllKey, tr("All Applications"), QString()));
+    for (const QString &cat : m_presentCategories)
+        list.append(row(kCatPrefix + cat, cat, QString()));
+    appendMenuSections(list, m_tree, QString(), 0);
+    return list;
+}
+
+const XdgMenuNode *AppMenu::nodeForPath(const QString &path) const
+{
+    const QStringList parts = path.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    const QList<XdgMenuNode> *level = &m_tree;
+    const XdgMenuNode *found = nullptr;
+    for (const QString &part : parts) {
+        found = nullptr;
+        for (const XdgMenuNode &node : *level) {
+            if (node.name == part) {
+                found = &node;
+                break;
+            }
+        }
+        if (!found)
+            return nullptr;
+        level = &found->children;
+    }
+    return found;
 }
 
 QVariantMap AppMenu::entryToMap(const QString &id) const
@@ -98,13 +159,32 @@ QVariantMap AppMenu::entryToMap(const QString &id) const
 
 QVariantList AppMenu::appsInCategory(const QString &category) const
 {
-    if (category == tr("Favorites"))
+    if (category == kFavoritesKey)
         return favorites();
 
+    // A submenu from the .menu files: its members are listed by filename, in the
+    // order the menu declares them (that order is the user's, so it is kept).
+    if (category.startsWith(kMenuPrefix)) {
+        QVariantList list;
+        const XdgMenuNode *node = nodeForPath(category.mid(kMenuPrefix.size()));
+        if (!node)
+            return list;
+        for (const QString &id : node->includeFiles) {
+            if (node->excludeFiles.contains(id))
+                continue;
+            const DesktopEntry e = m_apps->byId(id);
+            if (e.isValid() && !e.noDisplay)
+                list.append(entryToMap(e.id));
+        }
+        return list;
+    }
+
     QVariantList list;
-    const bool all = (category == tr("All Applications"));
+    const bool all = (category == kAllKey);
+    const QString label = category.startsWith(kCatPrefix) ? category.mid(kCatPrefix.size())
+                                                          : category;
     for (const DesktopEntry &e : m_apps->all()) {
-        if (all || primaryCategory(e.categories) == category)
+        if (all || primaryCategory(e.categories) == label)
             list.append(entryToMap(e.id));
     }
     return list;
@@ -141,6 +221,28 @@ void AppMenu::launch(const QString &id) const
     const DesktopEntry e = m_apps->byId(id);
     if (e.isValid())
         DesktopEntryIndex::launch(e);
+}
+
+void AppMenu::launchMenuEditor() const
+{
+    const QString app = m_config->menuEditorApp().trimmed();
+    if (app.isEmpty())
+        return;
+    // A .desktop id first (that is what the settings picker stores), through
+    // forAppId() so a bare name like "kmenuedit" also resolves to
+    // org.kde.kmenuedit. Anything else is run as a plain command, which keeps a
+    // hand-written value with arguments working on a machine without that
+    // .desktop file.
+    const DesktopEntry entry = m_apps->forAppId(app);
+    if (entry.isValid()) {
+        DesktopEntryIndex::launch(entry);
+        return;
+    }
+    QStringList parts = QProcess::splitCommand(app);
+    if (parts.isEmpty())
+        return;
+    const QString program = parts.takeFirst();
+    QProcess::startDetached(program, parts);
 }
 
 bool AppMenu::isFavorite(const QString &id) const

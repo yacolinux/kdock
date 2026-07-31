@@ -147,12 +147,47 @@ g++ -std=c++17 -fPIC /tmp/p/main.cpp /tmp/p/moc_*.cpp src/coloredtabbar.cpp -Isr
 timeout 30 xvfb-run -s "-screen 0 1000x400x24" env QT_QPA_PLATFORM=xcb /tmp/p/probe
 ```
 
+(Para un helper sin `QObject` —`xdgmenutree.cpp`, por ejemplo— es más corto todavía: no hace
+falta `moc` ni GUI, alcanza con `g++ main.cpp src/xdgmenutree.cpp $(pkg-config --cflags --libs Qt6Core)`
+y un `main` que imprima el resultado.)
+
 El `main.cpp` de prueba instancia el widget, y con un `QTimer::singleShot` hace
 `w.grab().save("/tmp/p/out.png")` y sale; el PNG se lee directo. Vale la pena correrlo dos
 veces, una con `app.setPalette()` claro y otra oscuro: el diálogo hereda el esquema de KDE
 (`Theme::applyAppPalette`) y un color que se lee bien en uno puede desaparecer en el otro.
 Encontró el bug de que las solapas coloreadas se pasaban de los 1000 px del diálogo (las
 diez ya piden ~940) y la barra caía en modo flechas de scroll.
+
+### Arnés de un componente QML suelto (popups del dock)
+
+El arnés de Xvfb de arriba prueba que el QML **carga**, pero no deja *ver* nada: los popups
+del dock (`AppMenuPopup`, `ClipboardPopup`, `DisksPopup`, `NetworkPopup`) solo se abren con
+un clic. Para verlos con datos reales, un `QQuickView` que instancie el componente con los
+backends de verdad como context properties, más `import -window root` bajo Xvfb. Con un
+`CMakeLists.txt` descartable en `/tmp` que liste los `.cpp` que hagan falta (para
+`AppMenuPopup`: `appmenu`, `xdgmenutree`, `desktopentry`, `dockconfig`, `theme`,
+`iconprovider`) el `moc` sale gratis. Encontró todos los bugs de las dos rondas del menú.
+
+Cinco trampas, las cinco mordieron (2026-07-31):
+
+- **`XDG_DATA_HOME` aislado esconde los datos del usuario.** Hay que aislarlo, porque si no
+  el arnés **le escribe la config real** al llamar a cualquier setter de `DockConfig`. Pero
+  entonces no se ven ni los `.desktop` de `~/.local/share/applications`, ni los `.directory`,
+  ni los íconos: los submenús salen **vacíos y parece un bug del código**. Enlazá los tres
+  dentro del home descartable (`applications`, `desktop-directories`, `icons`), igual que la
+  receta de diagnóstico de agrupación de más abajo.
+- **La captura tiene que ser de la raíz de X, no del `QQuickView`.** Los popups son
+  `popupType: Popup.Window`: viven en **otra** ventana, así que `view.grabWindow()` devuelve
+  el fondo vacío. `import -window root` los agarra.
+- **El proceso tiene que seguir vivo cuando sacás la captura.** Con un `singleShot` de salida
+  más corto que el `sleep` del script, el PNG sale gris de dos colores — que se parece
+  bastante a "el componente no renderizó".
+- **`theme: theme` se auto-sombrea.** Un componente con `required property var theme`
+  resuelve `theme` a su propia property, no a la context property, y todo queda `undefined`.
+  Nombrá distinto las del arnés (`hostTheme`, `hostConfig`) — es la misma razón por la que
+  `Dock.qml` usa los alias `_theme`/`_config`.
+- **La ruta del repo tiene un `#`**, así que `import "/ruta/qml"` no es una URL válida para
+  QML. Copiá `qml/` a `/tmp` y usá un import relativo.
 
 ## Convenciones
 
@@ -180,6 +215,12 @@ diez ya piden ~940) y la barra caía en modo flechas de scroll.
   `AGENTS.md` → *App-icon labels*. Es la única realimentación QML→C++ del grosor y es segura
   porque el ancho natural de un texto no depende del grosor: **no le agregues un gancho de
   re-medición a `dockThicknessChanged`**, que es justo la señal que emite el setter.
+- **Una clave nueva del grupo del menú se toca en CINCO lugares**: `Q_PROPERTY` + getter +
+  señal, `load()`, `reloadMenuConfig()`, el `seedKey()` de `setMenuConfigShared()` y el setter
+  vía `writeMenuConfigValue()` (no `m_settings.setValue()` directo). Si te salteás alguno
+  compila igual y anda igual… hasta que el usuario prende *"Compartir configuración del menú
+  entre docks"*: ahí la opción que falta se resetea al default o no se propaga. `menuColumns`
+  es el ejemplo a copiar.
 - **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **dos** listas: la
   del `CMakeLists.txt` de arriba (para `qml/`) y la de `previews/CMakeLists.txt` (para
   `previews/qml/`).

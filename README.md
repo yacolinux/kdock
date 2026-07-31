@@ -47,8 +47,17 @@ compositores wlroots (sway, hyprland, wayfire) por `wlr-foreign-toplevel-managem
   `~/.config/kdeglobals` con recarga en vivo. El fondo de las apps corriendo se tiñe con el
   color dominante del propio ícono.
 - **Bandeja del sistema** (StatusNotifierItem + DBusMenu, implementados acá).
+- **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un
+  color distinto para ubicarse de un vistazo (es lo que se ve en la captura de arriba).
 - **Menú de aplicaciones** estilo Kickoff: categorías XDG, búsqueda, favoritos y pie de
-  sesión.
+  sesión. Muestra además los **submenús propios**: los que se arman con el editor de menús
+  de KDE y los que crean los navegadores para sus web apps — declarados en los archivos
+  `.menu` de XDG, que listan sus miembros por nombre de archivo y no por categoría (de
+  hecho, los `.desktop` de las web apps no traen `Categories` en absoluto). El clic derecho
+  sobre el botón del menú abre el editor de menús, configurable.
+- **Vista de lista o de grilla** en el menú, de 1 a 8 columnas, con tamaño de ícono y
+  espaciado regulables: las celdas se calculan desde el ícono, así que unas pocas apps no
+  se desparraman por todo el popup.
 
 ### Widgets
 

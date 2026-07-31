@@ -20,6 +20,7 @@ qt_add_executable(kdock
     src/iconprovider.cpp      src/iconprovider.h
     src/iconcolorprovider.cpp src/iconcolorprovider.h
     src/appmenu.cpp           src/appmenu.h
+    src/xdgmenutree.cpp       src/xdgmenutree.h
     src/dockconfig.cpp        src/dockconfig.h
     src/dockwindow.cpp        src/dockwindow.h
     src/dockmanager.cpp       src/dockmanager.h

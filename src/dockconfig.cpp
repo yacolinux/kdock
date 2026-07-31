@@ -248,7 +248,12 @@ void DockConfig::reloadMenuConfig()
     const QString icon = src.value(QStringLiteral("menuIcon"), m_menuIcon).toString();
     const int w = src.value(QStringLiteral("menuPopupWidth"), m_menuPopupWidth).toInt();
     const int h = src.value(QStringLiteral("menuPopupHeight"), m_menuPopupHeight).toInt();
-    const int cols = qBound(1, src.value(QStringLiteral("menuColumns"), m_menuColumns).toInt(), 5);
+    const int cols = qBound(1, src.value(QStringLiteral("menuColumns"), m_menuColumns).toInt(), 8);
+    const int iconSize = qBound(16, src.value(QStringLiteral("menuAppIconSize"),
+                                              m_menuAppIconSize).toInt(), 96);
+    const int gridSpacing = qBound(0, src.value(QStringLiteral("menuGridSpacing"),
+                                                m_menuGridSpacing).toInt(), 40);
+    const QString editor = src.value(QStringLiteral("menuEditorApp"), m_menuEditorApp).toString();
 
     if (m_showMenuPower != power) {
         m_showMenuPower = power;
@@ -269,6 +274,18 @@ void DockConfig::reloadMenuConfig()
     if (m_menuColumns != cols) {
         m_menuColumns = cols;
         emit menuColumnsChanged();
+    }
+    if (m_menuAppIconSize != iconSize) {
+        m_menuAppIconSize = iconSize;
+        emit menuAppIconSizeChanged();
+    }
+    if (m_menuGridSpacing != gridSpacing) {
+        m_menuGridSpacing = gridSpacing;
+        emit menuGridSpacingChanged();
+    }
+    if (m_menuEditorApp != editor) {
+        m_menuEditorApp = editor;
+        emit menuEditorAppChanged();
     }
 }
 
@@ -294,6 +311,9 @@ void DockConfig::setMenuConfigShared(bool shared)
         seedKey(QStringLiteral("menuPopupWidth"), seed->m_menuPopupWidth);
         seedKey(QStringLiteral("menuPopupHeight"), seed->m_menuPopupHeight);
         seedKey(QStringLiteral("menuColumns"), seed->m_menuColumns);
+        seedKey(QStringLiteral("menuAppIconSize"), seed->m_menuAppIconSize);
+        seedKey(QStringLiteral("menuGridSpacing"), seed->m_menuGridSpacing);
+        seedKey(QStringLiteral("menuEditorApp"), seed->m_menuEditorApp);
     }
     // Re-sync every live dock to the (now) effective source.
     for (DockConfig *cfg : std::as_const(s_instances))
@@ -391,7 +411,11 @@ void DockConfig::load()
                                   QStringLiteral("applications-all")).toString();
     m_menuPopupWidth = m_settings.value(QStringLiteral("menuPopupWidth"), 540).toInt();
     m_menuPopupHeight = m_settings.value(QStringLiteral("menuPopupHeight"), 460).toInt();
-    m_menuColumns = qBound(1, m_settings.value(QStringLiteral("menuColumns"), 1).toInt(), 5);
+    m_menuColumns = qBound(1, m_settings.value(QStringLiteral("menuColumns"), 1).toInt(), 8);
+    m_menuAppIconSize = qBound(16, m_settings.value(QStringLiteral("menuAppIconSize"), 32).toInt(), 96);
+    m_menuGridSpacing = qBound(0, m_settings.value(QStringLiteral("menuGridSpacing"), 8).toInt(), 40);
+    m_menuEditorApp = m_settings.value(QStringLiteral("menuEditorApp"),
+                                       QStringLiteral("org.kde.kmenuedit")).toString();
     // When the menu appearance group is shared, its effective values come from
     // the shared settings file (defaults = the instance values just loaded).
     if (menuConfigShared()) {
@@ -400,7 +424,12 @@ void DockConfig::load()
         m_menuIcon = s.value(QStringLiteral("menuIcon"), m_menuIcon).toString();
         m_menuPopupWidth = s.value(QStringLiteral("menuPopupWidth"), m_menuPopupWidth).toInt();
         m_menuPopupHeight = s.value(QStringLiteral("menuPopupHeight"), m_menuPopupHeight).toInt();
-        m_menuColumns = qBound(1, s.value(QStringLiteral("menuColumns"), m_menuColumns).toInt(), 5);
+        m_menuColumns = qBound(1, s.value(QStringLiteral("menuColumns"), m_menuColumns).toInt(), 8);
+        m_menuAppIconSize = qBound(16, s.value(QStringLiteral("menuAppIconSize"),
+                                               m_menuAppIconSize).toInt(), 96);
+        m_menuGridSpacing = qBound(0, s.value(QStringLiteral("menuGridSpacing"),
+                                              m_menuGridSpacing).toInt(), 40);
+        m_menuEditorApp = s.value(QStringLiteral("menuEditorApp"), m_menuEditorApp).toString();
     }
     m_showClipboard = m_settings.value(QStringLiteral("showClipboard"), false).toBool();
     m_showDisks = m_settings.value(QStringLiteral("showDisks"), false).toBool();
@@ -768,12 +797,41 @@ void DockConfig::setMenuPopupHeight(int h)
 
 void DockConfig::setMenuColumns(int columns)
 {
-    columns = qBound(1, columns, 5);
+    columns = qBound(1, columns, 8);
     if (m_menuColumns == columns)
         return;
     m_menuColumns = columns;
     writeMenuConfigValue(QStringLiteral("menuColumns"), columns);
     emit menuColumnsChanged();
+}
+
+void DockConfig::setMenuAppIconSize(int px)
+{
+    px = qBound(16, px, 96);
+    if (m_menuAppIconSize == px)
+        return;
+    m_menuAppIconSize = px;
+    writeMenuConfigValue(QStringLiteral("menuAppIconSize"), px);
+    emit menuAppIconSizeChanged();
+}
+
+void DockConfig::setMenuGridSpacing(int px)
+{
+    px = qBound(0, px, 40);
+    if (m_menuGridSpacing == px)
+        return;
+    m_menuGridSpacing = px;
+    writeMenuConfigValue(QStringLiteral("menuGridSpacing"), px);
+    emit menuGridSpacingChanged();
+}
+
+void DockConfig::setMenuEditorApp(const QString &app)
+{
+    if (m_menuEditorApp == app)
+        return;
+    m_menuEditorApp = app;
+    writeMenuConfigValue(QStringLiteral("menuEditorApp"), app);
+    emit menuEditorAppChanged();
 }
 
 void DockConfig::setShowClipboard(bool show)

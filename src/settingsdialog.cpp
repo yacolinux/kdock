@@ -998,13 +998,78 @@ QWidget *SettingsDialog::createMenuTab()
     form->addRow(tr("Menu height:"), menuH);
 
     auto *menuColumns = new QSpinBox(tab);
-    menuColumns->setRange(1, 5);
+    menuColumns->setRange(1, 8);
     menuColumns->setValue(m_config->menuColumns());
-    menuColumns->setToolTip(tr("Number of columns for the app and favorites grid."));
+    menuColumns->setToolTip(tr("Number of columns for the app and favorites grid. The column "
+                               "count is honoured exactly, so raise \"Menu width\" as well when "
+                               "using many columns or the cells get too narrow for the names."));
     connect(menuColumns, QOverload<int>::of(&QSpinBox::valueChanged), m_config, &DockConfig::setMenuColumns);
     connect(m_config, &DockConfig::menuColumnsChanged, menuColumns,
             [this, menuColumns] { menuColumns->setValue(m_config->menuColumns()); });
     form->addRow(tr("Menu columns:"), menuColumns);
+
+    auto *menuIconSize = new QSpinBox(tab);
+    menuIconSize->setRange(16, 96);
+    menuIconSize->setSingleStep(4);
+    menuIconSize->setSuffix(tr(" px"));
+    menuIconSize->setValue(m_config->menuAppIconSize());
+    menuIconSize->setToolTip(tr("Size of the application icons inside the menu, in both the "
+                                "single-column list and the multi-column grid."));
+    connect(menuIconSize, QOverload<int>::of(&QSpinBox::valueChanged),
+            m_config, &DockConfig::setMenuAppIconSize);
+    connect(m_config, &DockConfig::menuAppIconSizeChanged, menuIconSize,
+            [this, menuIconSize] { menuIconSize->setValue(m_config->menuAppIconSize()); });
+    form->addRow(tr("Menu icon size:"), menuIconSize);
+
+    auto *menuSpacing = new QSpinBox(tab);
+    menuSpacing->setRange(0, 40);
+    menuSpacing->setSuffix(tr(" px"));
+    menuSpacing->setValue(m_config->menuGridSpacing());
+    menuSpacing->setToolTip(tr("Space around each icon in the multi-column grid. Lower it to "
+                               "pack the icons together instead of spreading a few of them "
+                               "across the whole menu."));
+    connect(menuSpacing, QOverload<int>::of(&QSpinBox::valueChanged),
+            m_config, &DockConfig::setMenuGridSpacing);
+    connect(m_config, &DockConfig::menuGridSpacingChanged, menuSpacing,
+            [this, menuSpacing] { menuSpacing->setValue(m_config->menuGridSpacing()); });
+    form->addRow(tr("Menu icon spacing:"), menuSpacing);
+
+    // Application opened by the menu widget's right-click → "Edit menu…". Stored
+    // as a .desktop id; AppMenu::launchMenuEditor() falls back to running the
+    // value as a plain command.
+    auto *menuEditorBtn = new QPushButton(tab);
+    menuEditorBtn->setStyleSheet(QStringLiteral("text-align:left; padding:4px 8px;"));
+    const auto refreshMenuEditorBtn = [this, menuEditorBtn] {
+        const QString id = m_config->menuEditorApp();
+        const DesktopEntry e = m_apps->byId(id);
+        menuEditorBtn->setIcon(QIcon::fromTheme(e.isValid() && !e.icon.isEmpty()
+                                                    ? e.icon : QStringLiteral("kmenuedit")));
+        menuEditorBtn->setText(QStringLiteral(" ") + (e.isValid() ? e.name : id));
+    };
+    refreshMenuEditorBtn();
+    connect(menuEditorBtn, &QPushButton::clicked, this, [this, refreshMenuEditorBtn] {
+        const QList<DesktopEntry> entries = m_apps->all();
+        QStringList names;
+        for (const DesktopEntry &e : entries)
+            names.append(e.name);
+        const DesktopEntry current = m_apps->byId(m_config->menuEditorApp());
+        const int currentIdx = qMax(0, names.indexOf(current.name));
+        bool ok = false;
+        const QString chosen = QInputDialog::getItem(this, tr("Menu editor"), tr("Application:"),
+                                                     names, currentIdx, false, &ok);
+        if (!ok)
+            return;
+        const int idx = names.indexOf(chosen);
+        if (idx < 0)
+            return;
+        m_config->setMenuEditorApp(entries[idx].id);
+        refreshMenuEditorBtn();
+    });
+    menuEditorBtn->setToolTip(tr("Application opened by the menu widget's right-click → "
+                                 "\"Edit menu…\". KDE's menu editor by default."));
+    form->addRow(tr("Menu editor:"), menuEditorBtn);
+    connect(m_config, &DockConfig::menuEditorAppChanged, menuEditorBtn,
+            [refreshMenuEditorBtn] { refreshMenuEditorBtn(); });
 
     auto *menuPower = new QCheckBox(tr("Power buttons in the application menu (KDE)"), tab);
     menuPower->setChecked(m_config->showMenuPower());

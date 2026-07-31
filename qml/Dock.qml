@@ -1629,14 +1629,40 @@ Item {
                 id: menuMouse
                 anchors.fill: parent
                 hoverEnabled: true
+                // This is a block, so the section-level MouseArea that gives the
+                // draggable widgets their context menu is disabled here
+                // (secMouse: enabled: sec.draggable) — the right button has to be
+                // handled by this one.
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
                 // The modal popup dismisses itself on the press that lands on
                 // this icon, so by onClicked it is already hidden. Suppress the
                 // reopen when the click is the one that just closed it (second
                 // click on the icon = toggle closed).
-                onClicked: {
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) { menuCtxMenu.popup(); return }
                     if (menuPopup.visible) { menuPopup.close(); return }
                     if (Date.now() - menuPopup.closedAt < 300) return
                     menuPopup.open()
+                }
+            }
+
+            Menu {
+                id: menuCtxMenu
+                popupType: Popup.Window
+                // Keeps the dock from auto-hiding while the menu is open, same as
+                // the section menu of the other widgets.
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
+                IconMenuItem {
+                    text: qsTr("Edit menu…")
+                    iconName: "kmenuedit"
+                    onTriggered: appMenu.launchMenuEditor()
+                }
+                MenuSeparator {}
+                IconMenuItem {
+                    text: qsTr("Dock settings…")
+                    iconName: "configure"
+                    onTriggered: dockWindow.openSettings()
                 }
             }
 

@@ -23,7 +23,14 @@ Popup {
     width: config.menuPopupWidth
     height: config.menuPopupHeight
 
-    property string currentCategory: appMenu ? (appMenu.categories[0] || "") : ""
+    // Sidebar rows: { key, label, icon, depth }. Categories first, then the
+    // submenus declared in the XDG .menu files (KDE's menu editor, browsers'
+    // web apps) — see AppMenu::sections().
+    readonly property var sectionModel: {
+        refreshTick // dependency
+        return appMenu ? appMenu.sections() : []
+    }
+    property string currentCategory: sectionModel.length > 0 ? sectionModel[0].key : ""
     property string query: ""
     // Bumped on favorites change to force the list model to re-evaluate.
     property int refreshTick: 0
@@ -105,7 +112,9 @@ Popup {
                 Rectangle {
                     id: sidebar
                     visible: popup.query.length === 0
-                    width: visible ? 150 : 0
+                    // Wider than the old text-only sidebar: the rows now carry an
+                    // icon and the .menu submenus are indented under their parent.
+                    width: visible ? 172 : 0
                     height: parent.height
                     radius: 6
                     color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.05)
@@ -114,27 +123,46 @@ Popup {
                         anchors.fill: parent
                         anchors.margins: 4
                         clip: true
-                        model: appMenu ? appMenu.categories : []
+                        model: popup.sectionModel
+                        ScrollBar.vertical: ScrollBar {}
                         delegate: ItemDelegate {
+                            id: sectionDelegate
                             required property int index
-                            required property string modelData
+                            required property var modelData
                             width: ListView.view.width
                             height: 30
                             background: Rectangle {
                                 radius: 4
-                                color: popup.currentCategory === modelData
+                                color: popup.currentCategory === sectionDelegate.modelData.key
                                        ? Qt.rgba(theme.highlight.r, theme.highlight.g, theme.highlight.b, 0.35)
-                                       : (hovered ? Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                                            theme.foreground.b, 0.08) : "transparent")
+                                       : (sectionDelegate.hovered
+                                          ? Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                                    theme.foreground.b, 0.08) : "transparent")
                             }
-                            contentItem: Text {
-                                text: modelData
-                                color: theme.foreground
-                                elide: Text.ElideRight
-                                verticalAlignment: Text.AlignVCenter
-                                leftPadding: 6
+                            contentItem: Row {
+                                // Nested submenus are indented under their parent.
+                                leftPadding: 6 + sectionDelegate.modelData.depth * 14
+                                spacing: 6
+                                Image {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    visible: sectionDelegate.modelData.icon.length > 0
+                                    width: visible ? 18 : 0; height: 18
+                                    source: visible ? "image://icon/" + sectionDelegate.modelData.icon
+                                                      + "@" + theme.revision : ""
+                                    sourceSize: Qt.size(18 * Screen.devicePixelRatio,
+                                                        18 * Screen.devicePixelRatio)
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: sectionDelegate.width - parent.leftPadding
+                                           - (sectionDelegate.modelData.icon.length > 0 ? 24 : 0) - 6
+                                    text: sectionDelegate.modelData.label
+                                    color: theme.foreground
+                                    elide: Text.ElideRight
+                                    verticalAlignment: Text.AlignVCenter
+                                }
                             }
-                            onClicked: popup.currentCategory = modelData
+                            onClicked: popup.currentCategory = sectionDelegate.modelData.key
                         }
                     }
                 }
@@ -144,21 +172,36 @@ Popup {
                 // favorites alike (same model).
                 GridView {
                     id: appList
-                    width: parent.width - sidebar.width - (sidebar.visible ? parent.spacing : 0)
+                    readonly property int available: parent.width - sidebar.width
+                                                     - (sidebar.visible ? parent.spacing : 0)
+                    readonly property int columns: Math.max(1, config.menuColumns)
+                    readonly property int gridIconSize: config.menuAppIconSize
+                    readonly property int gridSpacing: config.menuGridSpacing
+
+                    // Cells are sized from the icon, not from the available width:
+                    // otherwise a handful of apps at 4 columns spread across the
+                    // whole popup. The GridView is then only as wide as the cells
+                    // it is allowed to put in a row, so `columns` still caps the
+                    // row and the leftover space stays empty on the right.
+                    FontMetrics { id: gridFont }
+                    // Floor on the cell width: a cell sized purely from the icon
+                    // is too narrow for the name under it, and every entry ends
+                    // up elided after four characters. Ten characters per line
+                    // (two lines) is enough for most app names.
+                    readonly property int textFloor: Math.ceil(gridFont.averageCharacterWidth * 10)
+                                                     + 2 * gridSpacing
+                    cellWidth: columns === 1
+                               ? available
+                               : Math.min(Math.floor(available / columns),
+                                          Math.max(gridIconSize + 2 * gridSpacing + 16, textFloor))
+                    cellHeight: columns === 1
+                                ? Math.max(44, gridIconSize + 12)
+                                : gridIconSize + 2 * gridSpacing + Math.ceil(gridFont.height * 2) + 6
+
+                    width: columns === 1 ? available : Math.min(available, columns * cellWidth)
                     height: parent.height
                     clip: true
                     model: popup.listModel
-                    readonly property int columns: Math.max(1, config.menuColumns)
-                    cellWidth: width / columns
-                    // Grid cells keep the system/default font size (same as the
-                    // single-column list). The icon grows with the extra cell
-                    // width so it matches the larger text; cell height fits the
-                    // icon plus two lines of default-size text.
-                    FontMetrics { id: gridFont }
-                    readonly property int gridIconSize: Math.max(40, Math.min(72, Math.round(cellWidth * 0.42)))
-                    cellHeight: columns === 1
-                                ? 44
-                                : gridIconSize + 4 + Math.ceil(gridFont.height * 2) + 20
                     ScrollBar.vertical: ScrollBar {}
 
                     delegate: ItemDelegate {
@@ -185,13 +228,14 @@ Popup {
                                 spacing: 8
                                 Image {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: 32; height: 32
+                                    width: appList.gridIconSize; height: appList.gridIconSize
                                     source: "image://icon/" + appDelegate.modelData.icon + "@" + theme.revision
-                                    sourceSize: Qt.size(32 * Screen.devicePixelRatio, 32 * Screen.devicePixelRatio)
+                                    sourceSize: Qt.size(appList.gridIconSize * Screen.devicePixelRatio,
+                                                        appList.gridIconSize * Screen.devicePixelRatio)
                                 }
                                 Column {
                                     anchors.verticalCenter: parent.verticalCenter
-                                    width: appDelegate.width - 32 - starButton.width - 24
+                                    width: appDelegate.width - appList.gridIconSize - starButton.width - 24
                                     Text {
                                         text: appDelegate.modelData.name
                                         color: theme.foreground
@@ -230,9 +274,9 @@ Popup {
                             // --- multi-column compact cell (icon over name) ---
                             Column {
                                 anchors.fill: parent
-                                anchors.margins: 6
+                                anchors.margins: appList.gridSpacing
                                 visible: appDelegate.grid
-                                spacing: 4
+                                spacing: 2
                                 Image {
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     width: appList.gridIconSize; height: appList.gridIconSize

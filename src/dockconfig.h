@@ -65,6 +65,9 @@ class DockConfig : public QObject
     Q_PROPERTY(int menuPopupWidth READ menuPopupWidth WRITE setMenuPopupWidth NOTIFY menuPopupWidthChanged)
     Q_PROPERTY(int menuPopupHeight READ menuPopupHeight WRITE setMenuPopupHeight NOTIFY menuPopupHeightChanged)
     Q_PROPERTY(int menuColumns READ menuColumns WRITE setMenuColumns NOTIFY menuColumnsChanged)
+    Q_PROPERTY(int menuAppIconSize READ menuAppIconSize WRITE setMenuAppIconSize NOTIFY menuAppIconSizeChanged)
+    Q_PROPERTY(int menuGridSpacing READ menuGridSpacing WRITE setMenuGridSpacing NOTIFY menuGridSpacingChanged)
+    Q_PROPERTY(QString menuEditorApp READ menuEditorApp WRITE setMenuEditorApp NOTIFY menuEditorAppChanged)
     Q_PROPERTY(bool showClipboard READ showClipboard WRITE setShowClipboard NOTIFY showClipboardChanged)
     Q_PROPERTY(int clipboardPopupWidth READ clipboardPopupWidth WRITE setClipboardPopupWidth NOTIFY clipboardPopupWidthChanged)
     Q_PROPERTY(int clipboardPopupHeight READ clipboardPopupHeight WRITE setClipboardPopupHeight NOTIFY clipboardPopupHeightChanged)
@@ -341,6 +344,16 @@ public:
     int menuPopupWidth() const { return m_menuPopupWidth; }
     int menuPopupHeight() const { return m_menuPopupHeight; }
     int menuColumns() const { return m_menuColumns; }
+    // Icon size for the app list inside the menu popup. Drives both of its
+    // layouts: the single-column rows (icon, then text) and the multi-column
+    // cells (icon over text), whose cell size is derived from it.
+    int menuAppIconSize() const { return m_menuAppIconSize; }
+    // Padding around a multi-column cell. Lowering it packs the grid so a
+    // handful of apps stop occupying the whole popup.
+    int menuGridSpacing() const { return m_menuGridSpacing; }
+    // Application that edits the XDG menus, opened from the menu widget's
+    // right-click. A .desktop id, or a plain command as a fallback.
+    QString menuEditorApp() const { return m_menuEditorApp; }
     bool showClipboard() const { return m_showClipboard; }
     int clipboardPopupWidth() const { return m_clipboardPopupWidth; }
     int clipboardPopupHeight() const { return m_clipboardPopupHeight; }
@@ -420,6 +433,9 @@ public:
     void setMenuPopupWidth(int w);
     void setMenuPopupHeight(int h);
     void setMenuColumns(int columns);
+    void setMenuAppIconSize(int px);
+    void setMenuGridSpacing(int px);
+    void setMenuEditorApp(const QString &app);
     void setShowClipboard(bool show);
     void setShowDisks(bool show);
     void setShowNetwork(bool show);
@@ -504,6 +520,9 @@ signals:
     void menuPopupWidthChanged();
     void menuPopupHeightChanged();
     void menuColumnsChanged();
+    void menuAppIconSizeChanged();
+    void menuGridSpacingChanged();
+    void menuEditorAppChanged();
     void showClipboardChanged();
     void showDisksChanged();
     void showNetworkChanged();
@@ -605,6 +624,9 @@ private:
     int m_menuPopupWidth = 540;
     int m_menuPopupHeight = 460;
     int m_menuColumns = 1;
+    int m_menuAppIconSize = 32;   // the size the single-column rows always used
+    int m_menuGridSpacing = 8;
+    QString m_menuEditorApp = QStringLiteral("org.kde.kmenuedit");
     bool m_showClipboard = false;
     bool m_showDisks = false;
     bool m_showNetwork = false;
