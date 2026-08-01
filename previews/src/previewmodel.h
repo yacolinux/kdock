@@ -38,6 +38,8 @@ class PreviewModel : public QAbstractListModel
     // leaving dead bands when the auto-fit shrinks them (bug 2026-07-31). Equals
     // stripThicknessPx while the cards are full size.
     Q_PROPERTY(int effectiveThicknessPx READ effectiveThicknessPx NOTIFY effectiveThicknessChanged)
+    // Main-axis extent of the cards (see contentLengthPx below).
+    Q_PROPERTY(int contentLengthPx READ contentLengthPx NOTIFY contentLengthChanged)
 public:
     enum Roles {
         UuidRole = Qt::UserRole + 1,
@@ -63,6 +65,11 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     qreal cardScale() const { return m_cardScale; }
+    // Main-axis extent of every card at the current scale, spacing included.
+    // QML aligns the content with it instead of reading the ListView's own
+    // contentWidth/contentHeight: those *include* the Flickable margin the
+    // alignment writes, which closed a binding loop (bug 2026-07-31).
+    int contentLengthPx() const { return m_contentLength; }
     int effectiveThicknessPx() const
     {
         const int cardW = m_config ? qRound(m_config->cardWidthPx() * m_cardScale) : 260;
@@ -103,6 +110,7 @@ signals:
     void countChanged();
     void cardScaleChanged();
     void effectiveThicknessChanged();
+    void contentLengthChanged();
 
 private:
     struct Row {
@@ -153,5 +161,6 @@ private:
     qreal m_targetScale = 1.0;
     qreal m_cardScale = 1.0;
     int m_effectiveThickness = -1; // sentinel: force the first emit
+    int m_contentLength = -1;      // idem
     int m_availableLength = 0; // px; 0 until QML reports the strip's length
 };

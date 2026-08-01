@@ -331,6 +331,43 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
   `maximumFlickVelocity: 6000` (más inercia y velocidad al soltar un arrastre). **No** se
   toca el `mouseWheelVelocity` del `Flickable`: no existe en el Qt del sistema (6.10.2;
   llegó más tarde) y asignarlo hacía fallar la carga del QML (bug 2026-07-31).
+- **Rueda del mouse en tiras horizontales** (bug 2026-07-31, cerrado): Qt 6 **no cruza ejes**
+  en `QQuickFlickable::wheelEvent` — el `angleDelta().y` del wheel normal solo mueve si
+  `yflick()` (contenido vertical desbordante) y el `.x` solo si `xflick()`. Una tira
+  horizontal (edge 0/1) no desborda verticalmente (`contentHeight == height`), así que el
+  wheel vertical se ignoraba y no había forma de avanzar con el mouse (el arrastre sí
+  funcionaba). **Un `WheelHandler` hermano del `ListView` no lo arregla**: la entrega recorre
+  los items de arriba hacia abajo en el orden de apilado, y el `ListView` —que está *dentro*
+  de `slider`, o sea más arriba— se queda el evento antes de que se consulten los handlers
+  del padre. Verificado con logging: el handler se habilitaba (`enabled=true`) y `onWheel`
+  no disparaba nunca.
+  La solución es un **`MouseArea` por encima del `ListView`** (último hijo de `slider`, así
+  queda topmost y ve el wheel primero) con `acceptedButtons: Qt.NoButton`, que deja pasar los
+  press —clic en tarjeta, arrastre para flickear, menú de clic derecho— y no toca el hover del
+  autohide (`hoverEnabled` queda en false). En las tiras verticales pone `wheel.accepted = false`
+  y el evento sigue al `ListView`, que scrollea nativo con su propio timeline. En las
+  horizontales escribe `contentX` con un `NumberAnimation` de 150 ms; como escribir `contentX`
+  a mano **saltea el `boundsBehavior`**, el clamp a `[0, contentWidth - width]` es explícito, y
+  el destino se **acumula** entre muescas (`scrollTarget`) para que un giro rápido no se coma
+  a sí mismo. Wheel arriba == tarjetas anteriores, igual que la vertical.
+  - **Trampa (mordió 2026-07-31)**: un `WheelHandler` es un **PointerHandler, no un
+    `Item`**: **no tiene `anchors`**. Asignarle `anchors.fill:` falla con *"Cannot assign to
+    non-existent property anchors"* y **rompe la carga de todo el QML** — la tira queda
+    vacía (solo el espacio reservado, el escritorio de atrás recibe los clics).
+  - **Trampa de diagnóstico**: el `kdock-previews` que corre en la sesión **no manda su stderr
+    al journal** (lo lanza `previewslauncher` / el D-Bus, no una unidad); mirá
+    `/proc/<pid>/fd/2` para saber a dónde va (en esta máquina, `/tmp/previews-err.log`). Se
+    perdió una ronda entera buscando los `console.log` en `journalctl`.
+- **Barra de desplazamiento fina opcional** (`config.showScrollBar`, default **off**):
+  un indicador de 3 px en el **borde interior** de la tira (opuesto al borde de pantalla:
+  edge 0→arriba, 1→abajo, 2→derecha, 3→izquierda), para no pisar el hover del auto-hide.
+  Solo aparece cuando el contenido desborda (`contentWidth > width` en horizontal,
+  `contentHeight > height` en vertical); el handle sale de `list.visibleArea.{x,y}Position/
+  {width,height}Ratio` y es arrastrable (MouseArea → `contentX`/`contentY`). No se usa el
+  `ScrollBar` attached: `QQuickFlickableScrollBar` lo clava al borde inferior/derecho del
+  viewport, donde taparía las tarjetas (que llenan el viewport). La barra vive en la banda
+  de padding y no estorba el wheel: los eventos sin aceptar sobre su MouseArea propagan al
+  `slider` y los agarra el `WheelHandler` de arriba.
 - **Auto-fit de tarjetas** (`config.autoFitCards`, default on, + `config.fitMinCardWidth`,
   default 96 px): con muchas ventanas las tarjetas se achican para entrar en el largo de la
   tira en vez de desbordar a scroll, y vuelven al tamaño configurado al quedar pocas. El
@@ -378,12 +415,31 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
   borde, `applyScreen()`/`scheduleApplyScreen()` con el `wl_output` resuelto vía
   `QWaylandScreen`, máscara de input de 3 px para autohide). **Grosor: una sola fórmula**,
   `PreviewConfig::stripThicknessPx()` (px, no %, justamente para no depender del tamaño de
-  pantalla) — la lee el QML *y* la zona exclusiva. `reserveSpace` y `autohide` son
-  independientes, pero una tira oculta nunca reserva. Config en
-  `~/.local/share/kdock/previews.conf` (compartida: `enabled`, `enabledScreens`,
-  `knownScreens`) + `previews-<screen>.conf` por tira; `PreviewManager` replica el
-  `sync()` + `migrateFirstRun()` de `DockManager` (adopta el monitor primario en el primer
-  arranque). Con el switch maestro `enabled=false` no se muestra ninguna tira, así
+  pantalla) — la lee el QML *y* la zona exclusiva. Rango
+  `PreviewConfig::kMinThickness`..`kMaxThickness` (**48..800 px**), las mismas constantes que
+  usa el spinbox del panel, así el clamp y el widget no pueden discrepar. El piso de 48 es
+  geométrico: menos los `2*pad` deja la tarjeta en su mínimo de 32 px. En el panel el spinbox
+  se etiqueta **según el borde** — *"Alto del panel"* en Abajo/Arriba, *"Ancho del panel"* en
+  Izquierda/Derecha (`updateThicknessLabel()`, atada al combo de borde, no al config, para que
+  cambie en el acto): con el nombre fijo anterior el control existía pero en horizontal nadie
+  lo encontraba. `reserveSpace` y `autohide` son independientes, pero una tira oculta nunca
+  reserva. Config en `~/.local/share/kdock/previews.conf` (compartida: `enabled`,
+  `enabledScreens`, `knownScreens`) + `previews-<screen>.conf` por tira; `PreviewManager`
+  replica el `sync()` + `migrateFirstRun()` de `DockManager` (adopta el monitor primario en el
+  primer arranque).
+- **Alineación, dos caminos según el largo** (bug 2026-07-31): con `stripLength > 0` la ubica
+  el compositor —`applyLayerProperties()` ancla el borde más una esquina (Inicio/Fin) o solo
+  el borde (Centro)— y eso siempre anduvo. Con `stripLength = 0` la superficie está anclada a
+  **los dos** lados opuestos, el compositor la estira de punta a punta y no hay nada que
+  alinear: las tarjetas quedaban pegadas al inicio y el combo parecía roto. Ahora el QML
+  alinea el **contenido** (`PreviewStrip.qml` → `root.alignOffset`, aplicado como
+  `leftMargin`/`topMargin` del `ListView`), el mismo reparto que hace `Dock.qml` en modo panel.
+  Se usa el margen del `Flickable` y no la geometría del `ListView` a propósito: el margen no
+  toca `contentWidth`/`contentHeight` ni el `width` que el auto-fit reporta con
+  `setAvailableLength()`, así que **no hay bucle** entre alinear y encoger las tarjetas. Si el
+  contenido desborda, `alignOffset` es 0 (hay scroll: no hay nada que alinear).
+  Verificado con capturas reales en los dos ejes y los tres valores. Con el switch maestro
+  `enabled=false` no se muestra ninguna tira, así
   `--settings` abre el panel sin poner nada en pantalla.
 - **Integración desde kdock** (todo el acoplamiento, y es chico): `src/previewslauncher.cpp`
   (encuentra el binario, lee/escribe `enabled`, arranca/para vía `org.kdock.Previews`),
@@ -415,6 +471,11 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build
 ./build/kdock
 ```
+
+Deploy: `sudo ninja -C build install` (prefijo `/usr/local`; actualiza los binarios y los
+`.desktop`). **Ojo**: el `sudo` reescribe `build/.ninja_deps` como root, y el siguiente
+`ninja -C build` sin sudo falla con *"Error writing to deps log: Permission denied"* —
+recuperar con `sudo chown <user>:<user> build/.ninja_deps`.
 
 Dependencies: `qt6-base-dev`, `qt6-base-private-dev` (for the private `QZip*` headers used by `configarchive.cpp`), `qt6-declarative-dev`, `qt6-wayland-dev`, `qt6-wayland-private-dev`, `libqt6dbus6-dev` (or `qt6-tools-dev` depending on distro), `cmake`, `ninja-build`. CMake links `Qt6::CorePrivate` + `Qt6::WaylandClientPrivate` (private Qt modules).
 
@@ -513,7 +574,7 @@ still render and work; they just can't be toggled from the UI anymore).
 | `VolumeControl` | `volume` | `available`, `volume`, `muted`, `iconName`, `setVolume(v)`, `toggleMute()`, `refresh()` (called on hover to avoid acting on a stale cache) |
 | `AudioControl` | (no context property) | Mixer backend for Settings → Audio only: `available`, `maxVolume`; devices/streams via C++ API |
 | `IconProvider` | `image://icon/name@rev[@themeId]` | `theme.revision` appended to bust cache on theme change; optional `themeId` resolves that icon against another icon set (widget icons adapted to the dock color) |
-| `PreviewConfig` | `config.*` (binario `kdock-previews`) | Contexto de `PreviewStrip.qml`: `edge`, `alignment`, `opacity`, `panelColor`/`panelColorSet`/`panelPresetColors`/`resetPanelColor()`, `stripThickness` + read-only `stripThicknessPx`/`cardWidthPx`/`pad`, `stripLength` (0=todo el borde), `screenMargin`, `reserveSpace`, `autohide`, `showTitles`, `cardSpacing`, `autoFitCards`, `fitMinCardWidth`, `captureMode` (0=una captura al primer foco/default, 1=periódico), `refreshInterval`, `activeRefreshInterval` (solo en modo 1), `includeMinimized`, `currentDesktopOnly`, `thisMonitorOnly`, `screenName` |
+| `PreviewConfig` | `config.*` (binario `kdock-previews`) | Contexto de `PreviewStrip.qml`: `edge`, `alignment`, `opacity`, `panelColor`/`panelColorSet`/`panelPresetColors`/`resetPanelColor()`, `stripThickness` + read-only `stripThicknessPx`/`cardWidthPx`/`pad`, `stripLength` (0=todo el borde), `screenMargin`, `reserveSpace`, `autohide`, `showTitles`, `showScrollBar`, `cardSpacing`, `autoFitCards`, `fitMinCardWidth`, `captureMode` (0=una captura al primer foco/default, 1=periódico), `refreshInterval`, `activeRefreshInterval` (solo en modo 1), `includeMinimized`, `currentDesktopOnly`, `thisMonitorOnly`, `screenName` |
 | `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; read-only `cardScale` (auto-fit); `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)`, `setAvailableLength(px)` (auto-fit) |
 | `PreviewWindow` | `previewWindow` | `setHidden(bool)`, `openSettings()`, `restart()`, `quit()` |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |

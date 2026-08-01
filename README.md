@@ -20,6 +20,17 @@ compositores wlroots (sway, hyprland, wayfire) por `wlr-foreign-toplevel-managem
 
 ---
 
+## Galería
+
+El dock, en distintos bordes y disposiciones de etiqueta:
+
+| | |
+|---|---|
+| ![Dock al fondo, panel completo con etiquetas debajo](screenshots/dock-bottom-labels.jpg)<br>*Abajo, de borde a borde, etiqueta debajo del ícono* | ![Dock vertical a la izquierda, solo íconos](screenshots/dock-left-icons-only.jpg)<br>*Izquierda, compacto, solo íconos* |
+| ![Dock vertical a la izquierda con etiquetas](screenshots/dock-left-labels.jpg)<br>*Izquierda, etiqueta al costado* | ![Dock vertical a la izquierda con ícono y etiqueta invertidos](screenshots/dock-left-labels-reversed.jpg)<br>*La misma, con el orden ícono/etiqueta invertido* |
+| ![Dock vertical a la derecha con etiquetas](screenshots/dock-right-labels.jpg)<br>*Derecha, con los widgets abajo* | ![Dock arriba con etiquetas al costado](screenshots/dock-top-labels.jpg)<br>*Arriba, etiqueta al costado* |
+| ![Dock arriba en modo compacto](screenshots/dock-top-compact.jpg)<br>*Arriba, compacto, etiqueta encima* | |
+
 ## Características
 
 ### El dock
@@ -99,8 +110,13 @@ KWin**.
   se adelgaza cuando estas se encogen y recupera su tamaño al crecer, así las miniaturas
   siempre llenan la tira sin banda vacía a los lados (y la zona reservada del escritorio va
   con ella).
-- **Desplazamiento rápido**: arrastre con inercia y *fling* afinados para moverse entre
-  tarjetas grandes sin esfuerzo.
+- **Desplazamiento**: rueda del mouse, arrastre con inercia y *fling* afinados para moverse
+  entre tarjetas grandes sin esfuerzo, y una barra de desplazamiento fina opcional en el borde
+  interior de la tira.
+- **Tamaño y ubicación**: cualquiera de los cuatro bordes, grosor regulable de 48 a 800 px
+  (el panel lo llama *alto* o *ancho* según el borde), largo fijo o de punta a punta, y
+  alineación inicio/centro/fin — que mueve la tira si tiene largo propio, o las tarjetas
+  dentro de ella si ocupa todo el borde.
 - Capturas **una por ventana al pasar a primer plano** (o refresco periódico, experimental),
   filtros por monitor / escritorio virtual / minimizadas, y auto-ocultado opcional.
 
@@ -197,6 +213,7 @@ La configuración vive en el directorio de datos XDG:
 | `qml/` | La UI del dock y sus popups |
 | `previews/` | Binario accesorio de vistas previas (árbol propio, reusa 5 archivos de `src/`) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
+| `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |
 | `CLAUDE.md` | Cómo compilar, probar e instalar; arneses de prueba sin GUI |
 

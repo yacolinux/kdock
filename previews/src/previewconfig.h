@@ -37,6 +37,11 @@ class PreviewConfig : public QObject
     Q_PROPERTY(bool reserveSpace READ reserveSpace WRITE setReserveSpace NOTIFY reserveSpaceChanged)
     Q_PROPERTY(bool autohide READ autohide WRITE setAutohide NOTIFY autohideChanged)
     Q_PROPERTY(bool showTitles READ showTitles WRITE setShowTitles NOTIFY showTitlesChanged)
+    // Thin scroll indicator on the strip's inner edge (the side opposite the
+    // screen edge, so it never gets in the way of autohide). Off by default:
+    // the wheel already scrolls the strip (see the WheelHandler remap in
+    // PreviewStrip.qml); the bar is an opt-in aid.
+    Q_PROPERTY(bool showScrollBar READ showScrollBar WRITE setShowScrollBar NOTIFY showScrollBarChanged)
     Q_PROPERTY(int cardSpacing READ cardSpacing WRITE setCardSpacing NOTIFY cardSpacingChanged)
     Q_PROPERTY(int captureMode READ captureMode WRITE setCaptureMode NOTIFY captureModeChanged)
     Q_PROPERTY(int refreshInterval READ refreshInterval WRITE setRefreshInterval NOTIFY refreshIntervalChanged)
@@ -94,6 +99,12 @@ public:
     bool panelColorSet() const { return m_panelColor.isValid(); }
     QStringList panelPresetColors() const { return m_panelPresetColors; }
 
+    // Floor of the cross-axis size, shared with the settings spinbox so the
+    // widget and the clamp can never disagree. 48 px is the geometric floor:
+    // minus the 2*pad it leaves a card at PreviewCard's own 32 px minimum.
+    static constexpr int kMinThickness = 48;
+    static constexpr int kMaxThickness = 800;
+
     // Cross-axis size of the strip, in px. Single source of truth: QML reads it
     // through stripThicknessPx and PreviewWindow::thickness() returns it for the
     // layer-shell exclusive zone, so the drawn strip and the reserved space can
@@ -113,6 +124,7 @@ public:
     bool reserveSpace() const { return m_reserveSpace; }
     bool autohide() const { return m_autohide; }
     bool showTitles() const { return m_showTitles; }
+    bool showScrollBar() const { return m_showScrollBar; }
     int cardSpacing() const { return m_cardSpacing; }
     int captureMode() const { return m_captureMode; }
     int refreshInterval() const { return m_refreshInterval; }
@@ -133,6 +145,7 @@ public:
     void setReserveSpace(bool reserve);
     void setAutohide(bool autohide);
     void setShowTitles(bool show);
+    void setShowScrollBar(bool show);
     void setCardSpacing(int spacing);
     void setAutoFitCards(bool fit);
     void setFitMinCardWidth(int px);
@@ -155,6 +168,7 @@ signals:
     void reserveSpaceChanged();
     void autohideChanged();
     void showTitlesChanged();
+    void showScrollBarChanged();
     void cardSpacingChanged();
     void autoFitCardsChanged();
     void fitMinCardWidthChanged();
@@ -181,6 +195,7 @@ private:
     bool m_reserveSpace = true;
     bool m_autohide = false;
     bool m_showTitles = true;
+    bool m_showScrollBar = false;
     int m_cardSpacing = 10;
     bool m_autoFitCards = true;
     int m_fitMinCardWidth = 96;

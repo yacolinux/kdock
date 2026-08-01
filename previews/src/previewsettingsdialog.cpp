@@ -113,6 +113,7 @@ void PreviewSettingsDialog::buildControls()
     connect(m_edge, &QComboBox::currentIndexChanged, this, [this](int v) {
         if (m_config)
             m_config->setEdge(v);
+        updateThicknessLabel();
     });
 
     m_alignment = new QComboBox(geo);
@@ -123,14 +124,20 @@ void PreviewSettingsDialog::buildControls()
             m_config->setAlignment(v);
     });
 
-    m_alignmentNote = new QLabel(tr("La alineación solo aplica con un largo menor a 100%."), geo);
+    m_alignmentNote = new QLabel(
+        tr("Con un largo menor a 100% mueve la tira; con «Todo el borde», las tarjetas dentro."),
+        geo);
     m_alignmentNote->setWordWrap(true);
     geoForm->addRow(QString(), m_alignmentNote);
 
     m_thickness = new QSpinBox(geo);
-    m_thickness->setRange(120, 800);
+    m_thickness->setRange(PreviewConfig::kMinThickness, PreviewConfig::kMaxThickness);
     m_thickness->setSuffix(tr(" px"));
-    geoForm->addRow(tr("Ancho del panel:"), m_thickness);
+    // The cross axis is the *height* on a top/bottom strip and the *width* on a
+    // left/right one: one fixed word left half the users looking for a control
+    // that was already there. The label follows the edge combo live.
+    m_thicknessLabel = new QLabel(geo);
+    geoForm->addRow(m_thicknessLabel, m_thickness);
     connect(m_thickness, &QSpinBox::valueChanged, this, [this](int v) {
         if (m_config)
             m_config->setStripThickness(v);
@@ -188,6 +195,16 @@ void PreviewSettingsDialog::buildControls()
     connect(m_showTitles, &QCheckBox::toggled, this, [this](bool v) {
         if (m_config)
             m_config->setShowTitles(v);
+    });
+
+    // Kept short on purpose: a longer string pushes the dialog into a
+    // horizontal scrollbar (seen under the Xvfb probe).
+    m_showScrollBar = new QCheckBox(tr("Mostrar una barra de desplazamiento fina"), look);
+    m_showScrollBar->setToolTip(tr("Solo aparece cuando las tarjetas no entran en la tira."));
+    lookForm->addRow(QString(), m_showScrollBar);
+    connect(m_showScrollBar, &QCheckBox::toggled, this, [this](bool v) {
+        if (m_config)
+            m_config->setShowScrollBar(v);
     });
 
     m_cardSpacing = new QSpinBox(look);
@@ -316,8 +333,9 @@ void PreviewSettingsDialog::selectScreen(const QString &screenName)
         QSignalBlocker(m_alignment),          QSignalBlocker(m_thickness),
         QSignalBlocker(m_length),             QSignalBlocker(m_margin),
         QSignalBlocker(m_opacity),            QSignalBlocker(m_showTitles),
-        QSignalBlocker(m_cardSpacing),        QSignalBlocker(m_reserveSpace),
-        QSignalBlocker(m_autohide),           QSignalBlocker(m_refresh),
+        QSignalBlocker(m_showScrollBar),      QSignalBlocker(m_cardSpacing),
+        QSignalBlocker(m_reserveSpace),       QSignalBlocker(m_autohide),
+        QSignalBlocker(m_refresh),
         QSignalBlocker(m_activeRefresh),      QSignalBlocker(m_includeMinimized),
         QSignalBlocker(m_currentDesktopOnly), QSignalBlocker(m_thisMonitorOnly),
         QSignalBlocker(m_captureMode),        QSignalBlocker(m_autoFit),
@@ -329,10 +347,12 @@ void PreviewSettingsDialog::selectScreen(const QString &screenName)
     m_edge->setCurrentIndex(m_config->edge());
     m_alignment->setCurrentIndex(m_config->alignment());
     m_thickness->setValue(m_config->stripThickness());
+    updateThicknessLabel();
     m_length->setValue(m_config->stripLength());
     m_margin->setValue(m_config->screenMargin());
     m_opacity->setValue(qRound(m_config->opacity() * 100));
     m_showTitles->setChecked(m_config->showTitles());
+    m_showScrollBar->setChecked(m_config->showScrollBar());
     m_cardSpacing->setValue(m_config->cardSpacing());
     m_reserveSpace->setChecked(m_config->reserveSpace());
     m_autohide->setChecked(m_config->autohide());
@@ -355,6 +375,17 @@ void PreviewSettingsDialog::updateThumbControls()
     m_activeRefresh->setEnabled(periodic);
     // The minimum size only means something while auto-fit is on.
     m_fitMin->setEnabled(m_autoFit && m_autoFit->isChecked());
+}
+
+void PreviewSettingsDialog::updateThicknessLabel()
+{
+    if (!m_thicknessLabel)
+        return;
+    // Read the combo, not the config: the label has to follow the edge the user
+    // just picked even before the config emits.
+    const int edge = m_edge ? m_edge->currentIndex() : PreviewConfig::Bottom;
+    const bool horizontal = edge == PreviewConfig::Bottom || edge == PreviewConfig::Top;
+    m_thicknessLabel->setText(horizontal ? tr("Alto del panel:") : tr("Ancho del panel:"));
 }
 
 void PreviewSettingsDialog::updateColorButton()

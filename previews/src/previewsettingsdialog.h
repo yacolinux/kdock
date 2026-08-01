@@ -34,6 +34,8 @@ private:
     void buildControls();
     // The refresh intervals only mean something in Periodic mode.
     void updateThumbControls();
+    // The strip's cross axis is a height or a width depending on the edge.
+    void updateThicknessLabel();
     void updateColorButton();
     void pickColor();
 
@@ -59,6 +61,7 @@ private:
     QCheckBox *m_reserveSpace = nullptr;
     QCheckBox *m_autohide = nullptr;
     QCheckBox *m_showTitles = nullptr;
+    QCheckBox *m_showScrollBar = nullptr;
     QSpinBox *m_cardSpacing = nullptr;
     QCheckBox *m_autoFit = nullptr;
     QSpinBox *m_fitMin = nullptr;
@@ -69,4 +72,5 @@ private:
     QCheckBox *m_currentDesktopOnly = nullptr;
     QCheckBox *m_thisMonitorOnly = nullptr;
     QLabel *m_alignmentNote = nullptr;
+    QLabel *m_thicknessLabel = nullptr;
 };

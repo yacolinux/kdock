@@ -109,12 +109,15 @@ void PreviewConfig::load()
         m_panelPresetColors = {QStringLiteral("#000000"), QStringLiteral("#1b1e2b"),
                                QStringLiteral("#2e3440"), QStringLiteral("#3daee9")};
     }
-    m_stripThickness = qBound(120, m_settings.value(QStringLiteral("stripThickness"), 260).toInt(), 800);
+    m_stripThickness = qBound(kMinThickness,
+                              m_settings.value(QStringLiteral("stripThickness"), 260).toInt(),
+                              kMaxThickness);
     m_stripLength = qBound(0, m_settings.value(QStringLiteral("stripLength"), 0).toInt(), 100);
     m_screenMargin = qBound(0, m_settings.value(QStringLiteral("screenMargin"), 4).toInt(), 200);
     m_reserveSpace = m_settings.value(QStringLiteral("reserveSpace"), true).toBool();
     m_autohide = m_settings.value(QStringLiteral("autohide"), false).toBool();
     m_showTitles = m_settings.value(QStringLiteral("showTitles"), true).toBool();
+    m_showScrollBar = m_settings.value(QStringLiteral("showScrollBar"), false).toBool();
     m_cardSpacing = qBound(0, m_settings.value(QStringLiteral("cardSpacing"), 10).toInt(), 60);
     m_autoFitCards = m_settings.value(QStringLiteral("autoFitCards"), true).toBool();
     m_fitMinCardWidth =
@@ -186,7 +189,7 @@ void PreviewConfig::setPanelPresetColors(const QStringList &colors)
 
 void PreviewConfig::setStripThickness(int px)
 {
-    px = qBound(120, px, 800);
+    px = qBound(kMinThickness, px, kMaxThickness);
     if (m_stripThickness == px)
         return;
     m_stripThickness = px;
@@ -239,6 +242,15 @@ void PreviewConfig::setShowTitles(bool show)
     m_showTitles = show;
     m_settings.setValue(QStringLiteral("showTitles"), show);
     emit showTitlesChanged();
+}
+
+void PreviewConfig::setShowScrollBar(bool show)
+{
+    if (m_showScrollBar == show)
+        return;
+    m_showScrollBar = show;
+    m_settings.setValue(QStringLiteral("showScrollBar"), show);
+    emit showScrollBarChanged();
 }
 
 void PreviewConfig::setCardSpacing(int spacing)

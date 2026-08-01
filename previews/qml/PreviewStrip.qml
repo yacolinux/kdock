@@ -30,6 +30,31 @@ Item {
         return Math.round(screenMain * config.stripLength / 100)
     }
 
+    // With stripLength = 0 the surface is anchored to both side edges, so the
+    // compositor stretches it across the whole screen edge and cannot align it:
+    // the alignment has to move the *cards* inside the strip instead (same split
+    // as Dock.qml, which aligns the row itself in panel mode). It is applied as
+    // the ListView's leading margin below. With a fixed length the layer-shell
+    // anchors already place the surface and this only centers what is left over
+    // inside it.
+    //
+    // The cards' extent comes from the model, deliberately *not* from
+    // list.contentWidth/contentHeight: those include the very margin the
+    // alignment writes, which closes a binding loop (bug 2026-07-31 — invisible
+    // under the Xvfb harness, where there are no windows and so no content).
+    readonly property int contentLength: previews ? previews.contentLengthPx : 0
+    readonly property int availableLength: horizontal ? list.width : list.height
+    readonly property bool overflowing: contentLength > availableLength
+
+    readonly property int alignOffset: {
+        if (config.alignment === 0) // Start: the ListView's natural origin.
+            return 0
+        const slack = availableLength - contentLength
+        if (slack <= 0) // Overflowing: it scrolls, there is nothing to align.
+            return 0
+        return config.alignment === 2 ? slack : Math.round(slack / 2)
+    }
+
     property bool menuOpen: false
     readonly property bool revealed: !config.autohide || stripHover.hovered || menuOpen
     onRevealedChanged: if (revealed) previewWindow.setHidden(false)
@@ -102,6 +127,8 @@ Item {
             anchors.margins: root.pad
             orientation: root.horizontal ? ListView.Horizontal : ListView.Vertical
             spacing: config.cardSpacing
+            leftMargin: root.horizontal ? root.alignOffset : 0
+            topMargin: root.horizontal ? 0 : root.alignOffset
             clip: true
             model: previews
             // Cards are large: flicking with a wheel or a drag both make sense.
@@ -192,6 +219,140 @@ Item {
             Component.onCompleted: {
                 reportRange()
                 reportAvailable()
+            }
+        }
+
+        // Thin scroll indicator, opt-in (config.showScrollBar), on the strip's
+        // *inner* edge — the side opposite the screen edge — so it never sits
+        // where autohide's hover strip is. A plain attached ScrollBar cannot
+        // be placed there: QQuickFlickableScrollBar pins it to the bottom/right
+        // of the viewport, where it would cover the cards. This bar lives in
+        // the strip's padding band and mirrors list.visibleArea.
+        Rectangle {
+            id: scrollTrackH
+            visible: root.horizontal && config.showScrollBar && root.overflowing
+            anchors.top: config.edge === 0 ? background.top : undefined
+            anchors.bottom: config.edge === 1 ? background.bottom : undefined
+            anchors.left: background.left
+            anchors.right: background.right
+            anchors.leftMargin: root.pad
+            anchors.rightMargin: root.pad
+            height: 3
+            color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.12)
+            radius: height / 2
+
+            Rectangle {
+                id: handleH
+                x: parent.width * list.visibleArea.xPosition
+                width: Math.max(24, parent.width * list.visibleArea.widthRatio)
+                height: parent.height
+                color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.5)
+                radius: height / 2
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                function apply(mx) {
+                    const avail = parent.width - handleH.width
+                    if (avail <= 0)
+                        return
+                    const frac = Math.max(0, Math.min(1, (mx - handleH.width / 2) / avail))
+                    list.contentX = frac * (list.contentWidth - list.width)
+                }
+                onPressed: (m) => apply(m.x)
+                onPositionChanged: (m) => { if (pressed) apply(m.x) }
+            }
+        }
+
+        Rectangle {
+            id: scrollTrackV
+            visible: !root.horizontal && config.showScrollBar && root.overflowing
+            anchors.left: config.edge === 3 ? background.left : undefined
+            anchors.right: config.edge === 2 ? background.right : undefined
+            anchors.top: background.top
+            anchors.bottom: background.bottom
+            anchors.topMargin: root.pad
+            anchors.bottomMargin: root.pad
+            width: 3
+            color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.12)
+            radius: width / 2
+
+            Rectangle {
+                id: handleV
+                y: parent.height * list.visibleArea.yPosition
+                width: parent.width
+                height: Math.max(24, parent.height * list.visibleArea.heightRatio)
+                color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.5)
+                radius: width / 2
+            }
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                function apply(my) {
+                    const avail = parent.height - handleV.height
+                    if (avail <= 0)
+                        return
+                    const frac = Math.max(0, Math.min(1, (my - handleV.height / 2) / avail))
+                    list.contentY = frac * (list.contentHeight - list.height)
+                }
+                onPressed: (m) => apply(m.y)
+                onPositionChanged: (m) => { if (pressed) apply(m.y) }
+            }
+        }
+
+        // Qt 6's Flickable never crosses axes: a horizontal ListView only
+        // scrolls on angleDelta().x, and a plain mouse wheel is vertical, so a
+        // top/bottom strip could not be wheel-scrolled at all (bug 2026-07-31).
+        // A sibling WheelHandler does not fix it — the ListView is consulted
+        // before its parent's handlers and eats the event — so the wheel is
+        // caught *above* the list instead: this MouseArea is declared last, so
+        // it is topmost and sees the wheel first. acceptedButtons: NoButton
+        // lets presses fall through (card clicks, drag-to-flick, the
+        // right-click menu) and hoverEnabled stays off, so autohide's
+        // HoverHandler is untouched.
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.NoButton
+
+            // Wheel notches land faster than the glide, so the target
+            // accumulates instead of restarting from the current contentX.
+            property real scrollTarget: 0
+
+            NumberAnimation {
+                id: wheelGlide
+                target: list
+                property: "contentX"
+                duration: 150
+                easing.type: Easing.OutQuad
+            }
+
+            onWheel: (wheel) => {
+                // Vertical strips flick natively, with Flickable's own
+                // timeline: let the event through untouched.
+                if (!root.horizontal || !root.overflowing) {
+                    wheel.accepted = false
+                    return
+                }
+                const delta = wheel.angleDelta.y !== 0 ? wheel.angleDelta.y
+                                                       : wheel.angleDelta.x
+                if (delta === 0) {
+                    wheel.accepted = false
+                    return
+                }
+                // Writing contentX by hand bypasses boundsBehavior, hence the
+                // explicit clamp. Wheel up == earlier cards, the same direction
+                // as the vertical strips.
+                const from = wheelGlide.running ? scrollTarget : list.contentX
+                const step = Math.max(60, list.width * 0.3) * (delta / 120)
+                scrollTarget = Math.max(0, Math.min(list.contentWidth - list.width,
+                                                    from - step))
+                wheelGlide.stop()
+                wheelGlide.from = list.contentX
+                wheelGlide.to = scrollTarget
+                wheelGlide.start()
+                wheel.accepted = true
             }
         }
 

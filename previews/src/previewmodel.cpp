@@ -454,6 +454,13 @@ void PreviewModel::recomputeCardScale()
         m_effectiveThickness = effective;
         emit effectiveThicknessChanged();
     }
+
+    const int cross = m_config ? qRound(m_config->cardWidthPx() * m_cardScale) : 0;
+    const int length = mainAxisNeeded(cross);
+    if (length != m_contentLength) {
+        m_contentLength = length;
+        emit contentLengthChanged();
+    }
 }
 
 int PreviewModel::mainAxisNeeded(int crossSize) const

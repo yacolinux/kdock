@@ -208,7 +208,8 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `dockThicknessChanged()`, o el dock tapa las ventanas maximizadas.
   Lo mismo vale para `kdock-previews`: su única fórmula es
   `PreviewConfig::stripThicknessPx()` (en px, no en %, para no depender del tamaño de
-  pantalla).
+  pantalla), acotada por `PreviewConfig::kMinThickness`/`kMaxThickness` — **las mismas
+  constantes las usa el spinbox del panel**, no repitas el rango a mano.
 - **Una entrada de esa fórmula se mide en QML**: `config.effectiveLabelWidth`, el ancho del
   nombre más largo que el dock dibuja (`iconLabelWidth` es solo el tope). `Dock.qml` lo mide
   off-screen y lo reporta con `config.setMeasuredLabelWidth()`; el detalle está en
@@ -316,11 +317,21 @@ Lecturas:
 - PNGs con colores raros o corridos → mal el `stride`/`format` del reply, no el pipe.
 
 Y si el `--dump-captures` anda pero **la tarjeta se queda con el ícono de la app**, el proceso
-avisa por stderr una vez por ventana (`capture of <uuid> failed…`); como lo lanza kdock,
-eso va al journal:
+avisa por stderr una vez por ventana (`capture of <uuid> failed…`); si lo lanzó kdock, eso va
+al journal:
 
 ```bash
 journalctl --user -f | grep -i previews
+```
+
+**Pero no des por sentado el journal**: si la instancia se relanzó a mano (`setsid … 2> archivo`,
+que es lo normal después de instalar), su stderr **no está ahí** y `journalctl` sale vacío
+como si el proceso no dijera nada. Averiguá a dónde escribe antes de concluir nada — se
+perdió una ronda entera de diagnóstico buscando unos `console.log` que sí se estaban
+imprimiendo (2026-07-31):
+
+```bash
+ls -l /proc/$(pgrep -x kdock-previews)/fd/2     # p. ej. → /tmp/previews-err.log
 ```
 
 Ojo que en el modo por defecto (`captureMode=0`) que una tarjeta muestre el ícono **es lo
@@ -329,6 +340,53 @@ esperado** hasta que esa ventana pase a primer plano por primera vez.
 Verificado 2026-07-30 en la sesión real: 12 ventanas, 12 capturas, y **las 2 minimizadas
 salieron con contenido completo** — KWin re-renderiza la ventana aunque no esté visible, así
 que no hace falta volver a discutir ese riesgo.
+
+### Ver una tira de verdad sin tocar la del usuario
+
+Todo lo que depende del **layer-shell** —dónde queda anclada la superficie, la alineación, el
+grosor real, la zona exclusiva— **no se puede probar bajo Xvfb**: ahí es una ventana X normal.
+La receta que funcionó (2026-07-31, con la que se cerró el bug de alineación) es una **segunda
+instancia aislada en la sesión Wayland real**:
+
+```bash
+mkdir -p /tmp/kdp-live/kdock
+printf '[General]\nenabled=true\nenabledScreens=eDP-1\nknownScreens=eDP-1\n' > /tmp/kdp-live/kdock/previews.conf
+printf '[General]\nedge=1\nalignment=1\nstripLength=0\nreserveSpace=false\n'  > /tmp/kdp-live/kdock/previews-eDP-1.conf
+setsid env XDG_DATA_HOME=/tmp/kdp-live dbus-run-session -- /usr/local/bin/kdock-previews &
+```
+
+Las tres piezas importan:
+
+- **`dbus-run-session`** le da un bus propio, así el chequeo de instancia única
+  (`PreviewsService::alreadyRunning()`) no la manda a salir. Pierde el D-Bus de KWin (no hay
+  capturas), pero **la lista de ventanas sí funciona**: sale de un protocolo de Wayland.
+- **La ruta tiene que ser la instalada** (`/usr/local/bin/kdock-previews`). Desde
+  `build/previews/` KWin no concede el privilegio y la tira sale con *"Sin ventanas"*, que
+  parece un bug de filtros y es autorización.
+- **`reserveSpace=false`** y un borde distinto al de la tira real, para no moverle las
+  ventanas al usuario.
+- No hay `reload()` que sirva: `PreviewManager::reload()` solo crea/destruye tiras, **no
+  relee los `.conf`**. Entre variante y variante hay que matar y relanzar el proceso.
+
+Para *ver* el resultado, capturá la pantalla con **`spectacle-custom`**: el `spectacle` de
+`/usr/bin` no está autorizado en esta máquina y falla con *"The process is not authorized to
+take a screenshot"*.
+
+```bash
+spectacle-custom -b -n -f -o /tmp/shot.png
+```
+
+Y al terminar, **matá la instancia por PID**: `pkill -f kdock-previews` (o un `grep` sobre
+`ps aux`) también mata al shell del propio comando, porque la línea de comando del shell
+contiene el patrón. Filtrá con `pgrep -x kdock-previews` y excluí el PID de la instancia real.
+
+### El arnés de Xvfb no ve todos los binding loops
+
+El arnés carga el QML, pero en Xvfb no hay compositor que reporte ventanas: **el modelo queda
+vacío**. Cualquier bucle que necesite tarjetas para cerrarse —el de la alineación, que iba
+`alignOffset → leftMargin → contentWidth → alignOffset`— sale **limpio** ahí y recién aparece
+al reiniciar la instancia real (2026-07-31). Después de tocar geometría del `ListView`,
+reiniciá el proceso real y leé su stderr antes de cantar victoria.
 
 ## Al terminar una feature
 
