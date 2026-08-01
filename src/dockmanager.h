@@ -33,6 +33,7 @@ class BatteryControl;
 class OverviewControl;
 class DesktopControl;
 class MonitorControl;
+class MaxMinControl;
 class WallpaperControl;
 class PowerControl;
 class SystrayHost;
@@ -58,6 +59,7 @@ public:
         OverviewControl *overview = nullptr;
         DesktopControl *desktopControl = nullptr;
         MonitorControl *monitorControl = nullptr;
+        MaxMinControl *maxmin = nullptr;
         WallpaperControl *wallpaperControl = nullptr;
         PowerControl *power = nullptr;
         SystrayHost *systrayHost = nullptr;

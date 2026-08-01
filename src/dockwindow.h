@@ -19,6 +19,7 @@ class ClockWidget2;
 class OverviewControl;
 class DesktopControl;
 class MonitorControl;
+class MaxMinControl;
 class WallpaperControl;
 class PowerControl;
 class DockManager;
@@ -41,6 +42,7 @@ public:
                BrightnessControl *brightness, BatteryControl *battery,
                 OverviewControl *overview,
                 DesktopControl *desktopControl, MonitorControl *monitorControl,
+                MaxMinControl *maxmin,
                 WallpaperControl *wallpaperControl, PowerControl *power,
                 SystrayModel *systrayModel, SystrayHost *systrayHost = nullptr,
                RelanzadoresManager *relanzadores = nullptr,
@@ -99,6 +101,7 @@ private:
     OverviewControl *m_overview = nullptr;
     DesktopControl *m_desktopControl = nullptr;
     MonitorControl *m_monitorControl = nullptr;
+    MaxMinControl *m_maxmin = nullptr;
     WallpaperControl *m_wallpaperControl = nullptr;
     PowerControl *m_power = nullptr;
     bool m_hidden = false;

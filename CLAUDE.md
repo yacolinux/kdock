@@ -216,6 +216,20 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `AGENTS.md` → *App-icon labels*. Es la única realimentación QML→C++ del grosor y es segura
   porque el ancho natural de un texto no depende del grosor: **no le agregues un gancho de
   re-medición a `dockThicknessChanged`**, que es justo la señal que emite el setter.
+- **Un widget nuevo del dock se toca en SIETE archivos**, y el que se olvida no da error:
+  el backend (`src/<x>control.{h,cpp}`) + su línea en `CMakeLists.txt`; `DockConfig`
+  (`Q_PROPERTY`/getter/setter/señal/miembro en el `.h`, y `load()` + setter +
+  **`knownWidgetTokens()`** + `defaultWidgetLabel()` en el `.cpp`); `main.cpp` (instancia +
+  `shared.<x>`); `dockmanager.h` (campo en `Shared` + forward decl) y `dockmanager.cpp`
+  (pasarlo al ctor); `dockwindow.{h,cpp}` (parámetro, miembro y `setContextProperty`);
+  `Dock.qml` (`sectionVisible`, `componentFor`, `sectionTooltip`, `sectionClick` —más
+  `sectionHasAltClick`/`sectionAltClick` si usa el clic derecho— y el `Component`); y el
+  checkbox en `settingsdialog.cpp`.
+  **El que muerde es `knownWidgetTokens()`**: `reconcileWidgetOrder()` **descarta** de
+  `widgetOrder` todo token que no esté ahí, así que sin esa línea el widget **no aparece
+  nunca** aunque su flag esté en true y el `Component` exista, y no se imprime nada. Al
+  revés, si está, el token se **auto-agrega** al `widgetOrder` ya guardado de cada usuario:
+  no hace falta migración.
 - **Una clave nueva del grupo del menú se toca en CINCO lugares**: `Q_PROPERTY` + getter +
   señal, `load()`, `reloadMenuConfig()`, el `seedKey()` de `setMenuConfigShared()` y el setter
   vía `writeMenuConfigValue()` (no `m_settings.setValue()` directo). Si te salteás alguno
@@ -333,6 +347,11 @@ imprimiendo (2026-07-31):
 ```bash
 ls -l /proc/$(pgrep -x kdock-previews)/fd/2     # p. ej. → /tmp/previews-err.log
 ```
+
+Lo mismo vale para **`kdock`**: el que arranca con la sesión sí manda su stderr al journal,
+pero uno relanzado a mano después de instalar (`setsid /usr/local/bin/kdock 2> archivo`, que
+es la única forma de reiniciarlo desde la CLI —el `restart()` solo se puede invocar desde su
+menú—) escribe donde lo hayas mandado. Mismo `ls -l /proc/$(pgrep -x kdock)/fd/2`.
 
 Ojo que en el modo por defecto (`captureMode=0`) que una tarjeta muestre el ícono **es lo
 esperado** hasta que esa ventana pase a primer plano por primera vez.

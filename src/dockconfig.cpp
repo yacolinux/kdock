@@ -441,6 +441,7 @@ void DockConfig::load()
     m_showOverview = m_settings.value(QStringLiteral("showOverview"), false).toBool();
     m_showMoveToDesktop = m_settings.value(QStringLiteral("showMoveToDesktop"), false).toBool();
     m_showMoveToScreen = m_settings.value(QStringLiteral("showMoveToScreen"), false).toBool();
+    m_showMaxMin = m_settings.value(QStringLiteral("showMaxMin"), false).toBool();
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
     m_showClock2 = m_settings.value(QStringLiteral("showClock2"), false).toBool();
     m_groupWindows = m_settings.value(QStringLiteral("groupWindows"), true).toBool();
@@ -471,7 +472,8 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("battery"),
             QStringLiteral("clock"),       QStringLiteral("clock2"),
             QStringLiteral("overview"),    QStringLiteral("movetodesktop"),
-            QStringLiteral("movetoscreen"), QStringLiteral("nextwallpaper"),
+            QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
+            QStringLiteral("nextwallpaper"),
             QStringLiteral("autohide"),
             QStringLiteral("showdesktop"), QStringLiteral("systray"),
             QStringLiteral("relanzadores"), QStringLiteral("scriptrunners"),
@@ -933,6 +935,15 @@ void DockConfig::setShowMoveToScreen(bool show)
     emit showMoveToScreenChanged();
 }
 
+void DockConfig::setShowMaxMin(bool show)
+{
+    if (m_showMaxMin == show)
+        return;
+    m_showMaxMin = show;
+    m_settings.setValue(QStringLiteral("showMaxMin"), show);
+    emit showMaxMinChanged();
+}
+
 void DockConfig::setShowNextWallpaper(bool show)
 {
     if (m_showNextWallpaper == show)
@@ -1226,6 +1237,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("overview"),      tr("Overview")},
         {QStringLiteral("movetodesktop"), tr("Move to desktop")},
         {QStringLiteral("movetoscreen"),  tr("Move to monitor")},
+        {QStringLiteral("maxmin"),        tr("MaxMin")},
         {QStringLiteral("nextwallpaper"), tr("Next wallpaper")},
         {QStringLiteral("autohide"),      tr("Auto-hide toggle")},
         {QStringLiteral("showdesktop"),   tr("Show desktop")},

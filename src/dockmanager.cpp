@@ -350,7 +350,7 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     auto *window = new DockWindow(
         cfg, m_shared.theme, model, m_shared.apps, m_shared.volume, clock,
         clock2, m_shared.brightness, m_shared.battery, m_shared.overview, m_shared.desktopControl,
-        m_shared.monitorControl, m_shared.wallpaperControl, m_shared.power, systrayModel, primary ? m_shared.systrayHost : nullptr,
+        m_shared.monitorControl, m_shared.maxmin, m_shared.wallpaperControl, m_shared.power, systrayModel, primary ? m_shared.systrayHost : nullptr,
         m_shared.relanzadores, m_shared.scriptRunners, m_shared.clipboardHistory,
         m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor);
     window->setManager(this);

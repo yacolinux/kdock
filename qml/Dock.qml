@@ -434,6 +434,7 @@ Item {
         case "overview": return config.showOverview && overview && overview.available
         case "movetodesktop": return config.showMoveToDesktop && desktopControl && desktopControl.available
         case "movetoscreen": return config.showMoveToScreen && monitorControl && monitorControl.available
+        case "maxmin": return config.showMaxMin && maxmin && maxmin.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
@@ -464,6 +465,7 @@ Item {
         case "overview": return overviewComp
         case "movetodesktop": return moveDesktopComp
         case "movetoscreen": return moveScreenComp
+        case "maxmin": return maxMinComp
         case "nextwallpaper": return nextWallpaperComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
@@ -496,7 +498,8 @@ Item {
         case "clock2": return Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy, HH:mm:ss")
         case "overview": return overview && overview.active ? qsTr("Close Overview") : qsTr("Open Overview")
         case "movetodesktop": return qsTr("Move window to next desktop")
-        case "movetoscreen": return qsTr("Move window to next monitor")
+        case "movetoscreen": return qsTr("Move window to next monitor (right-click: previous)")
+        case "maxmin": return qsTr("Maximize window (right-click: minimize)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
         case "iconthemes": return qsTr("Iconset de KDE")
         case "colorschemes": return qsTr("Esquema de color de KDE")
@@ -514,11 +517,25 @@ Item {
         else if (token === "overview" && overview) overview.toggle()
         else if (token === "movetodesktop" && desktopControl) desktopControl.moveToNextDesktop()
         else if (token === "movetoscreen" && monitorControl) monitorControl.moveToNextScreen()
+        else if (token === "maxmin" && maxmin) maxmin.maximize()
         else if (token === "nextwallpaper" && wallpaperControl) wallpaperControl.nextWallpaper(config.screenName)
         else if (token === "autohide") config.autohide = !config.autohide
         else if (token === "showdesktop" && showdesktop) showdesktop.minimizeAllWindows()
         else if (token === "settings") dockWindow.openSettings()
         else if (token === "clock2") clock2.launch()
+    }
+
+    // Widgets whose right click is an action of their own instead of the
+    // section menu. Shift+right-click still opens the menu on all of them
+    // (see secMouse.onClicked).
+    function sectionHasAltClick(token) {
+        return token === "volume" || token === "movetoscreen" || token === "maxmin"
+    }
+
+    function sectionAltClick(token) {
+        if (token === "volume") dockWindow.openAudioSettings()
+        else if (token === "movetoscreen" && monitorControl) monitorControl.moveToPreviousScreen()
+        else if (token === "maxmin" && maxmin) maxmin.minimize()
     }
 
     function sectionWheel(token, dy) {
@@ -821,12 +838,17 @@ Item {
                             onReleased: secVisual.Drag.drop()
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.RightButton) {
-                                    // The volume widget's right-click opens the
-                                    // audio mixer (settings Audio tab) directly.
-                                    if (sec.token === "volume")
-                                        dockWindow.openAudioSettings()
-                                    else
+                                    // A few widgets spend their right click on a
+                                    // second action (mixer, previous monitor,
+                                    // minimize). Shift is the universal escape
+                                    // hatch back to the section menu, so the
+                                    // rename / label / colour items stay
+                                    // reachable on every widget.
+                                    if ((mouse.modifiers & Qt.ShiftModifier)
+                                        || !root.sectionHasAltClick(sec.token))
                                         sectionMenu.popup()
+                                    else
+                                        root.sectionAltClick(sec.token)
                                 } else if (mouse.button === Qt.LeftButton)
                                     root.sectionClick(sec.token)
                             }
@@ -2327,6 +2349,29 @@ Item {
                 width: root.widgetIconPx
                 height: width
                 source: "image://icon/video-display" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: parent.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    Component {
+        id: maxMinComp
+        Item {
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                // Static on purpose: "Window Maximize" is a toggle on KWin's
+                // side and the dock has no view of the active window's
+                // maximized state to mirror here.
+                source: "image://icon/window-maximize" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
                 opacity: 0.85

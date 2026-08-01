@@ -871,8 +871,18 @@ QWidget *SettingsDialog::createWidgetsTab()
 
     auto *showMoveToScreen = new QCheckBox(tr("Show move-to-next-monitor button (KDE)"), tab);
     showMoveToScreen->setChecked(m_config->showMoveToScreen());
+    showMoveToScreen->setToolTip(tr("Right-click moves the window to the previous monitor. "
+                                    "Shift+right-click opens the widget menu."));
     connect(showMoveToScreen, &QCheckBox::toggled, m_config, &DockConfig::setShowMoveToScreen);
     form->addRow(tr("Move to monitor:"), showMoveToScreen);
+
+    auto *showMaxMin = new QCheckBox(tr("Show maximize/minimize button (KDE)"), tab);
+    showMaxMin->setChecked(m_config->showMaxMin());
+    showMaxMin->setToolTip(tr("Acts on the active window: left-click maximizes (KWin toggles, "
+                              "so it also restores), right-click minimizes. "
+                              "Shift+right-click opens the widget menu."));
+    connect(showMaxMin, &QCheckBox::toggled, m_config, &DockConfig::setShowMaxMin);
+    form->addRow(tr("MaxMin:"), showMaxMin);
 
     // NOTE: the "Next wallpaper" checkbox was removed from Settings to save
     // space. The widget itself is left intact but is no longer UI-reachable
