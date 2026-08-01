@@ -34,6 +34,7 @@ class OverviewControl;
 class DesktopControl;
 class MonitorControl;
 class MaxMinControl;
+class ActiveWindowControl;
 class WallpaperControl;
 class PowerControl;
 class SystrayHost;
@@ -60,6 +61,7 @@ public:
         DesktopControl *desktopControl = nullptr;
         MonitorControl *monitorControl = nullptr;
         MaxMinControl *maxmin = nullptr;
+        ActiveWindowControl *activeWindow = nullptr;
         WallpaperControl *wallpaperControl = nullptr;
         PowerControl *power = nullptr;
         SystrayHost *systrayHost = nullptr;

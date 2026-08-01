@@ -435,6 +435,7 @@ Item {
         case "movetodesktop": return config.showMoveToDesktop && desktopControl && desktopControl.available
         case "movetoscreen": return config.showMoveToScreen && monitorControl && monitorControl.available
         case "maxmin": return config.showMaxMin && maxmin && maxmin.available
+        case "closewindow": return config.showCloseWindow && activeWindow && activeWindow.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
@@ -466,6 +467,7 @@ Item {
         case "movetodesktop": return moveDesktopComp
         case "movetoscreen": return moveScreenComp
         case "maxmin": return maxMinComp
+        case "closewindow": return closeWindowComp
         case "nextwallpaper": return nextWallpaperComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
@@ -500,6 +502,7 @@ Item {
         case "movetodesktop": return qsTr("Move window to next desktop")
         case "movetoscreen": return qsTr("Move window to next monitor (right-click: previous)")
         case "maxmin": return qsTr("Maximize window (right-click: minimize)")
+        case "closewindow": return qsTr("Close window (right-click: send to next desktop, staying here)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
         case "iconthemes": return qsTr("Iconset de KDE")
         case "colorschemes": return qsTr("Esquema de color de KDE")
@@ -518,6 +521,7 @@ Item {
         else if (token === "movetodesktop" && desktopControl) desktopControl.moveToNextDesktop()
         else if (token === "movetoscreen" && monitorControl) monitorControl.moveToNextScreen()
         else if (token === "maxmin" && maxmin) maxmin.maximize()
+        else if (token === "closewindow" && activeWindow) activeWindow.closeActive()
         else if (token === "nextwallpaper" && wallpaperControl) wallpaperControl.nextWallpaper(config.screenName)
         else if (token === "autohide") config.autohide = !config.autohide
         else if (token === "showdesktop" && showdesktop) showdesktop.minimizeAllWindows()
@@ -530,12 +534,14 @@ Item {
     // (see secMouse.onClicked).
     function sectionHasAltClick(token) {
         return token === "volume" || token === "movetoscreen" || token === "maxmin"
+               || token === "closewindow"
     }
 
     function sectionAltClick(token) {
         if (token === "volume") dockWindow.openAudioSettings()
         else if (token === "movetoscreen" && monitorControl) monitorControl.moveToPreviousScreen()
         else if (token === "maxmin" && maxmin) maxmin.minimize()
+        else if (token === "closewindow" && activeWindow) activeWindow.sendActiveToNextDesktop()
     }
 
     function sectionWheel(token, dy) {
@@ -2372,6 +2378,26 @@ Item {
                 // side and the dock has no view of the active window's
                 // maximized state to mirror here.
                 source: "image://icon/window-maximize" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: parent.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    Component {
+        id: closeWindowComp
+        Item {
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                source: "image://icon/window-close" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
                 opacity: 0.85

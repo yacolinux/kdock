@@ -81,6 +81,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showMoveToDesktop READ showMoveToDesktop WRITE setShowMoveToDesktop NOTIFY showMoveToDesktopChanged)
     Q_PROPERTY(bool showMoveToScreen READ showMoveToScreen WRITE setShowMoveToScreen NOTIFY showMoveToScreenChanged)
     Q_PROPERTY(bool showMaxMin READ showMaxMin WRITE setShowMaxMin NOTIFY showMaxMinChanged)
+    Q_PROPERTY(bool showCloseWindow READ showCloseWindow WRITE setShowCloseWindow NOTIFY showCloseWindowChanged)
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
@@ -367,6 +368,7 @@ public:
     bool showMoveToDesktop() const { return m_showMoveToDesktop; }
     bool showMoveToScreen() const { return m_showMoveToScreen; }
     bool showMaxMin() const { return m_showMaxMin; }
+    bool showCloseWindow() const { return m_showCloseWindow; }
     bool showNextWallpaper() const { return m_showNextWallpaper; }
     bool groupWindows() const { return m_groupWindows; }
     QStringList menuFavorites() const { return m_menuFavorites; }
@@ -450,6 +452,7 @@ public:
     void setShowMoveToDesktop(bool show);
     void setShowMoveToScreen(bool show);
     void setShowMaxMin(bool show);
+    void setShowCloseWindow(bool show);
     void setShowNextWallpaper(bool show);
     void setGroupWindows(bool group);
     void setMenuFavorites(const QStringList &favorites);
@@ -538,6 +541,7 @@ signals:
     void showMoveToDesktopChanged();
     void showMoveToScreenChanged();
     void showMaxMinChanged();
+    void showCloseWindowChanged();
     void showNextWallpaperChanged();
     void groupWindowsChanged();
     void menuFavoritesChanged();
@@ -643,6 +647,7 @@ private:
     bool m_showMoveToDesktop = false;
     bool m_showMoveToScreen = false;
     bool m_showMaxMin = false;
+    bool m_showCloseWindow = false;
     bool m_showNextWallpaper = false;
     bool m_groupWindows = true;
     QStringList m_menuFavorites;

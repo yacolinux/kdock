@@ -35,6 +35,7 @@ qt_add_executable(kdock
     src/desktopcontrol.cpp    src/desktopcontrol.h
     src/monitorcontrol.cpp    src/monitorcontrol.h
     src/maxmincontrol.cpp     src/maxmincontrol.h
+    src/activewindowcontrol.cpp src/activewindowcontrol.h
     src/kwinshortcut.cpp      src/kwinshortcut.h
     src/wallpapercontrol.cpp  src/wallpapercontrol.h
     src/brightnesscontrol.cpp src/brightnesscontrol.h

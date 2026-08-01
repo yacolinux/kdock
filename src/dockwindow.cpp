@@ -13,6 +13,7 @@
 #include "iconprovider.h"
 #include "overviewcontrol.h"
 #include "desktopcontrol.h"
+#include "activewindowcontrol.h"
 #include "maxmincontrol.h"
 #include "monitorcontrol.h"
 #include "wallpapercontrol.h"
@@ -54,7 +55,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        BrightnessControl *brightness, BatteryControl *battery,
                        OverviewControl *overview,
                        DesktopControl *desktopControl, MonitorControl *monitorControl,
-                       MaxMinControl *maxmin,
+                       MaxMinControl *maxmin, ActiveWindowControl *activeWindow,
                        WallpaperControl *wallpaperControl, PowerControl *power,
                        SystrayModel *systrayModel, SystrayHost *systrayHost,
                        RelanzadoresManager *relanzadores,
@@ -75,6 +76,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_desktopControl(desktopControl)
     , m_monitorControl(monitorControl)
     , m_maxmin(maxmin)
+    , m_activeWindow(activeWindow)
     , m_wallpaperControl(wallpaperControl)
     , m_power(power)
 {
@@ -131,6 +133,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("desktopControl"), m_desktopControl);
     rootContext()->setContextProperty(QStringLiteral("monitorControl"), m_monitorControl);
     rootContext()->setContextProperty(QStringLiteral("maxmin"), m_maxmin);
+    rootContext()->setContextProperty(QStringLiteral("activeWindow"), m_activeWindow);
     rootContext()->setContextProperty(QStringLiteral("wallpaperControl"), m_wallpaperControl);
     rootContext()->setContextProperty(QStringLiteral("power"), m_power);
     rootContext()->setContextProperty(QStringLiteral("systray"), systrayModel);

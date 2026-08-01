@@ -884,6 +884,15 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showMaxMin, &QCheckBox::toggled, m_config, &DockConfig::setShowMaxMin);
     form->addRow(tr("MaxMin:"), showMaxMin);
 
+    auto *showCloseWindow = new QCheckBox(tr("Show close-window button"), tab);
+    showCloseWindow->setChecked(m_config->showCloseWindow());
+    showCloseWindow->setToolTip(tr("Acts on the active window: left-click closes it, "
+                                   "right-click sends it to the next virtual desktop while "
+                                   "you stay on the current one (KWin only). "
+                                   "Shift+right-click opens the widget menu."));
+    connect(showCloseWindow, &QCheckBox::toggled, m_config, &DockConfig::setShowCloseWindow);
+    form->addRow(tr("Close window:"), showCloseWindow);
+
     // NOTE: the "Next wallpaper" checkbox was removed from Settings to save
     // space. The widget itself is left intact but is no longer UI-reachable
     // (dormant) — see AGENTS.md "Dormant / UI-unreachable code".

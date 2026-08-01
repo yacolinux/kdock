@@ -26,6 +26,19 @@ public:
     virtual void unminimize() {}
     virtual void requestClose() = 0;
 
+    // Move the window between virtual desktops *without* switching the view to
+    // it — the compositor is told which desktop to add and which to drop, and
+    // never which one to show. Only the plasma-window backend implements it
+    // (wlr-foreign-toplevel has no desktop requests), hence the capability
+    // query; desktops are identified by the uuid strings KWin also publishes
+    // over D-Bus on /VirtualDesktopManager.
+    virtual bool canChangeDesktop() const { return false; }
+    virtual void moveToDesktop(const QString &enterId, const QString &leaveId)
+    {
+        Q_UNUSED(enterId)
+        Q_UNUSED(leaveId)
+    }
+
 signals:
     void changed();
     void windowClosed();

@@ -18,6 +18,7 @@
 #include "batterycontrol.h"
 #include "overviewcontrol.h"
 #include "desktopcontrol.h"
+#include "activewindowcontrol.h"
 #include "maxmincontrol.h"
 #include "monitorcontrol.h"
 #include "wallpapercontrol.h"
@@ -140,6 +141,7 @@ int main(int argc, char *argv[])
     DesktopControl desktopControl;
     MonitorControl monitorControl;
     MaxMinControl maxmin;
+    ActiveWindowControl activeWindow(monitor);
     WallpaperControl wallpaperControl;
     PowerControl power;
     SystrayHost systray;
@@ -165,6 +167,7 @@ int main(int argc, char *argv[])
     shared.desktopControl = &desktopControl;
     shared.monitorControl = &monitorControl;
     shared.maxmin = &maxmin;
+    shared.activeWindow = &activeWindow;
     shared.wallpaperControl = &wallpaperControl;
     shared.power = &power;
     shared.systrayHost = &systray;

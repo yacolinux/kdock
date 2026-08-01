@@ -34,6 +34,17 @@ void PlasmaWindow::requestClose()
     close();
 }
 
+void PlasmaWindow::moveToDesktop(const QString &enterId, const QString &leaveId)
+{
+    // Enter first, leave second: a window that belongs to *no* desktop is how
+    // the protocol spells "on all desktops", so dropping the old one first
+    // would flash the window onto every desktop.
+    if (!enterId.isEmpty())
+        request_enter_virtual_desktop(enterId);
+    if (!leaveId.isEmpty() && leaveId != enterId)
+        request_leave_virtual_desktop(leaveId);
+}
+
 void PlasmaWindow::org_kde_plasma_window_title_changed(const QString &t)
 {
     title = t;

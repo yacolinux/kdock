@@ -24,6 +24,9 @@ public:
     void minimize() override;
     void unminimize() override;
     void requestClose() override;
+    // Available since version 8 of the interface; the client binds 20.
+    bool canChangeDesktop() const override { return true; }
+    void moveToDesktop(const QString &enterId, const QString &leaveId) override;
 
 signals:
     void initialStateDone();

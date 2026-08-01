@@ -216,6 +216,23 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `AGENTS.md` → *App-icon labels*. Es la única realimentación QML→C++ del grosor y es segura
   porque el ancho natural de un texto no depende del grosor: **no le agregues un gancho de
   re-medición a `dockThicknessChanged`**, que es justo la señal que emite el setter.
+- **Leer una propiedad D-Bus que es un struct: dos trampas, la segunda te tira el proceso.**
+  Las dos mordieron el 2026-08-01 leyendo `desktops` (a(iss)) de
+  `org.kde.KWin /VirtualDesktopManager` para el widget `closewindow`:
+  1. **`QDBusInterface::property()` no alcanza**: se niega a demarshalar un tipo struct que no
+     se registró con `qDBusRegisterMetaType`, avisa por stderr (*"type QDBusRawType<…> must be
+     registered"*) y devuelve un `QVariant` **inválido** — o sea, la feature no hace nada y no
+     falla. O registrás el metatipo (idiom en `src/systray.cpp`) o llamás a
+     `org.freedesktop.DBus.Properties.Get` a mano y desenvolvés el `QDBusVariant`, que es lo
+     que hace `ActiveWindowControl::desktopProperty()`.
+  2. **El `QDBusArgument` local tiene que ser `const`.** `beginArray()`/`beginStructure()`
+     tienen sobrecarga const (leer) y no-const (**escribir**); sobre un objeto no-const el
+     compilador elige la de escritura, la lectura se desincroniza y **libdbus aborta el
+     proceso entero** (*"type struct not a basic type"*, más un `QDBusArgument: write from a
+     read-only object` antes). En el dock eso es un crash, no un valor raro.
+  Las dos se destaparon **antes de instalar** con una sonda de 30 líneas
+  (`g++ main.cpp $(pkg-config --cflags --libs Qt6DBus Qt6Core)`) que imprime lo que contesta el
+  servicio: para cualquier D-Bus con tipos compuestos, vale la pena escribirla primero.
 - **Un widget nuevo del dock se toca en SIETE archivos**, y el que se olvida no da error:
   el backend (`src/<x>control.{h,cpp}`) + su línea en `CMakeLists.txt`; `DockConfig`
   (`Q_PROPERTY`/getter/setter/señal/miembro en el `.h`, y `load()` + setter +

@@ -87,6 +87,7 @@ Frameworks:
 | Overview | Abre el efecto Overview de KWin | kglobalaccel |
 | Mover ventana | Al siguiente escritorio virtual, o al siguiente monitor (clic derecho: al anterior) | kglobalaccel |
 | MaxMin | Maximiza (clic izquierdo) o minimiza (clic derecho) la ventana activa | kglobalaccel |
+| Cerrar ventana | Cierra la ventana activa; con clic derecho la manda al escritorio siguiente sin cambiar de escritorio | Protocolo del compositor + KWin (D-Bus) |
 | Siguiente fondo | Avanza la presentación de fondos de un monitor | D-Bus de Plasma |
 | Sesión | Cerrar sesión, reiniciar, apagar, bloquear, suspender | D-Bus de KDE |
 | Mostrar escritorio | Toggle de "mostrar escritorio" | Protocolo del compositor |
@@ -196,7 +197,8 @@ kdock
 
 En los widgets el clic derecho abre ese mismo menú, salvo en los que lo usan para una
 segunda acción (volumen → mezclador, mover a monitor → monitor anterior, MaxMin →
-minimizar). En todos, **Shift + clic derecho** abre el menú.
+minimizar, cerrar ventana → mandarla al escritorio siguiente). En todos, **Shift + clic
+derecho** abre el menú.
 
 La configuración vive en el directorio de datos XDG:
 
