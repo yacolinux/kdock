@@ -449,6 +449,11 @@ void PreviewModel::recomputeCardScale()
 
     if (!qFuzzyCompare(m_cardScale, previous))
         emit cardScaleChanged();
+    const int effective = effectiveThicknessPx();
+    if (effective != m_effectiveThickness) {
+        m_effectiveThickness = effective;
+        emit effectiveThicknessChanged();
+    }
 }
 
 int PreviewModel::mainAxisNeeded(int crossSize) const

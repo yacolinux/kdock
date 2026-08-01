@@ -60,6 +60,11 @@ PreviewWindow::PreviewWindow(PreviewConfig *config, Theme *theme, PreviewModel *
     connect(m_config, &PreviewConfig::reserveSpaceChanged, this,
             &PreviewWindow::applyLayerProperties);
     connect(m_config, &PreviewConfig::autohideChanged, this, &PreviewWindow::applyLayerProperties);
+    // The auto-fit shrinks the cards (and with them the panel: the exclusive
+    // zone must follow, or the strip would either overlap windows or leave a
+    // dead band — bug 2026-07-31).
+    connect(m_model, &PreviewModel::effectiveThicknessChanged, this,
+            &PreviewWindow::applyLayerProperties);
 
     // The wl_output is fixed at layer-surface creation, so moving to another
     // screen recreates the platform window. Runtime changes are coalesced (see
@@ -90,7 +95,7 @@ PreviewWindow::PreviewWindow(PreviewConfig *config, Theme *theme, PreviewModel *
 
 int PreviewWindow::thickness() const
 {
-    return m_config->stripThicknessPx();
+    return m_model ? m_model->effectiveThicknessPx() : m_config->stripThicknessPx();
 }
 
 void PreviewWindow::scheduleApplyScreen()

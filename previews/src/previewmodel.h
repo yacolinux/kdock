@@ -12,6 +12,8 @@
 #include <QHash>
 #include <QPointer>
 
+#include "previewconfig.h"
+
 class DesktopEntryIndex;
 class KWinWindow;
 class KWinWindows;
@@ -30,6 +32,12 @@ class PreviewModel : public QAbstractListModel
     // shrink so they all do (PreviewStrip multiplies crossSize by this). Driven
     // by PreviewConfig::autoFitCards / fitMinCardWidth.
     Q_PROPERTY(qreal cardScale READ cardScale NOTIFY cardScaleChanged)
+    // The strip's cross-axis size the cards actually need: the shrunk card
+    // width plus the padding. PreviewWindow uses it for the exclusive zone and
+    // PreviewStrip for the surface, so the panel hugs the thumbnails instead of
+    // leaving dead bands when the auto-fit shrinks them (bug 2026-07-31). Equals
+    // stripThicknessPx while the cards are full size.
+    Q_PROPERTY(int effectiveThicknessPx READ effectiveThicknessPx NOTIFY effectiveThicknessChanged)
 public:
     enum Roles {
         UuidRole = Qt::UserRole + 1,
@@ -55,6 +63,11 @@ public:
     QHash<int, QByteArray> roleNames() const override;
 
     qreal cardScale() const { return m_cardScale; }
+    int effectiveThicknessPx() const
+    {
+        const int cardW = m_config ? qRound(m_config->cardWidthPx() * m_cardScale) : 260;
+        return cardW + (m_config ? 2 * m_config->pad() : 16);
+    }
 
     Q_INVOKABLE void activate(int row);
     Q_INVOKABLE void closeWindow(int row);
@@ -89,6 +102,7 @@ public slots:
 signals:
     void countChanged();
     void cardScaleChanged();
+    void effectiveThicknessChanged();
 
 private:
     struct Row {
@@ -138,5 +152,6 @@ private:
     bool m_stripVisible = true;
     qreal m_targetScale = 1.0;
     qreal m_cardScale = 1.0;
+    int m_effectiveThickness = -1; // sentinel: force the first emit
     int m_availableLength = 0; // px; 0 until QML reports the strip's length
 };

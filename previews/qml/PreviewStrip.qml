@@ -15,7 +15,11 @@ Item {
     id: root
 
     readonly property bool horizontal: config.edge === 0 || config.edge === 1
-    readonly property int thickness: config.stripThicknessPx
+    // The panel hugs the cards: the auto-fit shrinks the cross size along with
+    // the cards, so the strip never shows dead bands on either side of the
+    // thumbnails (bug 2026-07-31). At full size this equals config.stripThicknessPx.
+    readonly property int thickness: previews ? previews.effectiveThicknessPx
+                                              : config.stripThicknessPx
     readonly property int pad: config.pad
     readonly property color baseColor: config.panelColorSet ? config.panelColor : theme.background
 
@@ -102,14 +106,27 @@ Item {
             model: previews
             // Cards are large: flicking with a wheel or a drag both make sense.
             boundsBehavior: Flickable.StopAtBounds
-            // Faster scrolling: one wheel notch moves ~2-3 cards (Qt's default
-            // ~100 px is under half a card), drags glide further and a hard
-            // flick goes faster.
-            mouseWheelVelocity: 600
+            // Drags glide further and a hard flick goes faster.
             flickDeceleration: 800
             maximumFlickVelocity: 6000
 
             delegate: Item {
+                // ListView only injects the model roles into the delegate *root*,
+                // so the wrapper must receive them and hand them on to the card —
+                // a bare nested PreviewCard leaves its required properties
+                // uninitialized and every delegate fails to be created (the strip
+                // then shows just the empty panel, bug 2026-07-31).
+                required property int index
+                required property string uuid
+                required property string thumbId
+                required property string title
+                required property string appName
+                required property string iconName
+                required property int thumbRevision
+                required property real aspect
+                required property bool active
+                required property bool minimized
+
                 // The cross axis fills the viewport so a card shrunk by the
                 // auto-fit stays centered in the strip instead of hugging an
                 // edge; the card's own extent drives the main axis.
@@ -122,6 +139,17 @@ Item {
                     crossSize: Math.round(config.cardWidthPx * previews.cardScale)
                     horizontal: root.horizontal
                     showTitle: config.showTitles
+
+                    index: parent.index
+                    uuid: parent.uuid
+                    thumbId: parent.thumbId
+                    title: parent.title
+                    appName: parent.appName
+                    iconName: parent.iconName
+                    thumbRevision: parent.thumbRevision
+                    aspect: parent.aspect
+                    active: parent.active
+                    minimized: parent.minimized
                 }
             }
 
@@ -132,8 +160,6 @@ Item {
                     previews.setAvailableLength(root.horizontal ? width : height)
             }
 
-            onWidthChanged: reportAvailable()
-            onHeightChanged: reportAvailable()
             onOrientationChanged: reportAvailable()
 
             // Only the cards actually on screen are worth capturing; the model's
@@ -161,8 +187,8 @@ Item {
             onContentXChanged: reportRange()
             onContentYChanged: reportRange()
             onCountChanged: reportRange()
-            onWidthChanged: reportRange()
-            onHeightChanged: reportRange()
+            onWidthChanged: { reportRange(); reportAvailable() }
+            onHeightChanged: { reportRange(); reportAvailable() }
             Component.onCompleted: {
                 reportRange()
                 reportAvailable()

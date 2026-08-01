@@ -95,9 +95,12 @@ KWin**.
   ventana, y un segundo clic sobre la que ya está al frente la minimiza. Clic medio = cerrar.
 - **Auto-ajuste de tarjetas**: con muchas ventanas las tarjetas se encogen para entrar en el
   largo de la tira en vez de desbordar a scroll, y vuelven al tamaño configurado al cerrarlas
-  (con un tamaño mínimo regulable).
-- **Desplazamiento rápido**: rueda y arrastre afinados para moverse entre tarjetas grandes sin
-  esfuerzo (un notch de rueda ≈ 2-3 tarjetas, con inercia al soltar).
+  (con un tamaño mínimo regulable). El **grosor de la tira acompaña a las tarjetas**: la tira
+  se adelgaza cuando estas se encogen y recupera su tamaño al crecer, así las miniaturas
+  siempre llenan la tira sin banda vacía a los lados (y la zona reservada del escritorio va
+  con ella).
+- **Desplazamiento rápido**: arrastre con inercia y *fling* afinados para moverse entre
+  tarjetas grandes sin esfuerzo.
 - Capturas **una por ventana al pasar a primer plano** (o refresco periódico, experimental),
   filtros por monitor / escritorio virtual / minimizadas, y auto-ocultado opcional.
 

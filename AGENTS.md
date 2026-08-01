@@ -327,14 +327,21 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
   de un bug de render si no lo dice.
 - **Ventanas minimizadas**: se capturan igual, con contenido completo (verificado
   2026-07-30); KWin las re-renderiza aunque no estén visibles.
-- **Scroll rápido**: el `ListView` de la tira usa `mouseWheelVelocity: 600` (un notch de
-  rueda ≈ 2-3 tarjetas; el default de Qt ~100 px es media tarjeta), `flickDeceleration: 800`
-  y `maximumFlickVelocity: 6000` (más inercia y velocidad al soltar un arrastre).
+- **Scroll rápido**: el `ListView` de la tira usa `flickDeceleration: 800` y
+  `maximumFlickVelocity: 6000` (más inercia y velocidad al soltar un arrastre). **No** se
+  toca el `mouseWheelVelocity` del `Flickable`: no existe en el Qt del sistema (6.10.2;
+  llegó más tarde) y asignarlo hacía fallar la carga del QML (bug 2026-07-31).
 - **Auto-fit de tarjetas** (`config.autoFitCards`, default on, + `config.fitMinCardWidth`,
   default 96 px): con muchas ventanas las tarjetas se achican para entrar en el largo de la
   tira en vez de desbordar a scroll, y vuelven al tamaño configurado al quedar pocas. El
-  **grosor de la tira y la zona exclusiva no se mueven** (solo se achican las tarjetas; quedan
-  centradas en la tira — el delegate es un wrapper del tamaño del viewport con `anchors.centerIn`).
+  **grosor de la tira y la zona exclusiva acompañan a las tarjetas** (bug 2026-07-31): con el
+  grosor fijo y las tarjetas encogidas la tira mostraba una banda muerta a cada lado; ahora
+  `PreviewModel::effectiveThicknessPx` = `round(cardWidthPx * cardScale) + 2*pad` lo alimenta
+  todo — el QML (grosor del root, que re-dirige el tamaño de la superficie) y
+  `PreviewWindow::thickness()` (zona exclusiva, reaplicada vía
+  `effectiveThicknessChanged` → `applyLayerProperties`). A escala completa coincide con
+  `stripThicknessPx`. Sin bucle: el largo útil (eje principal) no depende del grosor, y la
+  realimentación vía geometría de ventanas maximizadas es contractiva (factor 1/n, n ≥ 2).
   - La escala la calcula **`PreviewModel::cardScale`** (Q_PROPERTY qreal, 1.0 = tamaño
     configurado), no el QML: el modelo conoce las filas y sus `aspect`. El largo útil lo
     reporta el QML con `previews.setAvailableLength(px)` (el width/height del `ListView`,
@@ -350,6 +357,12 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
     tamaño escalado ⇒ con muchas ventanas las miniaturas cacheadas son más chicas (menos RAM).
   - En el panel: checkbox "Ajustar el tamaño de las tarjetas al contenido" + spinbox
     "Tamaño mínimo de tarjeta" (habilitado solo con el checkbox), en el grupo Miniaturas.
+- **El delegate es un wrapper que reenvía los roles** (bug 2026-07-31): ListView inyecta los
+  roles del modelo solo en el *root* del delegate, así que el `Item` que envuelve a
+  `PreviewCard` (para centrar la tarjeta encogida) debe declarar los `required property` y
+  reasignárselos a la tarjeta. Sin el reenvío, cada fila falla con
+  `Required property uuid was not initialized` y la tira queda vacía (parece un problema de
+  render o autorización, y es el delegate).
 
 - **Fuente de ventanas propia** (`previews/src/kwinwindows.cpp`), KWin-only, en vez de
   generalizar `WindowMonitor`/`PlasmaWindow`: necesita uuid + `geometry` + escritorios
