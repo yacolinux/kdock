@@ -319,6 +319,29 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   mientras todo el resto reporta éxito** (mordió 2026-07-30, costó dos rondas). Regla: nunca
   armes una URL con `uuid`; usá el rol `thumbId` (uuid sin llaves). `ThumbnailCache`
   normaliza igual las dos formas, y un *miss* del provider ahora avisa por stderr una vez.
+- **`QIcon::setThemeName()` re-entra al `IconProvider`, así que un swap "temporal" del
+  iconset global se filtra.** Para resolver *un* ícono contra otro set, el provider hacía
+  `previous = QIcon::themeName()` → `setThemeName(override)` → renderizar →
+  `setThemeName(previous)`. Parece seguro (un solo hilo, restauración incondicional) y no lo
+  es: `setThemeName()` **notifica a las vistas de forma síncrona**, o sea que desde adentro
+  del swap vuelve a entrar a `requestPixmap()`. La traza del arnés lo muestra sin lugar a
+  dudas (`d=2` con el global puesto en el override de la llamada de afuera). Si la llamada
+  anidada es un ícono **sin** override —un lanzador— se dibuja con el iconset del widget, y
+  como su URL no lleva tema, **QML cachea ese pixmap y el ícono queda mal hasta el próximo
+  bump de `theme.revision`**. Síntoma: al reiniciar, los íconos de las apps salen con el set
+  de los widgets y "se arreglan solos" al tocar cualquier cosa del tema (mordió 2026-08-02,
+  y parece un bug de render siendo estado global). Regla: **nunca toques `QIcon::setThemeName()`
+  fuera de `Theme`**; resolvé por archivo (`IconProvider::resolveInTheme()`).
+  Reproducirlo cuesta 40 líneas: `qInfo()` a la entrada y a la salida de `requestPixmap()`
+  con un contador de profundidad, y el arnés de Xvfb con una **copia** de la config del
+  usuario. Ojo con dos cosas del arnés acá: `QT_QPA_PLATFORM=offscreen` deja
+  `QIcon::themeSearchPaths()` en solo `:/icons` (ningún ícono resuelve y todo sale nulo —
+  usá `xcb` bajo Xvfb), y la config del usuario apunta a pantallas reales, así que hay que
+  copiar `kdock-<screen>.conf` a `kdock-screen.conf` y poner `enabledScreens=screen`.
+- **El arnés de Xvfb tiene efectos reales sobre la máquina.** No es una caja de arena: el
+  `BrightnessControl` reaplica al arrancar el `Brightness/lastBrightness` de la config que le
+  des (`brightnessctl set`), así que correr el arnés **te cambia el brillo de la pantalla** al
+  valor que tenga ese `.conf`. Lo mismo vale para cualquier backend que escriba al sistema.
 - **Clave de fila en `DockModel`**: con `groupWindows=false` una ventana se indexa como
   `win:<puntero>`. Todo camino que convierta esa fila en lanzador anclado tiene que
   **re-indexarla por la app**, o queda un lanzador huérfano que relanza en cada clic.
