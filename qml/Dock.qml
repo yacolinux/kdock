@@ -55,6 +55,10 @@ Item {
     TextMetrics {
         id: secNameProbe
         font.pixelSize: config.iconLabelFontPx
+        // Bold section names are wider than regular ones, so the probe has to
+        // follow the setting or the reserved box comes out short and every
+        // widget name gets elided.
+        font.bold: config.labelBold
     }
     Timer {
         id: labelMeasureTimer
@@ -97,6 +101,9 @@ Item {
         // would feed straight back in here.
         function onIconSizeChanged() { root.scheduleLabelMeasure() }
         function onIconLabelFontSizeChanged() { root.scheduleLabelMeasure() }
+        // Not an input of iconLabelFontPx, but it does change how wide the
+        // section names come out (secNameProbe above).
+        function onLabelBoldChanged() { root.scheduleLabelMeasure() }
     }
     Connections {
         target: dockModel
@@ -336,10 +343,18 @@ Item {
     // panel color. Perceptual luminance (not a flat average) so dark
     // blues/greens count as dark. Opacity deliberately plays no part: a
     // translucent dark panel still reads as dark, so the text stays light.
-    readonly property color dockBaseColor: config.panelColorSet ? config.panelColor : theme.background
+    //
+    // Dark mode overrides both of them *here*, at read time: config.panelColor
+    // is never written, so leaving dark mode restores the user's own scheme
+    // with nothing to undo. config.opacity is applied downstream as always, so
+    // a translucent dock stays translucent in dark mode too.
+    readonly property color dockBaseColor: config.darkModeActive ? config.darkBackground
+                                           : config.panelColorSet ? config.panelColor
+                                                                  : theme.background
     readonly property bool dockBaseIsLight:
         (0.299 * dockBaseColor.r + 0.587 * dockBaseColor.g + 0.114 * dockBaseColor.b) > 0.5
-    readonly property color dockTextColor: dockBaseIsLight ? "#141414" : "#F2F2F2"
+    readonly property color dockTextColor: config.darkModeActive ? config.darkAccent
+                                           : dockBaseIsLight ? "#141414" : "#F2F2F2"
 
     // Same idea for the widgets' icons: the standard icons (volume, network,
     // session…) are monochrome and drawn in a color meant for one background,
@@ -347,6 +362,11 @@ Item {
     // an icon set built for the dock background instead of the global one
     // (Breeze / Breeze Dark by default). Empty = no override, use the theme's.
     readonly property string widgetIconTheme: {
+        // Dark mode forces the dark-background set whatever the mode says: the
+        // panel is dark by definition there, and the light set would be a black
+        // icon on a black panel.
+        if (config.darkModeActive)
+            return config.widgetIconThemeDarkBg
         switch (config.widgetIconThemeMode) {
         case 1: return dockBaseIsLight ? config.widgetIconThemeLightBg   // match dock color
                                        : config.widgetIconThemeDarkBg
@@ -437,6 +457,7 @@ Item {
         case "maxmin": return config.showMaxMin && maxmin && maxmin.available
         case "closewindow": return config.showCloseWindow && activeWindow && activeWindow.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
+        case "darkmode": return config.showDarkMode
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
         case "systray": return systray && config.showSystray && systray.count > 0
@@ -469,6 +490,7 @@ Item {
         case "maxmin": return maxMinComp
         case "closewindow": return closeWindowComp
         case "nextwallpaper": return nextWallpaperComp
+        case "darkmode": return darkModeComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
         case "systray": return systrayComp
@@ -504,6 +526,7 @@ Item {
         case "maxmin": return qsTr("Maximize window (right-click: minimize)")
         case "closewindow": return qsTr("Close window (right-click: send to next desktop, staying here)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
+        case "darkmode": return qsTr("Modo normal (clic derecho: modo oscuro)")
         case "iconthemes": return qsTr("Iconset de KDE")
         case "colorschemes": return qsTr("Esquema de color de KDE")
         case "autohide": return config.autohide ? qsTr("Dock auto-hides") : qsTr("Dock stays visible")
@@ -523,6 +546,7 @@ Item {
         else if (token === "maxmin" && maxmin) maxmin.maximize()
         else if (token === "closewindow" && activeWindow) activeWindow.closeActive()
         else if (token === "nextwallpaper" && wallpaperControl) wallpaperControl.nextWallpaper(config.screenName)
+        else if (token === "darkmode") config.setDarkModeActive(false)
         else if (token === "autohide") config.autohide = !config.autohide
         else if (token === "showdesktop" && showdesktop) showdesktop.minimizeAllWindows()
         else if (token === "settings") dockWindow.openSettings()
@@ -534,7 +558,7 @@ Item {
     // (see secMouse.onClicked).
     function sectionHasAltClick(token) {
         return token === "volume" || token === "movetoscreen" || token === "maxmin"
-               || token === "closewindow"
+               || token === "closewindow" || token === "darkmode"
     }
 
     function sectionAltClick(token) {
@@ -542,6 +566,7 @@ Item {
         else if (token === "movetoscreen" && monitorControl) monitorControl.moveToPreviousScreen()
         else if (token === "maxmin" && maxmin) maxmin.minimize()
         else if (token === "closewindow" && activeWindow) activeWindow.sendActiveToNextDesktop()
+        else if (token === "darkmode") config.setDarkModeActive(true)
     }
 
     function sectionWheel(token, dy) {
@@ -826,6 +851,7 @@ Item {
                                                                               : Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             font.pixelSize: root.labelFontPx
+                            font.bold: config.labelBold
                             color: root.dockTextColor
                         }
 
@@ -896,6 +922,7 @@ Item {
                             }
                             MenuSeparator {}
                             BackgroundColorMenu {}
+                            ModeMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
                             IconMenuItem {
@@ -1058,9 +1085,13 @@ Item {
                             anchors.topMargin: -(root.horizontal ? crossRoom : alongRoom)
                             anchors.bottomMargin: -(root.horizontal ? crossRoom : alongRoom)
                             radius: config.compact ? 6 : 10
-                            readonly property color dom: iconColors
-                                ? iconColors.dominant(delegateRoot.iconName, theme.revision)
-                                : theme.highlight
+                            // Dark mode drops the per-icon coloring and paints
+                            // every highlight with the single accent color.
+                            readonly property color dom: config.darkModeActive
+                                ? config.darkAccent
+                                : iconColors
+                                  ? iconColors.dominant(delegateRoot.iconName, theme.revision)
+                                  : theme.highlight
                             color: Qt.rgba(dom.r, dom.g, dom.b, 0.85)
                         }
 
@@ -1075,11 +1106,17 @@ Item {
                             readonly property bool activeApp: delegateRoot.active
                             // Over the colored background use the inverted color so
                             // the bar stays visible; otherwise the dominant color.
-                            readonly property color indColor: iconColors
-                                ? (config.iconRunningBackground
-                                    ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
-                                    : iconColors.dominant(delegateRoot.iconName, theme.revision))
-                                : theme.highlight
+                            readonly property color indColor: config.darkModeActive
+                                // Same single-color rule, except over the accent
+                                // fill, where the accent would be invisible: the
+                                // dark background is the other half of the palette.
+                                ? (config.iconRunningBackground ? config.darkBackground
+                                                                : config.darkAccent)
+                                : iconColors
+                                  ? (config.iconRunningBackground
+                                      ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
+                                      : iconColors.dominant(delegateRoot.iconName, theme.revision))
+                                  : theme.highlight
                             color: Qt.rgba(indColor.r, indColor.g, indColor.b, activeApp ? 1.0 : 0.55)
                             radius: 1.5
                             readonly property int lengthPx: Math.round(root.appIconPx * (activeApp ? 0.7 : 0.45))
@@ -1144,7 +1181,7 @@ Item {
                                                                         : Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                             font.pixelSize: root.labelFontPx
-                            font.bold: delegateRoot.active
+                            font.bold: config.labelBold || delegateRoot.active
                             color: root.dockTextColor
                         }
 
@@ -1155,11 +1192,17 @@ Item {
                             // Same coloring method as the edge line: icon's
                             // dominant color (inverted over the colored background
                             // so it stays visible), brighter for the active window.
-                            readonly property color indColor: iconColors
-                                ? (config.iconRunningBackground
-                                    ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
-                                    : iconColors.dominant(delegateRoot.iconName, theme.revision))
-                                : theme.highlight
+                            readonly property color indColor: config.darkModeActive
+                                // Same single-color rule, except over the accent
+                                // fill, where the accent would be invisible: the
+                                // dark background is the other half of the palette.
+                                ? (config.iconRunningBackground ? config.darkBackground
+                                                                : config.darkAccent)
+                                : iconColors
+                                  ? (config.iconRunningBackground
+                                      ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
+                                      : iconColors.dominant(delegateRoot.iconName, theme.revision))
+                                  : theme.highlight
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.top: parent.bottom
                             anchors.topMargin: config.compact ? 0 : 2
@@ -1177,11 +1220,17 @@ Item {
                             id: dotsColumn
                             visible: config.iconRunningDots
                                      && !root.horizontal && delegateRoot.windowCount > 0
-                            readonly property color indColor: iconColors
-                                ? (config.iconRunningBackground
-                                    ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
-                                    : iconColors.dominant(delegateRoot.iconName, theme.revision))
-                                : theme.highlight
+                            readonly property color indColor: config.darkModeActive
+                                // Same single-color rule, except over the accent
+                                // fill, where the accent would be invisible: the
+                                // dark background is the other half of the palette.
+                                ? (config.iconRunningBackground ? config.darkBackground
+                                                                : config.darkAccent)
+                                : iconColors
+                                  ? (config.iconRunningBackground
+                                      ? iconColors.contrasting(delegateRoot.iconName, theme.revision)
+                                      : iconColors.dominant(delegateRoot.iconName, theme.revision))
+                                  : theme.highlight
                             anchors.verticalCenter: parent.verticalCenter
                             anchors.left: config.edge === 2 ? undefined : parent.right
                             anchors.right: config.edge === 2 ? parent.left : undefined
@@ -1295,6 +1344,7 @@ Item {
                                 }
                             }
                             BackgroundColorMenu {}
+                            ModeMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
                             Menu {
@@ -2418,6 +2468,30 @@ Item {
                 width: root.widgetIconPx
                 height: width
                 source: "image://icon/preferences-desktop-wallpaper" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: parent.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    // Left click = normal, right click = dark. Deliberately not a toggle: each
+    // button picks one mode, so the widget is also a readout of which one is on.
+    Component {
+        id: darkModeComp
+        Item {
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                source: "image://icon/"
+                        + (config.darkModeActive ? "weather-clear-night" : "weather-clear")
+                        + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
                 opacity: 0.85

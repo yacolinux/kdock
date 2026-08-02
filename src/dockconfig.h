@@ -83,6 +83,15 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showMaxMin READ showMaxMin WRITE setShowMaxMin NOTIFY showMaxMinChanged)
     Q_PROPERTY(bool showCloseWindow READ showCloseWindow WRITE setShowCloseWindow NOTIFY showCloseWindowChanged)
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
+    Q_PROPERTY(bool showDarkMode READ showDarkMode WRITE setShowDarkMode NOTIFY showDarkModeChanged)
+    // Dark mode: an *override* of the normal color scheme, never a rewrite of
+    // it. See darkModeActive() — the "Normal" colors stay in the .conf exactly
+    // where the user left them, so turning dark mode off restores them by
+    // construction (no snapshot, no restore).
+    Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY darkModeChanged)
+    Q_PROPERTY(bool darkModeActive READ darkModeActive NOTIFY darkModeChanged)
+    Q_PROPERTY(QColor darkAccent READ darkAccent NOTIFY darkModeChanged)
+    Q_PROPERTY(QColor darkBackground READ darkBackground NOTIFY darkModeChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
     Q_PROPERTY(QStringList widgetOrder READ widgetOrder WRITE setWidgetOrder NOTIFY widgetOrderChanged)
@@ -101,6 +110,9 @@ class DockConfig : public QObject
     // Same idea for the non-app sections (widgets and blocks), configured apart
     // from the apps: a dock can name its widgets and not its apps, or vice versa.
     Q_PROPERTY(int widgetLabelMode READ widgetLabelMode WRITE setWidgetLabelMode NOTIFY widgetLabelModeChanged)
+    // Draws every name the dock shows (apps and sections) in bold. The clocks
+    // are bold already, so this only ever adds weight.
+    Q_PROPERTY(bool labelBold READ labelBold WRITE setLabelBold NOTIFY labelBoldChanged)
     // Bumped on every rename; QML reads it inside the bindings that call
     // widgetName() so a custom name repaints (same trick as theme.revision).
     Q_PROPERTY(int widgetNamesRevision READ widgetNamesRevision NOTIFY widgetNamesChanged)
@@ -202,6 +214,27 @@ public:
     // every live DockConfig in the process and emits menuFavoritesChanged().
     static void setFavoritesShared(bool shared);
 
+    // ---- Dark mode (app-wide part) ----------------------------------------
+    // Breeze Dark's two colors, copied into the app on purpose: the dark scheme
+    // must not shift under the dock when the user edits their KDE color scheme,
+    // so nothing here is read from kdeglobals at runtime.
+    static constexpr const char *kDarkAccentDefault     = "#3daee9";
+    static constexpr const char *kDarkBackgroundDefault = "#232629";
+
+    // Single switch that puts *every* dock in dark mode, minus the ones listed
+    // as exceptions. Stored in the shared settings file, like shareFavorites.
+    static bool darkModeAllDocks();
+    static void setDarkModeAllDocks(bool on);
+    // dockIds left in normal mode while darkModeAllDocks() is on.
+    static QStringList darkModeExceptions();
+    static void setDarkModeExceptions(const QStringList &dockIds);
+    // The one accent color (label text + running-app highlight) and the dock
+    // background used while dark mode is on. App-wide, not per dock.
+    static QColor darkAccentColor();
+    static void setDarkAccentColor(const QColor &color);
+    static QColor darkBackgroundColor();
+    static void setDarkBackgroundColor(const QColor &color);
+
     // Like favoritesShared(), but for the menu *appearance/behavior* group
     // (menu icon, popup width/height, power row, columns). Stored under
     // "shareMenuConfig"; when on, those keys live in the shared settings file.
@@ -269,6 +302,7 @@ public:
     int iconLabelGap() const { return m_compact ? 2 : 4; } // icon <-> label
     // See IconLabelMode. Width and font size are shared with the app labels.
     int widgetLabelMode() const { return m_widgetLabelMode; }
+    bool labelBold() const { return m_labelBold; }
     // Icons shrink (down to autoShrinkMinIconSize) instead of overflowing the
     // dock when the sections do not fit. Without it the layout piles the
     // sections that do not fit on top of each other.
@@ -370,6 +404,17 @@ public:
     bool showMaxMin() const { return m_showMaxMin; }
     bool showCloseWindow() const { return m_showCloseWindow; }
     bool showNextWallpaper() const { return m_showNextWallpaper; }
+    bool showDarkMode() const { return m_showDarkMode; }
+    // This dock's own dark-mode flag. Only consulted when the app-wide switch
+    // is off; see darkModeActive().
+    bool darkMode() const { return m_darkMode; }
+    // The value QML actually renders from. Resolved (never stored): the
+    // app-wide switch wins, and then the exception list decides. Doing it this
+    // way means an exception needs no write at all to the excepted dock's file
+    // — including the docks that are not even running.
+    bool darkModeActive() const;
+    QColor darkAccent() const { return darkAccentColor(); }
+    QColor darkBackground() const { return darkBackgroundColor(); }
     bool groupWindows() const { return m_groupWindows; }
     QStringList menuFavorites() const { return m_menuFavorites; }
     int separator1() const { return m_separator1; }
@@ -390,6 +435,7 @@ public:
     void setIconLabelWidth(int px);
     void setIconLabelFontSize(int px); // 0 = automatic
     void setWidgetLabelMode(int mode);
+    void setLabelBold(bool on);
     void setAutoShrinkIcons(bool on);
     void setAutoShrinkMinIconSize(int px);
     void setSpacing(int spacing);
@@ -454,6 +500,12 @@ public:
     void setShowMaxMin(bool show);
     void setShowCloseWindow(bool show);
     void setShowNextWallpaper(bool show);
+    void setShowDarkMode(bool show);
+    void setDarkMode(bool on);
+    // What the "Modo" submenu and the darkmode widget call: writes wherever the
+    // effective value lives (the app-wide switch when it is on, this dock's own
+    // flag otherwise), so the click does what it looks like it does.
+    Q_INVOKABLE void setDarkModeActive(bool on);
     void setGroupWindows(bool group);
     void setMenuFavorites(const QStringList &favorites);
     void setSeparator1(int pos);
@@ -477,6 +529,7 @@ signals:
     void iconLabelWidthChanged();
     void iconLabelFontSizeChanged();
     void widgetLabelModeChanged();
+    void labelBoldChanged();
     void autoShrinkIconsChanged();
     void autoShrinkMinIconSizeChanged();
     void widgetNamesChanged();
@@ -543,6 +596,11 @@ signals:
     void showMaxMinChanged();
     void showCloseWindowChanged();
     void showNextWallpaperChanged();
+    void showDarkModeChanged();
+    // One signal for the whole dark-mode group (own flag, app-wide switch,
+    // exceptions, both colors): every QML binding that cares reads more than
+    // one of them anyway.
+    void darkModeChanged();
     void groupWindowsChanged();
     void menuFavoritesChanged();
     void separator1Changed();
@@ -566,6 +624,11 @@ private:
     // Persist a menu-config key to the effective store (shared file when
     // menuConfigShared(), otherwise this dock's own settings).
     void writeMenuConfigValue(const QString &key, const QVariant &value);
+
+    // Emit darkModeChanged() on every live dock. The app-wide switch, the
+    // exceptions and the two colors are process-global, so a change to any of
+    // them has to repaint all the docks, not just the one being edited.
+    static void notifyDarkModeChanged();
 
     // Shared-favorites storage in the shared settings file.
     static QStringList sharedFavorites();
@@ -600,6 +663,7 @@ private:
     int m_measuredLabelWidth = -1; // -1 = unmeasured; see effectiveLabelWidth()
     int m_iconLabelFontSize = 0; // 0 = derived from iconSize
     int m_widgetLabelMode = IconOnly;
+    bool m_labelBold = false;
     bool m_autoShrinkIcons = true;
     int m_autoShrinkMinIconSize = 16;
     QHash<QString, QString> m_widgetNames; // section token -> user rename
@@ -649,6 +713,8 @@ private:
     bool m_showMaxMin = false;
     bool m_showCloseWindow = false;
     bool m_showNextWallpaper = false;
+    bool m_showDarkMode = false;
+    bool m_darkMode = false;
     bool m_groupWindows = true;
     QStringList m_menuFavorites;
     int m_separator1 = -1;

@@ -49,7 +49,14 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Modos de presentación**: flotante o panel de borde a borde, modo compacto, alineación
   inicio/centro/fin, opacidad, color de fondo, largo fijo o automático.
 - **Etiquetas de íconos** en seis disposiciones (debajo, al costado, solo nombre…) con
-  medición del nombre más largo para que el dock no desperdicie grosor.
+  medición del nombre más largo para que el dock no desperdicie grosor. Opcionalmente en
+  **negrita**, con re-medición para que el nombre más ancho siga entrando.
+- **Modo oscuro** conmutable por dock, o para todos de una con lista de excepciones: fondo
+  oscuro, un único color de resaltado para los nombres y para las apps corriendo, e íconos
+  de widgets resueltos contra el set oscuro. Es un **override**, no una reescritura: el
+  esquema de colores que ya tenías queda intacto en el `.conf` y reaparece tal cual al
+  volver a Normal. Se cambia desde su solapa, desde el submenú *Modo* del clic derecho o
+  desde su propio widget.
 - **Auto-encogido**: cuando no entran todos los íconos, el dock reduce escala y fuente en vez
   de recortar.
 - **Drag & drop** para reordenar íconos y secciones enteras, con separadores dinámicos
@@ -92,6 +99,7 @@ Frameworks:
 | Sesión | Cerrar sesión, reiniciar, apagar, bloquear, suspender | D-Bus de KDE |
 | Mostrar escritorio | Toggle de "mostrar escritorio" | Protocolo del compositor |
 | Auto-ocultar | Prende y apaga el auto-ocultado | — |
+| Modo oscuro | Clic izquierdo: esquema normal; clic derecho: modo oscuro | — |
 | Relanzadores | Mini-dock anidado: un ícono despliega una barra con otros lanzadores | — |
 | Script Runner | Ejecuta un script shell configurable | `sh` |
 

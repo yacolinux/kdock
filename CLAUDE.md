@@ -158,6 +158,34 @@ veces, una con `app.setPalette()` claro y otra oscuro: el diálogo hereda el esq
 Encontró el bug de que las solapas coloreadas se pasaban de los 1000 px del diálogo (las
 diez ya piden ~940) y la barra caía en modo flechas de scroll.
 
+**La barra de solapas se desborda cada vez que agregás una.** Volvió a pasar con la solapa
+*DarkMode* (2026-08-02): once títulos piden **1086 px** y el `QTabBar` cae en modo flechas
+**sin avisar**, escondiendo las últimas — el diálogo pasó a 1120 px. Antes de agregar una
+solapa, medí: un `main` de diez líneas que arma un `ColoredTabWidget` con los títulos e
+imprime `coloredTabBar()->sizeHint().width()` (no hace falta ni GUI ni captura).
+
+### Sonda del diálogo *real* (linkeando los `.o` del proyecto)
+
+Compilar una clase suelta sirve para un widget propio, pero no para algo que vive dentro de
+`SettingsDialog` (una solapa nueva): recrearla en la sonda prueba una copia, no el código que
+se instala. **No hace falta CMake: alcanza con linkear los objetos que el build ya dejó**,
+salteando `main.cpp.o`:
+
+```bash
+OBJS=$(find build/CMakeFiles/kdock.dir -name '*.o' | grep -v '/main.cpp.o' | tr '\n' ' ')
+g++ -std=c++17 -fPIC /tmp/p/dlg.cpp $OBJS -Isrc \
+    $(pkg-config --cflags --libs Qt6Widgets Qt6Quick Qt6Qml Qt6DBus Qt6WaylandClient \
+                                 Qt6Gui Qt6Core wayland-client) -o /tmp/p/dlgprobe
+```
+
+El `dlg.cpp` instancia `DockConfig` + `DesktopEntryIndex`, construye el `SettingsDialog` con
+`nullptr` en el resto (manager, systray, audio…), selecciona la solapa con
+`findChild<QTabWidget*>()->setCurrentIndex(n)` y hace `grab().save()`. Corré con
+`XDG_DATA_HOME` a un directorio descartable, o **te escribe la config real**. Dos detalles del
+link: `find` (no `ls`) para agarrar también los `.o` de los protocolos de Wayland y el
+`mocs_compilation`, y `wayland-client` explícito en el `pkg-config` (si no, *"DSO missing from
+command line"*).
+
 ### Arnés de un componente QML suelto (popups del dock)
 
 El arnés de Xvfb de arriba prueba que el QML **carga**, pero no deja *ver* nada: los popups
@@ -247,6 +275,10 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   nunca** aunque su flag esté en true y el `Component` exista, y no se imprime nada. Al
   revés, si está, el token se **auto-agrega** al `widgetOrder` ya guardado de cada usuario:
   no hace falta migración.
+  Un widget que **solo toca `DockConfig`** (el `darkmode`, por ejemplo) se salta cuatro de
+  los siete: no lleva `src/<x>control.{h,cpp}`, ni `main.cpp`, ni `dockmanager.*`, ni
+  `dockwindow.*` — no hay backend que instanciar ni context property que registrar. Quedan
+  `DockConfig` (con su `knownWidgetTokens()`), `Dock.qml` y el checkbox del diálogo.
 - **Una clave nueva del grupo del menú se toca en CINCO lugares**: `Q_PROPERTY` + getter +
   señal, `load()`, `reloadMenuConfig()`, el `seedKey()` de `setMenuConfigShared()` y el setter
   vía `writeMenuConfigValue()` (no `m_settings.setValue()` directo). Si te salteás alguno

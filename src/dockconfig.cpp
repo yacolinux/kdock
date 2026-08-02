@@ -170,6 +170,114 @@ void DockConfig::setSharedFavorites(const QStringList &favorites)
     s.setValue(QStringLiteral("sharedMenuFavorites"), favorites);
 }
 
+bool DockConfig::darkModeAllDocks()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("darkModeAllDocks"), false).toBool();
+}
+
+void DockConfig::setDarkModeAllDocks(bool on)
+{
+    if (darkModeAllDocks() == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("darkModeAllDocks"), on);
+    }
+    notifyDarkModeChanged();
+}
+
+QStringList DockConfig::darkModeExceptions()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("darkModeExceptions")).toStringList();
+}
+
+void DockConfig::setDarkModeExceptions(const QStringList &dockIds)
+{
+    if (darkModeExceptions() == dockIds)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("darkModeExceptions"), dockIds);
+    }
+    notifyDarkModeChanged();
+}
+
+QColor DockConfig::darkAccentColor()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    const QColor c(s.value(QStringLiteral("darkAccent"),
+                           QString::fromLatin1(kDarkAccentDefault)).toString());
+    return c.isValid() ? c : QColor(QString::fromLatin1(kDarkAccentDefault));
+}
+
+void DockConfig::setDarkAccentColor(const QColor &color)
+{
+    if (!color.isValid() || darkAccentColor() == color)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("darkAccent"), color.name());
+    }
+    notifyDarkModeChanged();
+}
+
+QColor DockConfig::darkBackgroundColor()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    const QColor c(s.value(QStringLiteral("darkBackground"),
+                           QString::fromLatin1(kDarkBackgroundDefault)).toString());
+    return c.isValid() ? c : QColor(QString::fromLatin1(kDarkBackgroundDefault));
+}
+
+void DockConfig::setDarkBackgroundColor(const QColor &color)
+{
+    if (!color.isValid() || darkBackgroundColor() == color)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("darkBackground"), color.name());
+    }
+    notifyDarkModeChanged();
+}
+
+void DockConfig::notifyDarkModeChanged()
+{
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->darkModeChanged();
+}
+
+bool DockConfig::darkModeActive() const
+{
+    if (darkModeAllDocks())
+        return !darkModeExceptions().contains(m_dockId);
+    return m_darkMode;
+}
+
+void DockConfig::setDarkModeActive(bool on)
+{
+    // Write where the effective value comes from, so the menu item / widget
+    // click is not silently overruled by the app-wide switch.
+    if (darkModeAllDocks()) {
+        QStringList exceptions = darkModeExceptions();
+        const bool excepted = exceptions.contains(m_dockId);
+        if (on == !excepted)
+            return;
+        if (on)
+            exceptions.removeAll(m_dockId);
+        else if (!m_dockId.isEmpty())
+            exceptions.append(m_dockId);
+        else
+            // Legacy single-instance config: no dockId to except, so the only
+            // way to go normal is to drop the app-wide switch.
+            return setDarkModeAllDocks(false);
+        setDarkModeExceptions(exceptions);
+        return;
+    }
+    setDarkMode(on);
+}
+
 void DockConfig::setFavoritesShared(bool shared)
 {
     if (favoritesShared() == shared)
@@ -339,6 +447,7 @@ void DockConfig::load()
     m_iconLabelFontSize = m_settings.value(QStringLiteral("iconLabelFontSize"), 0).toInt();
     m_widgetLabelMode = sanitizedWidgetLabelMode(
         m_settings.value(QStringLiteral("widgetLabelMode"), int(IconOnly)).toInt());
+    m_labelBold = m_settings.value(QStringLiteral("labelBold"), false).toBool();
     m_autoShrinkIcons = m_settings.value(QStringLiteral("autoShrinkIcons"), true).toBool();
     m_autoShrinkMinIconSize =
         qBound(8, m_settings.value(QStringLiteral("autoShrinkMinIconSize"), 16).toInt(), 64);
@@ -444,6 +553,8 @@ void DockConfig::load()
     m_showMaxMin = m_settings.value(QStringLiteral("showMaxMin"), false).toBool();
     m_showCloseWindow = m_settings.value(QStringLiteral("showCloseWindow"), false).toBool();
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
+    m_showDarkMode = m_settings.value(QStringLiteral("showDarkMode"), false).toBool();
+    m_darkMode = m_settings.value(QStringLiteral("darkMode"), false).toBool();
     m_showClock2 = m_settings.value(QStringLiteral("showClock2"), false).toBool();
     m_groupWindows = m_settings.value(QStringLiteral("groupWindows"), true).toBool();
     m_menuFavorites = m_settings.value(QStringLiteral("menuFavorites"),
@@ -475,7 +586,7 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("overview"),    QStringLiteral("movetodesktop"),
             QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
             QStringLiteral("closewindow"),
-            QStringLiteral("nextwallpaper"),
+            QStringLiteral("nextwallpaper"), QStringLiteral("darkmode"),
             QStringLiteral("autohide"),
             QStringLiteral("showdesktop"), QStringLiteral("systray"),
             QStringLiteral("relanzadores"), QStringLiteral("scriptrunners"),
@@ -964,6 +1075,24 @@ void DockConfig::setShowNextWallpaper(bool show)
     emit showNextWallpaperChanged();
 }
 
+void DockConfig::setShowDarkMode(bool show)
+{
+    if (m_showDarkMode == show)
+        return;
+    m_showDarkMode = show;
+    m_settings.setValue(QStringLiteral("showDarkMode"), show);
+    emit showDarkModeChanged();
+}
+
+void DockConfig::setDarkMode(bool on)
+{
+    if (m_darkMode == on)
+        return;
+    m_darkMode = on;
+    m_settings.setValue(QStringLiteral("darkMode"), on);
+    emit darkModeChanged();
+}
+
 void DockConfig::setGroupWindows(bool group)
 {
     if (m_groupWindows == group)
@@ -1211,6 +1340,17 @@ void DockConfig::setWidgetLabelMode(int mode)
     emit dockThicknessChanged();
 }
 
+void DockConfig::setLabelBold(bool on)
+{
+    if (m_labelBold == on)
+        return;
+    m_labelBold = on;
+    m_settings.setValue(QStringLiteral("labelBold"), on);
+    emit labelBoldChanged();
+    // Bold names are wider; Dock.qml re-measures on this signal and reports the
+    // new width back, which is what actually moves the thickness.
+}
+
 void DockConfig::setAutoShrinkIcons(bool on)
 {
     if (m_autoShrinkIcons == on)
@@ -1251,6 +1391,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("maxmin"),        tr("MaxMin")},
         {QStringLiteral("closewindow"),   tr("Close window")},
         {QStringLiteral("nextwallpaper"), tr("Next wallpaper")},
+        {QStringLiteral("darkmode"),      tr("Modo oscuro")},
         {QStringLiteral("autohide"),      tr("Auto-hide toggle")},
         {QStringLiteral("showdesktop"),   tr("Show desktop")},
         {QStringLiteral("systray"),       tr("System tray")},

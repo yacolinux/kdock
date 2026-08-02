@@ -129,10 +129,18 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
 
     // Keep the dialog within the screen so the bottom buttons are always visible
     // (tabs scroll internally for overflow).
+    // The width is what the colored tab bar needs: at 1000 px the eleven tabs
+    // (1086 px of titles, measured) no longer fit and the bar silently drops
+    // into scroll-arrow mode, hiding the last ones. Clamped to the screen the
+    // same way the height is.
+    int w = 1120;
     int h = 900;
-    if (QScreen *s = QGuiApplication::primaryScreen())
-        h = qMin(h, s->availableGeometry().height() - 80);
-    resize(1000, qMax(360, h));
+    if (QScreen *s = QGuiApplication::primaryScreen()) {
+        const QRect avail = s->availableGeometry();
+        w = qMin(w, avail.width() - 40);
+        h = qMin(h, avail.height() - 80);
+    }
+    resize(qMax(800, w), qMax(360, h));
 }
 
 void SettingsDialog::buildTabs()
@@ -158,6 +166,7 @@ void SettingsDialog::buildTabs()
     addTab(createGeneralTab(), tr("General"));
     addTab(createWidgetsTab(), tr("Widgets"));
     addTab(createMenuTab(), tr("Menu"));
+    addTab(createDarkModeTab(), tr("DarkMode"));
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
@@ -743,6 +752,13 @@ QWidget *SettingsDialog::createWidgetsTab()
         connect(labelFont, &QSpinBox::valueChanged, m_config, &DockConfig::setIconLabelFontSize);
         form->addRow(tr("· Name font size:"), labelFont);
 
+        auto *labelBold = new QCheckBox(tr("Negritas"), tab);
+        labelBold->setChecked(m_config->labelBold());
+        labelBold->setToolTip(tr("Draw every name the dock shows — applications and "
+                                 "widgets — in bold."));
+        connect(labelBold, &QCheckBox::toggled, m_config, &DockConfig::setLabelBold);
+        form->addRow(tr("· Bold text:"), labelBold);
+
         // Same for every other section (widgets and blocks): an independent
         // setting, so a dock can name its widgets and not its apps, or the
         // other way round. "Name only" is missing on purpose (a widget without
@@ -764,11 +780,12 @@ QWidget *SettingsDialog::createWidgetsTab()
         form->addRow(tr("Widget name:"), widgetLabelMode);
 
         // The two metrics only mean something while some name is shown.
-        auto syncLabelEnabled = [this, labelWidth, labelFont] {
+        auto syncLabelEnabled = [this, labelWidth, labelFont, labelBold] {
             const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
                             || m_config->widgetLabelMode() != DockConfig::IconOnly;
             labelWidth->setEnabled(on);
             labelFont->setEnabled(on);
+            labelBold->setEnabled(on);
         };
         connect(labelMode, &QComboBox::currentIndexChanged, this, [this, labelMode](int i) {
             m_config->setIconLabelMode(labelMode->itemData(i).toInt());
@@ -896,6 +913,15 @@ QWidget *SettingsDialog::createWidgetsTab()
     // NOTE: the "Next wallpaper" checkbox was removed from Settings to save
     // space. The widget itself is left intact but is no longer UI-reachable
     // (dormant) — see AGENTS.md "Dormant / UI-unreachable code".
+
+    auto *showDarkMode = new QCheckBox(tr("Show dark-mode button"), tab);
+    showDarkMode->setChecked(m_config->showDarkMode());
+    showDarkMode->setToolTip(tr("Left-click switches this dock to the normal color "
+                                "scheme, right-click to dark mode. Configure the dark "
+                                "colors in the DarkMode tab. "
+                                "Shift+right-click opens the widget menu."));
+    connect(showDarkMode, &QCheckBox::toggled, m_config, &DockConfig::setShowDarkMode);
+    form->addRow(tr("Modo oscuro:"), showDarkMode);
 
     auto *showSystray = new QCheckBox(tr("Show system tray (primary dock only)"), tab);
     showSystray->setChecked(m_config->showSystray());
@@ -1354,6 +1380,144 @@ QString SettingsDialog::sectionLabel(const QString &token)
     // Single source of truth for the section names: DockConfig also draws them
     // in the dock, and the Layout tab can rename them (see widgetName()).
     return DockConfig::defaultWidgetLabel(token);
+}
+
+QWidget *SettingsDialog::createDarkModeTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+    auto *form = new QFormLayout;
+
+    auto *intro = new QLabel(
+        tr("El modo oscuro <b>reemplaza</b> los colores del dock mientras está activo: "
+           "no toca la configuración que ya tenés. Al volver a Normal reaparece tal cual "
+           "estaba (color de fondo, resaltado de íconos, todo)."), tab);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    auto *thisDock = new QCheckBox(tr("Modo oscuro en este dock"), tab);
+    thisDock->setChecked(m_config->darkMode());
+    connect(thisDock, &QCheckBox::toggled, m_config, &DockConfig::setDarkMode);
+    // The mode is also reachable from the dock's right-click menu and from the
+    // darkmode widget while this dialog is open, so follow the config back.
+    connect(m_config, &DockConfig::darkModeChanged, thisDock, [this, thisDock] {
+        const QSignalBlocker block(thisDock);
+        thisDock->setChecked(m_config->darkMode());
+    });
+    form->addRow(tr("Este dock:"), thisDock);
+
+    auto *allDocks = new QCheckBox(tr("Aplicar a todos los docks"), tab);
+    allDocks->setChecked(DockConfig::darkModeAllDocks());
+    allDocks->setToolTip(tr("Pone en modo oscuro todos los docks salvo los que marques "
+                            "como excepción abajo. Mientras esté tildado, el interruptor "
+                            "de arriba no se usa."));
+    form->addRow(tr("Todos:"), allDocks);
+
+    // --- The two colors of the dark scheme (app-wide, not per dock) ---
+    // Same button+swatch idiom as the panel color in the General tab.
+    const auto colorButton = [this](QPushButton *btn, QColor (*get)(), void (*set)(const QColor &),
+                                    const QString &title) {
+        const auto refresh = [btn, get] {
+            const QColor c = get();
+            btn->setText(c.name(QColor::HexRgb).toUpper());
+            btn->setStyleSheet(QStringLiteral(
+                "background-color:%1; color:%2; padding:4px 12px; border:1px solid gray;")
+                .arg(c.name(), c.lightnessF() > 0.5 ? QStringLiteral("black")
+                                                    : QStringLiteral("white")));
+        };
+        refresh();
+        connect(btn, &QPushButton::clicked, this, [this, get, set, title, refresh] {
+            const QColor c = QColorDialog::getColor(get(), this, title);
+            if (c.isValid()) {
+                set(c);
+                refresh();
+            }
+        });
+        return refresh;
+    };
+
+    auto *accentBtn = new QPushButton(tab);
+    const auto refreshAccent = colorButton(accentBtn, &DockConfig::darkAccentColor,
+                                           &DockConfig::setDarkAccentColor,
+                                           tr("Color de resaltado"));
+    accentBtn->setToolTip(tr("Color de los nombres de apps y widgets, y del resaltado de "
+                             "las apps que están corriendo (que en modo oscuro deja de "
+                             "usar el color de cada ícono y pasa a este único color)."));
+    auto *accentRow = new QHBoxLayout;
+    auto *accentReset = new QPushButton(tr("Breeze Dark"), tab);
+    connect(accentReset, &QPushButton::clicked, this, [refreshAccent] {
+        DockConfig::setDarkAccentColor(QColor(QString::fromLatin1(DockConfig::kDarkAccentDefault)));
+        refreshAccent();
+    });
+    accentRow->addWidget(accentBtn, 1);
+    accentRow->addWidget(accentReset);
+    form->addRow(tr("Color de resaltado:"), accentRow);
+
+    auto *bgBtn = new QPushButton(tab);
+    const auto refreshBg = colorButton(bgBtn, &DockConfig::darkBackgroundColor,
+                                       &DockConfig::setDarkBackgroundColor,
+                                       tr("Fondo del dock"));
+    bgBtn->setToolTip(tr("Fondo del dock en modo oscuro. La transparencia configurada en "
+                         "la solapa General se sigue aplicando igual."));
+    auto *bgRow = new QHBoxLayout;
+    auto *bgReset = new QPushButton(tr("Breeze Dark"), tab);
+    connect(bgReset, &QPushButton::clicked, this, [refreshBg] {
+        DockConfig::setDarkBackgroundColor(
+            QColor(QString::fromLatin1(DockConfig::kDarkBackgroundDefault)));
+        refreshBg();
+    });
+    bgRow->addWidget(bgBtn, 1);
+    bgRow->addWidget(bgReset);
+    form->addRow(tr("Fondo del dock:"), bgRow);
+
+    layout->addLayout(form);
+
+    // --- Exceptions ---
+    auto *exceptionsLabel = new QLabel(tr("Docks exceptuados (quedan en Normal):"), tab);
+    layout->addWidget(exceptionsLabel);
+    auto *exceptions = new QListWidget(tab);
+    exceptions->setMinimumHeight(140);
+    const QStringList excepted = DockConfig::darkModeExceptions();
+    for (const QString &id : DockConfig::knownDocks()) {
+        const QString screen = DockConfig::screenOfDockId(id);
+        const int slot = DockConfig::slotOfDockId(id);
+        auto *item = new QListWidgetItem(tr("%1 — Dock %2").arg(screen).arg(slot + 1), exceptions);
+        item->setData(Qt::UserRole, id);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(excepted.contains(id) ? Qt::Checked : Qt::Unchecked);
+    }
+    connect(exceptions, &QListWidget::itemChanged, this, [exceptions] {
+        QStringList ids;
+        for (int i = 0; i < exceptions->count(); ++i) {
+            QListWidgetItem *item = exceptions->item(i);
+            if (item->checkState() == Qt::Checked)
+                ids << item->data(Qt::UserRole).toString();
+        }
+        DockConfig::setDarkModeExceptions(ids);
+    });
+    layout->addWidget(exceptions);
+
+    // The per-dock switch and the exception list are the two halves of the same
+    // decision: exactly one of them is in charge at a time.
+    const auto syncEnabled = [thisDock, exceptions, exceptionsLabel, allDocks] {
+        const bool all = allDocks->isChecked();
+        thisDock->setEnabled(!all);
+        exceptions->setEnabled(all);
+        exceptionsLabel->setEnabled(all);
+    };
+    connect(allDocks, &QCheckBox::toggled, this, [this, thisDock, syncEnabled](bool on) {
+        DockConfig::setDarkModeAllDocks(on);
+        // Leaving app-wide mode falls back to this dock's own flag, which the
+        // checkbox may no longer agree with (setDarkModeActive() writes the
+        // exception list while the app-wide switch is on).
+        const QSignalBlocker block(thisDock);
+        thisDock->setChecked(m_config->darkMode());
+        syncEnabled();
+    });
+    syncEnabled();
+
+    layout->addStretch();
+    return tab;
 }
 
 QWidget *SettingsDialog::createLayoutTab()

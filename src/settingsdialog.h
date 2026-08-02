@@ -59,6 +59,9 @@ private:
     // rebuildAudioTab() straight from a row widget's own signal — it would
     // delete that widget mid-emission and crash.
     void scheduleAudioRebuild();
+    // Dark mode: the per-dock switch, the app-wide one with its exception list,
+    // and the two colors of the dark scheme (accent + background).
+    QWidget *createDarkModeTab();
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
     QWidget *createScriptRunnersTab();
