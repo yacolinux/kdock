@@ -151,6 +151,12 @@ timeout 30 xvfb-run -s "-screen 0 1000x400x24" env QT_QPA_PLATFORM=xcb /tmp/p/pr
 falta `moc` ni GUI, alcanza con `g++ main.cpp src/xdgmenutree.cpp $(pkg-config --cflags --libs Qt6Core)`
 y un `main` que imprima el resultado.)
 
+**`kdeglobals` de esta máquina no tiene `General/ColorScheme`** (solo `ColorSchemeHash`), así
+que `AppearanceControl::currentColorScheme()` devuelve **vacío** y cualquier combo que se
+siembre con él cae en el primer ítem de la lista. Si lo que sigue es aplicar ese valor, le
+cambiás el esquema al usuario sin que lo pida: poné una entrada "(no cambiar)" con id vacío
+al frente. El iconset sí se lee bien (`Icons/Theme`).
+
 El `main.cpp` de prueba instancia el widget, y con un `QTimer::singleShot` hace
 `w.grab().save("/tmp/p/out.png")` y sale; el PNG se lee directo. Vale la pena correrlo dos
 veces, una con `app.setPalette()` claro y otra oscuro: el diálogo hereda el esquema de KDE
@@ -177,6 +183,10 @@ g++ -std=c++17 -fPIC /tmp/p/dlg.cpp $OBJS -Isrc \
     $(pkg-config --cflags --libs Qt6Widgets Qt6Quick Qt6Qml Qt6DBus Qt6WaylandClient \
                                  Qt6Gui Qt6Core wayland-client) -o /tmp/p/dlgprobe
 ```
+
+**Relinkeá la sonda después de cada `cmake --build`**: el `g++` de arriba no depende de nada,
+así que si solo recompilás el proyecto la sonda sigue siendo la vieja y ves el bug que creías
+recién arreglado (me pasó, 2026-08-02).
 
 El `dlg.cpp` instancia `DockConfig` + `DesktopEntryIndex`, construye el `SettingsDialog` con
 `nullptr` en el resto (manager, systray, audio…), selecciona la solapa con

@@ -10,6 +10,20 @@
 #include <QStringList>
 #include <QUrl>
 
+// Process-wide "the dark mode changed" ping. DockConfig::darkModeChanged() is
+// per instance (one per dock); this one fires once, which is what the system
+// appearance side effects need — applying a KDE color scheme fifteen times is
+// fifteen plasma-apply-colorscheme processes.
+class DarkModeNotifier : public QObject
+{
+    Q_OBJECT
+public:
+    using QObject::QObject;
+    void ping() { emit changed(); }
+signals:
+    void changed();
+};
+
 class DockConfig : public QObject
 {
     Q_OBJECT
@@ -232,6 +246,35 @@ public:
     // On/off state while the scope is app-wide (the per-dock flag is darkMode()).
     static bool darkModeGlobal();
     static void setDarkModeGlobal(bool on);
+    // Is any dock rendering dark right now? What the system-wide appearance
+    // switches below key off, since a KDE color scheme is not per monitor.
+    static bool anyDarkModeActive();
+
+    // Optional side effects of the mode: things outside the dock's own drawing
+    // that dark mode can also flip. Unlike the dock's colors these cannot be
+    // overridden at read time — they are global state — so each one carries the
+    // value for *both* modes and switching applies the matching one.
+    enum DarkAppearanceItem {
+        SystemColorScheme = 0, // KDE color scheme (plasma-apply-colorscheme)
+        SystemIconTheme   = 1, // KDE icon theme (plasma-changeicons)
+        DockIconTheme     = 2, // kdock's own icon-theme override (Theme)
+    };
+    static bool darkAppearanceEnabled(int item);
+    static void setDarkAppearanceEnabled(int item, bool on);
+    // dark == true: the value applied while the mode is on; false: the one
+    // restored when it goes off.
+    static QString darkAppearanceValue(int item, bool dark);
+    static void setDarkAppearanceValue(int item, bool dark, const QString &value);
+    // Whether the side effects above are currently applied. Persisted, because
+    // it is the state of the *system*, not of this process: without it a
+    // restart would re-apply them and overwrite nothing, or skip the restore.
+    static bool darkAppearanceApplied();
+    static void setDarkAppearanceApplied(bool applied);
+
+    // Fires once per dark-mode change, for the things that must react a single
+    // time instead of once per dock (the appearance side effects). The
+    // per-instance darkModeChanged() is what QML and the dialog use.
+    static DarkModeNotifier *darkModeNotifier();
     // dockIds left in normal mode while darkModeAllDocks() is on.
     static QStringList darkModeExceptions();
     static void setDarkModeExceptions(const QStringList &dockIds);

@@ -55,6 +55,7 @@ qt_add_executable(kdock
     src/diskscontrol.cpp        src/diskscontrol.h
     src/networkcontrol.cpp      src/networkcontrol.h
     src/appearancecontrol.cpp   src/appearancecontrol.h
+    src/darkmodeappearance.cpp  src/darkmodeappearance.h
     src/previewslauncher.cpp    src/previewslauncher.h
 )
 

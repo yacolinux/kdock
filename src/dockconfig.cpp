@@ -285,6 +285,91 @@ void DockConfig::notifyDarkModeChanged()
 {
     for (DockConfig *cfg : std::as_const(s_instances))
         emit cfg->darkModeChanged();
+    darkModeNotifier()->ping();
+}
+
+DarkModeNotifier *DockConfig::darkModeNotifier()
+{
+    static DarkModeNotifier notifier;
+    return &notifier;
+}
+
+bool DockConfig::anyDarkModeActive()
+{
+    for (const DockConfig *cfg : std::as_const(s_instances)) {
+        if (cfg->darkModeActive())
+            return true;
+    }
+    return false;
+}
+
+namespace {
+// (enabled, dark value, normal value) key names per DarkAppearanceItem.
+struct DarkAppearanceKeys { const char *enabled; const char *dark; const char *normal; };
+const DarkAppearanceKeys kDarkAppearanceKeys[] = {
+    {"darkModeApplyColorScheme",   "darkModeColorSchemeDark",   "darkModeColorSchemeNormal"},
+    {"darkModeApplyIconTheme",     "darkModeIconThemeDark",     "darkModeIconThemeNormal"},
+    {"darkModeApplyDockIconTheme", "darkModeDockIconThemeDark", "darkModeDockIconThemeNormal"},
+};
+constexpr int kDarkAppearanceCount = int(std::size(kDarkAppearanceKeys));
+} // namespace
+
+bool DockConfig::darkAppearanceEnabled(int item)
+{
+    if (item < 0 || item >= kDarkAppearanceCount)
+        return false;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QString::fromLatin1(kDarkAppearanceKeys[item].enabled), false).toBool();
+}
+
+void DockConfig::setDarkAppearanceEnabled(int item, bool on)
+{
+    if (item < 0 || item >= kDarkAppearanceCount || darkAppearanceEnabled(item) == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QString::fromLatin1(kDarkAppearanceKeys[item].enabled), on);
+    }
+    notifyDarkModeChanged();
+}
+
+QString DockConfig::darkAppearanceValue(int item, bool dark)
+{
+    if (item < 0 || item >= kDarkAppearanceCount)
+        return QString();
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    const char *key = dark ? kDarkAppearanceKeys[item].dark : kDarkAppearanceKeys[item].normal;
+    // No default for the "normal" side on purpose: what to restore is seeded
+    // from the live system when the tab is built, not guessed here.
+    const QString fallback = dark ? (item == SystemColorScheme
+                                         ? QStringLiteral("BreezeDark")
+                                         : QStringLiteral("breeze-dark"))
+                                  : QString();
+    return s.value(QString::fromLatin1(key), fallback).toString();
+}
+
+void DockConfig::setDarkAppearanceValue(int item, bool dark, const QString &value)
+{
+    if (item < 0 || item >= kDarkAppearanceCount || darkAppearanceValue(item, dark) == value)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        const char *key = dark ? kDarkAppearanceKeys[item].dark : kDarkAppearanceKeys[item].normal;
+        s.setValue(QString::fromLatin1(key), value);
+    }
+    notifyDarkModeChanged();
+}
+
+bool DockConfig::darkAppearanceApplied()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("darkAppearanceApplied"), false).toBool();
+}
+
+void DockConfig::setDarkAppearanceApplied(bool applied)
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("darkAppearanceApplied"), applied);
 }
 
 bool DockConfig::darkModeActive() const
@@ -1129,6 +1214,7 @@ void DockConfig::setDarkMode(bool on)
     m_darkMode = on;
     m_settings.setValue(QStringLiteral("darkMode"), on);
     emit darkModeChanged();
+    darkModeNotifier()->ping(); // the appearance side effects listen there
 }
 
 void DockConfig::setGroupWindows(bool group)

@@ -1,6 +1,7 @@
 #include "settingsdialog.h"
 
 #include "audiocontrol.h"
+#include "appearancecontrol.h"
 #include "coloredtabbar.h"
 #include "desktopentry.h"
 #include "dockconfig.h"
@@ -56,12 +57,14 @@
 
 SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray,
                                RelanzadoresManager *relanzadores, DockManager *manager,
-                               Theme *theme, AudioControl *audio, QWidget *parent)
+                               Theme *theme, AudioControl *audio,
+                               AppearanceControl *appearance, QWidget *parent)
     : QDialog(parent)
     , m_config(config)
     , m_apps(apps)
     , m_relanzadores(relanzadores)
     , m_audio(audio)
+    , m_appearance(appearance)
     , m_manager(manager)
     , m_theme(theme)
 {
@@ -1470,6 +1473,119 @@ QWidget *SettingsDialog::createDarkModeTab()
     form->addRow(tr("Fondo del dock:"), bgRow);
 
     layout->addLayout(form);
+
+    // --- Optional system-wide side effects ---
+    // Each row is a checkbox plus the value for each mode. Two combos and not
+    // one because these are global state, not a read-time override like the
+    // dock's colors: there is no "previous value" to fall back to (this desktop
+    // has no General/ColorScheme key at all), so what to restore is a setting.
+    auto *extrasBox = new QGroupBox(tr("Al cambiar de modo, cambiar también:"), tab);
+    auto *extrasForm = new QFormLayout(extrasBox);
+    extrasForm->addRow(new QLabel(tr("<i>Esto sí toca la configuración del escritorio, "
+                                     "no solo el dibujo del dock — por eso cada opción "
+                                     "lleva el valor de los dos modos.</i>"), extrasBox));
+
+    const auto addExtraRow = [this, extrasBox, extrasForm](
+                                 int item, const QString &title, const QString &tip,
+                                 const QList<QPair<QString, QString>> &choices,
+                                 const QString &liveValue) {
+        // With no match the combo would sit on whatever sorts first and quietly
+        // apply *that* — this desktop has no General/ColorScheme key, so the
+        // "normal" side started out pointing at "Arc". An explicit do-nothing
+        // entry is the safe landing spot; both apply*() calls no-op on "".
+        auto *check = new QCheckBox(title, extrasBox);
+        check->setChecked(DockConfig::darkAppearanceEnabled(item));
+        check->setToolTip(tip);
+
+        auto *darkCombo = new QComboBox(extrasBox);
+        auto *normalCombo = new QComboBox(extrasBox);
+        for (const auto &[id, name] : choices) {
+            darkCombo->addItem(name, id);
+            normalCombo->addItem(name, id);
+        }
+        const auto select = [](QComboBox *combo, const QString &id) {
+            const int i = combo->findData(id);
+            combo->setCurrentIndex(i < 0 ? 0 : i);
+        };
+        select(darkCombo, DockConfig::darkAppearanceValue(item, true));
+        // Seed "normal" from what the system is using right now, but only while
+        // the mode is off — reading it with dark applied would save the dark
+        // value as the thing to restore.
+        QString normal = DockConfig::darkAppearanceValue(item, false);
+        if (normal.isEmpty() && !DockConfig::darkAppearanceApplied())
+            normal = liveValue;
+        select(normalCombo, normal);
+
+        connect(check, &QCheckBox::toggled, this, [this, item, darkCombo, normalCombo](bool on) {
+            // Persist both combos on enable: the seeded "normal" is only in the
+            // widget until something writes it, and it is what the restore uses.
+            if (on) {
+                DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
+                DockConfig::setDarkAppearanceValue(item, false,
+                                                   normalCombo->currentData().toString());
+            }
+            DockConfig::setDarkAppearanceEnabled(item, on);
+            darkCombo->setEnabled(on);
+            normalCombo->setEnabled(on);
+        });
+        connect(darkCombo, &QComboBox::currentIndexChanged, this, [item, darkCombo] {
+            DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
+        });
+        connect(normalCombo, &QComboBox::currentIndexChanged, this, [item, normalCombo] {
+            DockConfig::setDarkAppearanceValue(item, false, normalCombo->currentData().toString());
+        });
+        darkCombo->setEnabled(check->isChecked());
+        normalCombo->setEnabled(check->isChecked());
+
+        extrasForm->addRow(check);
+        extrasForm->addRow(tr("· En modo oscuro:"), darkCombo);
+        extrasForm->addRow(tr("· En modo normal:"), normalCombo);
+    };
+
+    // The two system-wide rows lead with a do-nothing entry (empty id); the
+    // dock's own row does not, because there an empty id already means
+    // something else ("no override, follow KDE").
+    const QPair<QString, QString> noChange{QString(), tr("(no cambiar)")};
+
+    if (m_appearance) {
+        QList<QPair<QString, QString>> schemes{noChange};
+        const QVariantList list = m_appearance->colorSchemes();
+        for (const QVariant &v : list) {
+            const QVariantMap m = v.toMap();
+            schemes.append({m.value(QStringLiteral("id")).toString(),
+                            m.value(QStringLiteral("name")).toString()});
+        }
+        addExtraRow(DockConfig::SystemColorScheme, tr("El esquema de color del sistema"),
+                    tr("Aplica el esquema de color de KDE, igual que el widget "
+                       "«Esquema de color» (plasma-apply-colorscheme)."),
+                    schemes, m_appearance->currentColorScheme());
+    }
+
+    QList<QPair<QString, QString>> icons;
+    for (const auto &[name, id] : Theme::availableIconThemes()) {
+        // Some shipped index.theme files keep the packaging placeholder
+        // ("@ThemeName@") in Name=; the directory name is the honest fallback.
+        // Same rule as AppearanceControl::iconThemes().
+        icons.append({id, (name.isEmpty() || name.contains(QLatin1Char('@'))) ? id : name});
+    }
+    if (m_appearance) {
+        QList<QPair<QString, QString>> systemIcons{noChange};
+        systemIcons.append(icons);
+        addExtraRow(DockConfig::SystemIconTheme, tr("El iconset del sistema"),
+                    tr("Aplica el iconset de KDE, igual que el widget «Iconset» "
+                       "(plasma-changeicons). Afecta a todo el escritorio."),
+                    systemIcons, m_appearance->currentIconTheme());
+    }
+    {
+        // The dock's own override, where "no override" is a real choice.
+        QList<QPair<QString, QString>> dockIcons = icons;
+        dockIcons.prepend({QString(), tr("(seguir el del sistema)")});
+        addExtraRow(DockConfig::DockIconTheme, tr("El iconset del dock"),
+                    tr("Solo el iconset que usa kdock, sin tocar el del escritorio "
+                       "(Configuración → General → «Iconset del dock»)."),
+                    dockIcons, m_theme ? m_theme->iconTheme() : QString());
+    }
+    layout->addWidget(extrasBox);
 
     // --- Exceptions ---
     auto *exceptionsLabel = new QLabel(tr("Docks exceptuados (quedan en Normal):"), tab);

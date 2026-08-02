@@ -79,6 +79,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_activeWindow(activeWindow)
     , m_wallpaperControl(wallpaperControl)
     , m_power(power)
+    , m_appearance(appearance)
 {
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
@@ -325,7 +326,7 @@ void DockWindow::openSettings()
                 m_manager ? m_manager->systrayHost() : m_systrayHost,
                 m_manager ? m_manager->relanzadores() : m_relanzadores,
                 m_manager, m_theme,
-                m_manager ? m_manager->audio() : nullptr);
+                m_manager ? m_manager->audio() : nullptr, m_appearance);
     m_dialog->show();
     m_dialog->raise();
     m_dialog->activateWindow();

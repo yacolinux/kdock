@@ -56,7 +56,9 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   de widgets resueltos contra el set oscuro. Es un **override**, no una reescritura: el
   esquema de colores que ya tenías queda intacto en el `.conf` y reaparece tal cual al
   volver a Normal. Se cambia desde su solapa, desde el submenú *Modo* del clic derecho o
-  desde su propio widget.
+  desde su propio widget. Opcionalmente arrastra consigo el **esquema de color
+  y el iconset de KDE** y el iconset del propio dock: como eso sí es estado del escritorio y
+  no se puede "dejar de aplicar", cada opción guarda el valor de los dos modos.
 - **Auto-encogido**: cuando no entran todos los íconos, el dock reduce escala y fuente en vez
   de recortar.
 - **Drag & drop** para reordenar íconos y secciones enteras, con separadores dinámicos

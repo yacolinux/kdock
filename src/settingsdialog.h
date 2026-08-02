@@ -15,6 +15,7 @@ class SystrayHost;
 class RelanzadoresManager;
 class ScriptRunnersManager;
 class AudioControl;
+class AppearanceControl;
 class ColoredTabWidget;
 class IconColorProvider;
 class PreviewsLauncher;
@@ -39,7 +40,8 @@ class SettingsDialog : public QDialog
 public:
     SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray = nullptr,
                    RelanzadoresManager *relanzadores = nullptr, DockManager *manager = nullptr,
-                   Theme *theme = nullptr, AudioControl *audio = nullptr, QWidget *parent = nullptr);
+                   Theme *theme = nullptr, AudioControl *audio = nullptr,
+                   AppearanceControl *appearance = nullptr, QWidget *parent = nullptr);
 
     // Switch the dialog to the Audio tab (used by the volume widget's
     // right-click). No-op when the tab isn't present.
@@ -102,6 +104,7 @@ private:
     RelanzadoresManager *m_relanzadores;
     ScriptRunnersManager *m_scriptRunners = nullptr;
     AudioControl *m_audio = nullptr;
+    AppearanceControl *m_appearance = nullptr;
     Theme *m_theme = nullptr;
     DockManager *m_manager = nullptr;
     QString m_dockId;                       // dock currently being edited

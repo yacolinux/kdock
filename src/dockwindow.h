@@ -106,6 +106,7 @@ private:
     ActiveWindowControl *m_activeWindow = nullptr;
     WallpaperControl *m_wallpaperControl = nullptr;
     PowerControl *m_power = nullptr;
+    AppearanceControl *m_appearance = nullptr;
     bool m_hidden = false;
     bool m_primary = false;
     bool m_screenChangePending = false;

@@ -26,6 +26,7 @@
 #include "previewslauncher.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
+#include "darkmodeappearance.h"
 #include "networkcontrol.h"
 #include "relanzadorconfig.h"
 #include "relanzadormodel.h"
@@ -179,6 +180,12 @@ int main(int argc, char *argv[])
     shared.appearance = &appearance;
 
     DockManager manager(shared);
+
+    // Optional system-wide side effects of dark mode (KDE color scheme / icon
+    // theme, dock icon override). Built after the docks so its first sync()
+    // sees their real mode instead of "no dock is dark yet".
+    DarkModeAppearance darkAppearance(&theme, &appearance);
+    darkAppearance.sync();
 
     // Accessory binary: bring up the preview strips if the user left them on
     // (Settings -> Previews). It is a separate process with its own config, so
