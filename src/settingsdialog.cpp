@@ -1395,23 +1395,22 @@ QWidget *SettingsDialog::createDarkModeTab()
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
-    auto *thisDock = new QCheckBox(tr("Modo oscuro en este dock"), tab);
-    thisDock->setChecked(m_config->darkMode());
-    connect(thisDock, &QCheckBox::toggled, m_config, &DockConfig::setDarkMode);
-    // The mode is also reachable from the dock's right-click menu and from the
-    // darkmode widget while this dialog is open, so follow the config back.
-    connect(m_config, &DockConfig::darkModeChanged, thisDock, [this, thisDock] {
-        const QSignalBlocker block(thisDock);
-        thisDock->setChecked(m_config->darkMode());
-    });
-    form->addRow(tr("Este dock:"), thisDock);
+    // Reads and writes the *effective* mode through setDarkModeActive(), the
+    // same call the "Modo" submenu and the darkmode widget use — the three
+    // controls are one switch with three faces. Showing the dock's own flag
+    // here instead made the box read "on" while the dock was drawing normal
+    // (bug 2026-08-02). Its label follows the scope for the same reason.
+    auto *thisDock = new QCheckBox(tab);
+    thisDock->setChecked(m_config->darkModeActive());
+    connect(thisDock, &QCheckBox::toggled, m_config, &DockConfig::setDarkModeActive);
+    form->addRow(tr("Modo oscuro:"), thisDock);
 
     auto *allDocks = new QCheckBox(tr("Aplicar a todos los docks"), tab);
     allDocks->setChecked(DockConfig::darkModeAllDocks());
-    allDocks->setToolTip(tr("Pone en modo oscuro todos los docks salvo los que marques "
-                            "como excepción abajo. Mientras esté tildado, el interruptor "
-                            "de arriba no se usa."));
-    form->addRow(tr("Todos:"), allDocks);
+    allDocks->setToolTip(tr("Mientras esté tildado, prender o apagar el modo oscuro "
+                            "—desde acá, desde el submenú «Modo» o desde el widget— vale "
+                            "para todos los docks. Las excepciones se editan abajo."));
+    form->addRow(tr("Alcance:"), allDocks);
 
     // --- The two colors of the dark scheme (app-wide, not per dock) ---
     // Same button+swatch idiom as the panel color in the General tab.
@@ -1497,24 +1496,35 @@ QWidget *SettingsDialog::createDarkModeTab()
     });
     layout->addWidget(exceptions);
 
-    // The per-dock switch and the exception list are the two halves of the same
-    // decision: exactly one of them is in charge at a time.
-    const auto syncEnabled = [thisDock, exceptions, exceptionsLabel, allDocks] {
-        const bool all = allDocks->isChecked();
-        thisDock->setEnabled(!all);
+    // One resync for the whole tab. Everything here is reachable from somewhere
+    // else too (the submenu, the widget, another dock's copy of this dialog),
+    // and the three controls overlap, so they are all redrawn from the config
+    // rather than from each other. Blocked while writing: the exception list
+    // itself is what setDarkModeExceptions() changes.
+    const auto syncAll = [this, thisDock, allDocks, exceptions, exceptionsLabel] {
+        const bool all = DockConfig::darkModeAllDocks();
+        const QSignalBlocker blockThis(thisDock);
+        const QSignalBlocker blockAll(allDocks);
+        const QSignalBlocker blockList(exceptions);
+        thisDock->setChecked(m_config->darkModeActive());
+        thisDock->setText(all ? tr("Activado en todos los docks")
+                              : tr("Activado en este dock"));
+        allDocks->setChecked(all);
+        const QStringList excepted = DockConfig::darkModeExceptions();
+        for (int i = 0; i < exceptions->count(); ++i) {
+            QListWidgetItem *item = exceptions->item(i);
+            item->setCheckState(excepted.contains(item->data(Qt::UserRole).toString())
+                                    ? Qt::Checked : Qt::Unchecked);
+        }
         exceptions->setEnabled(all);
         exceptionsLabel->setEnabled(all);
     };
-    connect(allDocks, &QCheckBox::toggled, this, [this, thisDock, syncEnabled](bool on) {
+    connect(allDocks, &QCheckBox::toggled, this, [syncAll](bool on) {
         DockConfig::setDarkModeAllDocks(on);
-        // Leaving app-wide mode falls back to this dock's own flag, which the
-        // checkbox may no longer agree with (setDarkModeActive() writes the
-        // exception list while the app-wide switch is on).
-        const QSignalBlocker block(thisDock);
-        thisDock->setChecked(m_config->darkMode());
-        syncEnabled();
+        syncAll();
     });
-    syncEnabled();
+    connect(m_config, &DockConfig::darkModeChanged, tab, syncAll);
+    syncAll();
 
     layout->addStretch();
     return tab;

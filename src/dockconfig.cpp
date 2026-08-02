@@ -257,22 +257,20 @@ bool DockConfig::darkModeActive() const
 
 void DockConfig::setDarkModeActive(bool on)
 {
-    // Write where the effective value comes from, so the menu item / widget
-    // click is not silently overruled by the app-wide switch.
     if (darkModeAllDocks()) {
-        QStringList exceptions = darkModeExceptions();
-        const bool excepted = exceptions.contains(m_dockId);
-        if (on == !excepted)
-            return;
-        if (on)
-            exceptions.removeAll(m_dockId);
-        else if (!m_dockId.isEmpty())
-            exceptions.append(m_dockId);
-        else
-            // Legacy single-instance config: no dockId to except, so the only
-            // way to go normal is to drop the app-wide switch.
-            return setDarkModeAllDocks(false);
-        setDarkModeExceptions(exceptions);
+        // The app-wide switch defines the *scope* of the action, not just a
+        // default: picking a mode from any one dock applies it to all of them.
+        // Exceptions are an editing tool of the DarkMode tab, so a mode change
+        // clears them instead of adding one (which is what this used to do, and
+        // it left the switch on with the dock reading as dark — bug 2026-08-02).
+        setDarkModeExceptions(QStringList());
+        if (!on) {
+            // Dropping the switch hands every dock back to its own flag, so
+            // that flag has to come down too or the dock stays dark.
+            for (DockConfig *cfg : std::as_const(s_instances))
+                cfg->setDarkMode(false);
+            setDarkModeAllDocks(false);
+        }
         return;
     }
     setDarkMode(on);
