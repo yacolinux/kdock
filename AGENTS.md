@@ -15,7 +15,7 @@ src/
   main.cpp                — Entry point; sets QT_WAYLAND_SHELL_INTEGRATION, builds shared singletons + DockManager
   dockmanager.{h,cpp}     — Owns one dock instance per enabled+connected monitor; hotplug, per-monitor configs
   layershell.{h,cpp}      — In-tree wlr-layer-shell-v1 Qt Wayland shell integration (static plugin)
-  windowmonitor.{h,cpp}   — Backend factory; AbstractWindow base class
+  windowmonitor.{h,cpp}   — Backend factory; AbstractWindow base class. Lo que un solo backend sabe hacer se agrega como par "consulta de capacidad + no-op por defecto" (canChangeDesktop()/moveToDesktop(), hoy solo en PlasmaWindow), no como virtual pura: así el backend wlroots compila y el widget que la usa se apaga solo
   taskmanager.{h,cpp}     — wlroots backend: zwlr_foreign_toplevel_management_v1
   plasmawindowmonitor.{h,cpp} — KWin backend: org_kde_plasma_window_management
   desktopentry.{h,cpp}    — XDG .desktop file indexer and launcher (no KDE code)
