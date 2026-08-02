@@ -196,6 +196,19 @@ link: `find` (no `ls`) para agarrar también los `.o` de los protocolos de Wayla
 `mocs_compilation`, y `wayland-client` explícito en el `pkg-config` (si no, *"DSO missing from
 command line"*).
 
+Dos usos más de la misma sonda, los dos salieron gratis (2026-08-02, colores rápidos):
+
+- **Probar una migración de config** sin esperar al reinicio del dock: el `dlg.cpp` imprime el
+  valor con `qInfo()` apenas construye el `DockConfig`, así se ve exactamente qué leyó de
+  cada archivo. Con una config de prueba que traiga el formato *viejo*, una corrida muestra la
+  migración; una **segunda** corrida sobre el mismo `XDG_DATA_HOME` prueba que lo migrado
+  persistió — es lo único que distingue "lo convirtió en memoria" de "lo guardó".
+- **Verificar contra la config real del usuario, en modo lectura**: copiá
+  `~/.local/share/kdock` a un `XDG_DATA_HOME` descartable y corré la sonda ahí. Ve los datos
+  de verdad (todos los docks, sus claves viejas) y cualquier escritura cae en la copia. Es la
+  forma de confirmar qué van a leer los docks instalados sin reiniciarle ninguno al usuario.
+  El `dockId` va hardcodeado en el `dlg.cpp`, así que para mirar otro dock hay que recompilar.
+
 ### Arnés de un componente QML suelto (popups del dock)
 
 El arnés de Xvfb de arriba prueba que el QML **carga**, pero no deja *ver* nada: los popups

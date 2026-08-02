@@ -48,6 +48,10 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   tamaño, widgets, anclados) y manejo de hotplug. Hasta 3 docks por pantalla.
 - **Modos de presentación**: flotante o panel de borde a borde, modo compacto, alineación
   inicio/centro/fin, opacidad, color de fondo, largo fijo o automático.
+- **Colores rápidos**: ocho colores de fondo configurables, aplicables al vuelo desde el
+  submenú *Color de fondo* del clic derecho. La paleta es **común a todos los docks** y vive
+  en la configuración compartida, así que se edita una vez y sobrevive a los reinicios; el
+  color elegido, en cambio, es de cada dock.
 - **Etiquetas de íconos** en seis disposiciones (debajo, al costado, solo nombre…) con
   medición del nombre más largo para que el dock no desperdicie grosor. Opcionalmente en
   **negrita**, con re-medición para que el nombre más ancho siga entrando.

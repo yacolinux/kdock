@@ -1,5 +1,6 @@
 // BackgroundColorMenu.qml - reusable right-click submenu that switches the dock
-// background color between four user-configurable presets and the theme default.
+// background color between the user-configurable quick colors (shared by every
+// dock) and the theme default.
 // Uses the global context properties (config, theme). Reused by the app-icon
 // context menu and the widget-section menu in Dock.qml.
 
@@ -11,7 +12,7 @@ Menu {
     title: qsTr("Color de fondo")
     popupType: Popup.Window
 
-    // Four preset swatches, driven by config.panelPresetColors (a 4-item list).
+    // One swatch per entry of config.panelPresetColors.
     Instantiator {
         model: config.panelPresetColors
         delegate: MenuItem {

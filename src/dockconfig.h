@@ -383,9 +383,11 @@ public:
     // Custom panel background color; invalid = inherit the KDE theme color.
     QColor panelColor() const { return m_panelColor; }
     bool panelColorSet() const { return m_panelColor.isValid(); }
-    // Four user-configurable quick background colors (hex strings), offered in
-    // the right-click "background color" submenu.
+    // Eight user-configurable quick background colors (hex strings), offered in
+    // the right-click "background color" submenu. Process-global: they live in
+    // the shared settings file, so every dock offers the same palette.
     QStringList panelPresetColors() const { return m_panelPresetColors; }
+    static constexpr int kPresetColorCount = 8;
     // Tiled panel background image (absolute path; empty = none).
     QString panelImage() const { return m_panelImage; }
     QUrl panelImageUrl() const { return m_panelImage.isEmpty() ? QUrl() : QUrl::fromLocalFile(m_panelImage); }
@@ -679,6 +681,13 @@ private:
     // exceptions and the two colors are process-global, so a change to any of
     // them has to repaint all the docks, not just the one being edited.
     static void notifyDarkModeChanged();
+
+    // Quick colors are shared by every dock: read them from the shared file
+    // (seeding it from this dock's legacy per-screen key on first run) and
+    // normalize the list to kPresetColorCount entries.
+    void reloadPresetColors();
+    static QStringList normalizedPresetColors(const QStringList &colors);
+    static QStringList defaultPresetColors();
 
     // Shared-favorites storage in the shared settings file.
     static QStringList sharedFavorites();

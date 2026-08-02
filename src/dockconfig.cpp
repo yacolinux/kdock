@@ -591,17 +591,7 @@ void DockConfig::load()
     // Stored as a #RRGGBB string; empty/absent = inherit the theme color.
     const QString pc = m_settings.value(QStringLiteral("panelColor")).toString();
     m_panelColor = pc.isEmpty() ? QColor() : QColor(pc);
-    m_panelPresetColors = m_settings.value(QStringLiteral("panelPresetColors"),
-                                           QStringList{QStringLiteral("#31363b"),
-                                                       QStringLiteral("#2c5aa0"),
-                                                       QStringLiteral("#3a7d44"),
-                                                       QStringLiteral("#7a4a8c")})
-                              .toStringList();
-    // Keep exactly four entries so the UI/menu can index them safely.
-    while (m_panelPresetColors.size() < 4)
-        m_panelPresetColors.append(QStringLiteral("#31363b"));
-    if (m_panelPresetColors.size() > 4)
-        m_panelPresetColors = m_panelPresetColors.mid(0, 4);
+    reloadPresetColors();
     m_panelImage = m_settings.value(QStringLiteral("panelImage")).toString();
     m_pinned = m_settings.value(QStringLiteral("pinned"),
                                 QStringList{QStringLiteral("org.kde.dolphin"),
@@ -1655,19 +1645,56 @@ void DockConfig::resetPanelColor()
     setPanelColor(QColor()); // invalid = inherit theme
 }
 
-void DockConfig::setPanelPresetColors(const QStringList &colors)
+QStringList DockConfig::defaultPresetColors()
 {
-    // Normalize to exactly four entries.
-    QStringList v = colors;
-    while (v.size() < 4)
-        v.append(QStringLiteral("#31363b"));
-    if (v.size() > 4)
-        v = v.mid(0, 4);
+    return QStringList{QStringLiteral("#31363b"), QStringLiteral("#2c5aa0"),
+                       QStringLiteral("#3a7d44"), QStringLiteral("#7a4a8c"),
+                       QStringLiteral("#b04a2f"), QStringLiteral("#1f7a7a"),
+                       QStringLiteral("#8c6d1f"), QStringLiteral("#101014")};
+}
+
+QStringList DockConfig::normalizedPresetColors(const QStringList &colors)
+{
+    // Exactly kPresetColorCount entries so the UI/menu can index them safely.
+    // A short list (an older config had four) is completed with the defaults
+    // rather than a repeated color, so the new slots start out useful.
+    QStringList v = colors.mid(0, kPresetColorCount);
+    const QStringList def = defaultPresetColors();
+    while (v.size() < kPresetColorCount)
+        v.append(def.at(v.size()));
+    return v;
+}
+
+void DockConfig::reloadPresetColors()
+{
+    QSettings shared(settingsFilePath(), QSettings::IniFormat);
+    QStringList v;
+    if (shared.contains(QStringLiteral("panelPresetColors"))) {
+        v = shared.value(QStringLiteral("panelPresetColors")).toStringList();
+    } else {
+        // First run after the palette became process-global: adopt whatever
+        // this dock had in its own file so the user does not lose the colors.
+        v = m_settings.value(QStringLiteral("panelPresetColors")).toStringList();
+    }
+    v = normalizedPresetColors(v);
     if (m_panelPresetColors == v)
         return;
     m_panelPresetColors = v;
-    m_settings.setValue(QStringLiteral("panelPresetColors"), v);
     emit panelPresetColorsChanged();
+}
+
+void DockConfig::setPanelPresetColors(const QStringList &colors)
+{
+    const QStringList v = normalizedPresetColors(colors);
+    {
+        // The palette is shared: persist once and let every live dock re-read
+        // it, so all the "background color" submenus stay in sync.
+        QSettings shared(settingsFilePath(), QSettings::IniFormat);
+        shared.setValue(QStringLiteral("panelPresetColors"), v);
+    }
+    // s_instances includes this one, so no separate update is needed here.
+    for (DockConfig *cfg : std::as_const(s_instances))
+        cfg->reloadPresetColors();
 }
 
 void DockConfig::setPanelImage(const QString &path)

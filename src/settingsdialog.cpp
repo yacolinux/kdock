@@ -550,10 +550,13 @@ QWidget *SettingsDialog::createGeneralTab()
     colorRow->addWidget(colorReset);
     form->addRow(tr("Panel color:"), colorRow);
 
-    // Four quick-color presets, offered in the right-click "background color"
-    // submenu. Compact graphical form: a row of colored swatch buttons.
+    // Quick-color presets, offered in the right-click "background color"
+    // submenu. Compact graphical form: a row of colored swatch buttons. The
+    // palette is shared by every dock, so each swatch also follows changes made
+    // from another dock's dialog.
     auto *presetsRow = new QHBoxLayout;
-    for (int i = 0; i < 4; ++i) {
+    presetsRow->setSpacing(4);
+    for (int i = 0; i < DockConfig::kPresetColorCount; ++i) {
         auto *sw = new QPushButton(tab);
         sw->setFixedSize(28, 28);
         const auto refreshSwatch = [this, sw, i] {
@@ -563,14 +566,14 @@ QWidget *SettingsDialog::createGeneralTab()
                 "background-color:%1; border:1px solid gray; border-radius:4px;").arg(c.name()));
         };
         refreshSwatch();
-        connect(sw, &QPushButton::clicked, this, [this, i, refreshSwatch] {
+        connect(m_config, &DockConfig::panelPresetColorsChanged, sw, refreshSwatch);
+        connect(sw, &QPushButton::clicked, this, [this, i] {
             QStringList presets = m_config->panelPresetColors();
             const QColor c = QColorDialog::getColor(QColor(presets.value(i)), this,
                                                     tr("Quick color %1").arg(i + 1));
             if (c.isValid()) {
                 presets[i] = c.name(QColor::HexRgb);
                 m_config->setPanelPresetColors(presets);
-                refreshSwatch();
             }
         });
         presetsRow->addWidget(sw);
