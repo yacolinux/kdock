@@ -221,10 +221,17 @@ public:
     static constexpr const char *kDarkAccentDefault     = "#3daee9";
     static constexpr const char *kDarkBackgroundDefault = "#232629";
 
-    // Single switch that puts *every* dock in dark mode, minus the ones listed
-    // as exceptions. Stored in the shared settings file, like shareFavorites.
+    // Scope of the dark-mode switch: whether turning it on/off from anywhere
+    // acts on every dock or only on the one it was clicked from. A persistent
+    // *preference*, deliberately independent of the on/off state below — it
+    // stays put when the mode is turned off, so turning it back on still
+    // reaches every dock. Stored in the shared settings file, like
+    // shareFavorites.
     static bool darkModeAllDocks();
     static void setDarkModeAllDocks(bool on);
+    // On/off state while the scope is app-wide (the per-dock flag is darkMode()).
+    static bool darkModeGlobal();
+    static void setDarkModeGlobal(bool on);
     // dockIds left in normal mode while darkModeAllDocks() is on.
     static QStringList darkModeExceptions();
     static void setDarkModeExceptions(const QStringList &dockIds);

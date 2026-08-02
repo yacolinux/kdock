@@ -180,9 +180,48 @@ void DockConfig::setDarkModeAllDocks(bool on)
 {
     if (darkModeAllDocks() == on)
         return;
+    // Changing the *scope* must not change what is on screen. Read what each
+    // dock is rendering right now, under the old scope, and seed the store the
+    // new scope reads from with it.
+    QList<QPair<DockConfig *, bool>> current;
+    bool anyActive = false;
+    for (DockConfig *cfg : std::as_const(s_instances)) {
+        const bool active = cfg->darkModeActive();
+        current.append({cfg, active});
+        anyActive = anyActive || active;
+    }
     {
         QSettings s(settingsFilePath(), QSettings::IniFormat);
         s.setValue(QStringLiteral("darkModeAllDocks"), on);
+        if (on) {
+            // Widening the scope: keep the mode on if any dock had it on.
+            s.setValue(QStringLiteral("darkModeOn"), anyActive);
+        }
+    }
+    if (!on) {
+        // Narrowing it: each dock goes back to its own flag, so that flag has
+        // to hold what the dock was showing.
+        for (const auto &[cfg, active] : std::as_const(current))
+            cfg->setDarkMode(active);
+    }
+    notifyDarkModeChanged();
+}
+
+bool DockConfig::darkModeGlobal()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    // Default follows the scope: a config written before this key existed used
+    // "scope is app-wide" to mean "and it is on".
+    return s.value(QStringLiteral("darkModeOn"), darkModeAllDocks()).toBool();
+}
+
+void DockConfig::setDarkModeGlobal(bool on)
+{
+    if (darkModeGlobal() == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("darkModeOn"), on);
     }
     notifyDarkModeChanged();
 }
@@ -251,26 +290,27 @@ void DockConfig::notifyDarkModeChanged()
 bool DockConfig::darkModeActive() const
 {
     if (darkModeAllDocks())
-        return !darkModeExceptions().contains(m_dockId);
+        return darkModeGlobal() && !darkModeExceptions().contains(m_dockId);
     return m_darkMode;
 }
 
 void DockConfig::setDarkModeActive(bool on)
 {
     if (darkModeAllDocks()) {
-        // The app-wide switch defines the *scope* of the action, not just a
-        // default: picking a mode from any one dock applies it to all of them.
-        // Exceptions are an editing tool of the DarkMode tab, so a mode change
-        // clears them instead of adding one (which is what this used to do, and
-        // it left the switch on with the dock reading as dark — bug 2026-08-02).
-        setDarkModeExceptions(QStringList());
-        if (!on) {
-            // Dropping the switch hands every dock back to its own flag, so
-            // that flag has to come down too or the dock stays dark.
-            for (DockConfig *cfg : std::as_const(s_instances))
-                cfg->setDarkMode(false);
-            setDarkModeAllDocks(false);
+        // App-wide scope: picking a mode from any one dock applies it to all of
+        // them. It writes the global on/off flag and *leaves the scope alone* —
+        // turning the mode off used to drop the scope with it, so turning it
+        // back on only reached the dock it was clicked from (bug 2026-08-02).
+        // Exceptions survive too: they are a setting of the DarkMode tab, not a
+        // byproduct of switching the mode.
+        if (on) {
+            // …except for this dock's own exception, if it has one: asking for
+            // dark right here can't sensibly leave this dock in normal.
+            QStringList exceptions = darkModeExceptions();
+            if (exceptions.removeAll(m_dockId) > 0)
+                setDarkModeExceptions(exceptions);
         }
+        setDarkModeGlobal(on);
         return;
     }
     setDarkMode(on);
