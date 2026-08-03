@@ -112,9 +112,11 @@ Popup {
                 Rectangle {
                     id: sidebar
                     visible: popup.query.length === 0
-                    // Wider than the old text-only sidebar: the rows now carry an
-                    // icon and the .menu submenus are indented under their parent.
-                    width: visible ? 172 : 0
+                    // Sized for the widest row: "All Applications" plus its icon,
+                    // plus the indent a nested .menu submenu adds. Every row
+                    // carries an icon now (see AppMenu::sections), so the old 172
+                    // elided that one label.
+                    width: visible ? 196 : 0
                     height: parent.height
                     radius: 6
                     color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.05)

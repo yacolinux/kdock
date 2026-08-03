@@ -3,33 +3,80 @@
 #include "desktopentry.h"
 #include "dockconfig.h"
 
+#include <QIcon>
 #include <QProcess>
 #include <QVariantMap>
 
 #include <array>
 
 namespace {
+// Icon candidates for one row, best first. The freedesktop "categories" names
+// are near-universal but not guaranteed, so each entry carries a fallback or
+// two; see pickIcon().
+using IconCandidates = std::array<const char *, 3>;
+
 struct CategoryDef
 {
     const char *label;
+    IconCandidates icons;
     std::array<const char *, 4> tokens; // XDG main-category tokens; nullptr-terminated-ish
 };
 
 // Canonical order (KMenu-like). First matching token wins as an app's group.
 const std::array<CategoryDef, 11> kCategories = {{
-    {"Development", {"Development", nullptr, nullptr, nullptr}},
-    {"Education",   {"Education", nullptr, nullptr, nullptr}},
-    {"Games",       {"Game", nullptr, nullptr, nullptr}},
-    {"Graphics",    {"Graphics", nullptr, nullptr, nullptr}},
-    {"Internet",    {"Network", nullptr, nullptr, nullptr}},
-    {"Multimedia",  {"AudioVideo", "Audio", "Video", nullptr}},
-    {"Office",      {"Office", nullptr, nullptr, nullptr}},
-    {"Science",     {"Science", "Math", "Education", nullptr}},
-    {"Settings",    {"Settings", nullptr, nullptr, nullptr}},
-    {"System",      {"System", nullptr, nullptr, nullptr}},
-    {"Utilities",   {"Utility", "Accessories", nullptr, nullptr}},
+    {"Development", {"applications-development", "applications-engineering", nullptr},
+     {"Development", nullptr, nullptr, nullptr}},
+    {"Education",   {"applications-education", "applications-science", nullptr},
+     {"Education", nullptr, nullptr, nullptr}},
+    {"Games",       {"applications-games", "applications-toys", nullptr},
+     {"Game", nullptr, nullptr, nullptr}},
+    {"Graphics",    {"applications-graphics", "applications-interfacedesign", nullptr},
+     {"Graphics", nullptr, nullptr, nullptr}},
+    {"Internet",    {"applications-internet", "applications-network", nullptr},
+     {"Network", nullptr, nullptr, nullptr}},
+    {"Multimedia",  {"applications-multimedia", "applications-audio", nullptr},
+     {"AudioVideo", "Audio", "Video", nullptr}},
+    {"Office",      {"applications-office", "x-office-document", nullptr},
+     {"Office", nullptr, nullptr, nullptr}},
+    {"Science",     {"applications-science", "applications-engineering", nullptr},
+     {"Science", "Math", "Education", nullptr}},
+    {"Settings",    {"preferences-system", "applications-system", "preferences-desktop"},
+     {"Settings", nullptr, nullptr, nullptr}},
+    {"System",      {"applications-system", "preferences-system", nullptr},
+     {"System", nullptr, nullptr, nullptr}},
+    {"Utilities",   {"applications-utilities", "applications-accessories", nullptr},
+     {"Utility", "Accessories", nullptr, nullptr}},
 }};
 const char *kOther = "Other";
+const IconCandidates kOtherIcons{"applications-other", "applications-utilities", nullptr};
+const IconCandidates kFavoritesIcons{"bookmarks", "emblem-favorite", "starred-symbolic"};
+const IconCandidates kAllIcons{"applications-all", "applications-other", nullptr};
+// A .menu submenu whose .directory file carries no Icon= — most of them do not.
+const IconCandidates kSubmenuIcons{"folder", "applications-other", nullptr};
+
+// First candidate the current icon theme actually has. Falls back to the
+// primary name rather than to nothing: every row in the sidebar carries an icon
+// by design, and a blank one on a theme missing the standard names would put
+// the indentation back out of step.
+QString pickIcon(const IconCandidates &candidates)
+{
+    for (const char *name : candidates) {
+        if (!name)
+            break;
+        if (QIcon::hasThemeIcon(QLatin1String(name)))
+            return QString::fromLatin1(name);
+    }
+    return QString::fromLatin1(candidates.front());
+}
+
+const IconCandidates &iconsForCategory(const QString &label)
+{
+    for (const CategoryDef &def : kCategories) {
+        if (label == QLatin1String(def.label))
+            return def.icons;
+    }
+    return kOtherIcons;
+}
 
 // Section-key prefixes. Keys are not translated (unlike the labels shown), so
 // the current selection survives a language change.
@@ -95,7 +142,9 @@ void AppMenu::appendMenuSections(QVariantList &out, const QList<XdgMenuNode> &no
         QVariantMap m;
         m[QStringLiteral("key")] = kMenuPrefix + path;
         m[QStringLiteral("label")] = node.label;
-        m[QStringLiteral("icon")] = node.icon;
+        // Most .directory files carry no Icon=; give those a folder rather than
+        // a hole, so the submenus line up with the categories above them.
+        m[QStringLiteral("icon")] = node.icon.isEmpty() ? pickIcon(kSubmenuIcons) : node.icon;
         m[QStringLiteral("depth")] = depth;
         out.append(m);
         appendMenuSections(out, node.children, path, depth + 1);
@@ -113,13 +162,15 @@ QVariantList AppMenu::sections() const
         return QVariant(m);
     };
 
-    // Favorites and All Applications stay text-only: they are not menus, and
-    // giving them an icon narrows the row enough to elide "All Applications".
+    // Every row carries an icon, including these two: the sidebar reads as one
+    // list, and only the .menu submenus having one (their .directory files
+    // supply it) made the rest look unfinished. The rows are wider for it, which
+    // is why AppMenuPopup's sidebar is sized for "All Applications" plus an icon.
     QVariantList list;
-    list.append(row(kFavoritesKey, tr("Favorites"), QString()));
-    list.append(row(kAllKey, tr("All Applications"), QString()));
+    list.append(row(kFavoritesKey, tr("Favorites"), pickIcon(kFavoritesIcons)));
+    list.append(row(kAllKey, tr("All Applications"), pickIcon(kAllIcons)));
     for (const QString &cat : m_presentCategories)
-        list.append(row(kCatPrefix + cat, cat, QString()));
+        list.append(row(kCatPrefix + cat, cat, pickIcon(iconsForCategory(cat))));
     appendMenuSections(list, m_tree, QString(), 0);
     return list;
 }

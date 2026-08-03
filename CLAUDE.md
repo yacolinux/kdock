@@ -198,7 +198,15 @@ xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
 XDG_DATA_HOME=/tmp/tm ./build/tilemenu/kdock-tilemenu --dump-layout "cat:Development"
 ```
 
-Cuatro cosas de este arnés:
+Cinco cosas de este arnés:
+
+- **Envolvelo en `dbus-run-session` o no estás probando tu build.** El candado de instancia
+  única es el nombre en el bus de sesión, y `xvfb-run` **hereda el bus del usuario**: si la
+  instancia real está corriendo, tu `--show` se le reenvía a *ella* y el proceso del build sale
+  enseguida (`kill` falla con *"No existe el proceso"* y la captura sale vacía). Peor: le abre
+  el menú **en la pantalla del usuario**. Me pasó el 2026-08-03. Lo mismo vale para el arnés
+  del **dock** en cuanto vayas a hacerle clic al widget `tilemenu`, porque el clic termina en
+  el mismo D-Bus.
 
 - **Los tres enlaces son obligatorios.** `XDG_DATA_HOME` hay que aislarlo (si no, el arnés le
   escribe la config real), pero entonces no se ven ni los `.desktop`, ni los `.directory`, ni

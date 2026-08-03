@@ -199,6 +199,15 @@ protocols/
 - Kickoff-like application menu, exposed to QML as `appMenu` context property.
 - Groups installed `.desktop` apps by freedesktop main categories (Development, Games, Graphics, Internet, Multimedia, Office, Settings, System, Utilities, Other).
 - Sidebar categories: **Favorites**, **All Applications**, then present categories.
+- **Every sidebar row carries an icon.** The freedesktop categories used to be emitted with an
+  empty icon and only the `.menu` submenus had one (out of their `.directory` files), which
+  left the list looking half-finished. `AppMenu::sections()` now maps each canonical category
+  to its standard `applications-*` name, with a fallback or two per entry and a
+  `QIcon::hasThemeIcon()` check (`pickIcon()`), because those names are near-universal but not
+  guaranteed. A submenu whose `.directory` has no `Icon=` gets `folder`. Favorites and All
+  Applications get one too — the old comment said an icon would elide "All Applications", and
+  the fix for that is `AppMenuPopup`'s sidebar at **196 px** instead of 172. One change, both
+  menus: `kdock-tilemenu`'s sidebar reads the same `sections()`.
 - Search filters by name, comment, and desktop file id.
 - Editable favorites: star toggle per app, drag-to-reorder, persisted in `DockConfig::menuFavorites`.
 - The menu **button** in the dock is a regular section (token `"menu"`) gated by `config.showMenuButton` (default off). Like the `apps`/`systray` blocks, it is a **drop-only anchor** (not draggable as a unit).
