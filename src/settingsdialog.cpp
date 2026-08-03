@@ -53,6 +53,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 #include "theme.h"
 
 SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray,
@@ -610,25 +612,8 @@ QWidget *SettingsDialog::createGeneralTab()
     imgRow->addWidget(imgClear);
     form->addRow(tr("Panel image:"), imgRow);
 
-    auto *sep1 = new QSpinBox(tab);
-    sep1->setRange(-1, 99);
-    sep1->setValue(m_config->separator1());
-    sep1->setSpecialValueText(tr("Off"));
-    connect(sep1, &QSpinBox::valueChanged, m_config, &DockConfig::setSeparator1);
-    form->addRow(tr("Separator 1 (position):"), sep1);
-
-    auto *sep2 = new QSpinBox(tab);
-    sep2->setRange(-1, 99);
-    sep2->setValue(m_config->separator2());
-    sep2->setSpecialValueText(tr("Off"));
-    connect(sep2, &QSpinBox::valueChanged, m_config, &DockConfig::setSeparator2);
-    form->addRow(tr("Separator 2 (position):"), sep2);
-
-    auto *sepSize = new QSpinBox(tab);
-    sepSize->setRange(4, 64);
-    sepSize->setValue(m_config->separatorSize());
-    connect(sepSize, &QSpinBox::valueChanged, m_config, &DockConfig::setSeparatorSize);
-    form->addRow(tr("Separator size (px):"), sepSize);
+    // Separators (both kinds) and their size live in the Layout tab: they are
+    // part of the section order, not a numeric setting.
 
     return tab;
 }
@@ -1656,13 +1641,18 @@ QWidget *SettingsDialog::createLayoutTab()
 
     layout->addWidget(new QLabel(
         tr("Order of dock sections. Use the buttons to reorder, add or remove\n"
-           "dynamic separators (springs). A spring pushes the following sections\n"
-           "toward the far end when the dock is in panel mode."), tab));
+           "separators. A static separator is a fixed gap; a dynamic one (spring)\n"
+           "pushes the following sections toward the far end in panel mode."), tab));
 
     m_layoutList = new QListWidget(tab);
-    layout->addWidget(m_layoutList);
+    // Two lists share the tab; the section one has many more rows, so it gets
+    // the larger share of whatever height is going.
+    layout->addWidget(m_layoutList, 2);
 
     auto *buttons = new QHBoxLayout;
+    auto *addSep = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
+                                   tr("Add separator"), tab);
+    addSep->setToolTip(tr("Fixed gap of \"Separator size\" px between two sections."));
     auto *addSpring = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
                                       tr("Add dynamic separator"), tab);
     auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
@@ -1674,6 +1664,7 @@ QWidget *SettingsDialog::createLayoutTab()
                           "empty to restore the default name."));
     auto *up = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), tab);
     auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), tab);
+    buttons->addWidget(addSep);
     buttons->addWidget(addSpring);
     buttons->addWidget(remove);
     buttons->addWidget(rename);
@@ -1692,13 +1683,13 @@ QWidget *SettingsDialog::createLayoutTab()
         return it ? it->data(Qt::UserRole + 1).toInt() : -1;
     };
 
-    // Remove is only enabled when a dynamic separator is selected; renaming is
-    // the other way round (a separator draws no name).
+    // Remove is only enabled when a separator (of either kind) is selected;
+    // renaming is the other way round (a separator draws no name).
     auto updateRemove = [this, remove, rename] {
         QListWidgetItem *it = m_layoutList->currentItem();
-        const bool spring = it && it->data(Qt::UserRole).toString() == QLatin1String("spring");
-        remove->setEnabled(spring);
-        rename->setEnabled(it && !spring);
+        const bool sep = it && DockConfig::isRepeatableToken(it->data(Qt::UserRole).toString());
+        remove->setEnabled(sep);
+        rename->setEnabled(it && !sep);
     };
     connect(m_layoutList, &QListWidget::currentRowChanged, this, [updateRemove](int) { updateRemove(); });
 
@@ -1721,6 +1712,13 @@ QWidget *SettingsDialog::createLayoutTab()
         const int oi = orderIndexOfRow(row);
         const int at = oi >= 0 ? oi + 1 : m_config->widgetOrder().size();
         m_config->insertSpring(at);
+        m_layoutList->setCurrentRow(row + 1);
+    });
+    connect(addSep, &QPushButton::clicked, this, [this, orderIndexOfRow] {
+        const int row = m_layoutList->currentRow();
+        const int oi = orderIndexOfRow(row);
+        const int at = oi >= 0 ? oi + 1 : m_config->widgetOrder().size();
+        m_config->insertSeparator(at);
         m_layoutList->setCurrentRow(row + 1);
     });
     connect(remove, &QPushButton::clicked, this, [this, orderIndexOfRow] {
@@ -1763,7 +1761,175 @@ QWidget *SettingsDialog::createLayoutTab()
     reloadLayoutList();
     updateRemove();
 
+    // ---- Separators inside the apps block -------------------------------
+    // These are not sections: DockModel draws them *between app icons*, so they
+    // are placed by index (DockConfig::separator1/separator2). The list below
+    // shows the pinned launchers with those two separators where they land, so
+    // the index never has to be typed (it used to be a spinbox in General).
+    auto *line = new QLabel(tab);
+    line->setFrameStyle(QFrame::HLine | QFrame::Sunken);
+    layout->addWidget(line);
+
+    layout->addWidget(new QLabel(
+        tr("Separators inside the applications block (up to two). They split the\n"
+           "pinned launchers; a separator at the end also splits them from the\n"
+           "windows that are merely running."), tab));
+
+    m_appSepList = new QListWidget(tab);
+    layout->addWidget(m_appSepList, 1);
+    m_appSepSelected = 0; // buildTabs() rebuilds this list for another dock
+
+    auto *sepButtons = new QHBoxLayout;
+    auto *addAppSep = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
+                                      tr("Add separator"), tab);
+    auto *removeAppSep = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
+                                         tr("Remove separator"), tab);
+    auto *sepUp = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), tab);
+    auto *sepDown = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), tab);
+    sepButtons->addWidget(addAppSep);
+    sepButtons->addWidget(removeAppSep);
+    sepButtons->addStretch();
+    sepButtons->addWidget(sepUp);
+    sepButtons->addWidget(sepDown);
+    layout->addLayout(sepButtons);
+
+    auto updateAppSepButtons = [this, addAppSep, removeAppSep, sepUp, sepDown] {
+        const bool room = appSeparatorPos(1) < 0 || appSeparatorPos(2) < 0;
+        const bool onSep = m_appSepSelected != 0;
+        addAppSep->setEnabled(room);
+        removeAppSep->setEnabled(onSep);
+        sepUp->setEnabled(onSep);
+        sepDown->setEnabled(onSep);
+    };
+    connect(m_appSepList, &QListWidget::currentRowChanged, this,
+            [this, updateAppSepButtons](int row) {
+                QListWidgetItem *it = row >= 0 ? m_appSepList->item(row) : nullptr;
+                m_appSepSelected = it ? it->data(Qt::UserRole).toInt() : 0;
+                updateAppSepButtons();
+            });
+
+    connect(addAppSep, &QPushButton::clicked, this, [this] {
+        if (appSeparatorPos(1) >= 0 && appSeparatorPos(2) >= 0)
+            return;
+        const int which = appSeparatorPos(1) < 0 ? 1 : 2;
+        // Insert before the selected launcher, or at the end of the pinned ones.
+        QListWidgetItem *it = m_appSepList->currentItem();
+        int pos = it ? it->data(Qt::UserRole + 1).toInt() : m_config->pinned().size();
+        if (pos == appSeparatorPos(which == 1 ? 2 : 1))
+            ++pos; // never stack the two on the same index
+        m_appSepSelected = which; // the new separator is what the buttons act on
+        setAppSeparatorPos(which, pos);
+    });
+    connect(removeAppSep, &QPushButton::clicked, this, [this] {
+        if (const int which = m_appSepSelected) {
+            m_appSepSelected = 0;
+            setAppSeparatorPos(which, -1);
+        }
+    });
+    // Up/Down shift the separator one launcher at a time, jumping over the
+    // other separator so the two never share an index (they would then be
+    // indistinguishable, and DockModel would draw them back to back).
+    auto shift = [this](int delta) {
+        const int which = m_appSepSelected;
+        if (!which)
+            return;
+        const int other = appSeparatorPos(which == 1 ? 2 : 1);
+        int pos = appSeparatorPos(which) + delta;
+        if (pos == other)
+            pos += delta;
+        setAppSeparatorPos(which, qBound(0, pos, m_config->pinned().size()));
+    };
+    connect(sepUp, &QPushButton::clicked, this, [shift] { shift(-1); });
+    connect(sepDown, &QPushButton::clicked, this, [shift] { shift(1); });
+
+    auto *sizeForm = new QFormLayout;
+    auto *sepSize = new QSpinBox(tab);
+    sepSize->setRange(4, 64);
+    sepSize->setSuffix(tr(" px"));
+    sepSize->setValue(m_config->separatorSize());
+    sepSize->setToolTip(tr("Size of every static separator: both the ones inside the "
+                           "applications block and the \"Static separator\" sections."));
+    connect(sepSize, &QSpinBox::valueChanged, m_config, &DockConfig::setSeparatorSize);
+    connect(m_config, &DockConfig::separatorSizeChanged, sepSize,
+            [this, sepSize] { sepSize->setValue(m_config->separatorSize()); });
+    sizeForm->addRow(tr("Separator size:"), sepSize);
+    layout->addLayout(sizeForm);
+
+    for (auto signal : {&DockConfig::separator1Changed, &DockConfig::separator2Changed,
+                        &DockConfig::pinnedChanged}) {
+        connect(m_config, signal, this, [this, updateAppSepButtons] {
+            reloadAppSeparatorList();
+            updateAppSepButtons();
+        });
+    }
+    reloadAppSeparatorList();
+    updateAppSepButtons();
+
     return tab;
+}
+
+int SettingsDialog::appSeparatorPos(int which) const
+{
+    return which == 1 ? m_config->separator1() : m_config->separator2();
+}
+
+void SettingsDialog::setAppSeparatorPos(int which, int pos)
+{
+    if (which == 1)
+        m_config->setSeparator1(pos);
+    else
+        m_config->setSeparator2(pos);
+}
+
+void SettingsDialog::reloadAppSeparatorList()
+{
+    // Keep the selection on the same separator across the rebuild. Snapshot it
+    // first: clear() and setCurrentItem() both emit currentRowChanged, which
+    // writes m_appSepSelected, so it is restored at the end.
+    const int selected = m_appSepSelected;
+    m_appSepList->clear();
+
+    const QStringList pinned = m_config->pinned();
+    const auto addSeparatorsAt = [this, selected](int pos) {
+        for (int which = 1; which <= 2; ++which) {
+            if (appSeparatorPos(which) != pos)
+                continue;
+            auto *item = new QListWidgetItem(
+                QIcon::fromTheme(QStringLiteral("distribute-vertical-margin")),
+                tr("── Separator %1 ──").arg(which), m_appSepList);
+            item->setData(Qt::UserRole, which);
+            item->setData(Qt::UserRole + 1, pos);
+            if (which == selected)
+                m_appSepList->setCurrentItem(item);
+        }
+    };
+
+    for (int i = 0; i < pinned.size(); ++i) {
+        addSeparatorsAt(i);
+        const DesktopEntry entry = m_apps->byId(pinned.at(i));
+        auto *item = new QListWidgetItem(
+            QIcon::fromTheme(entry.isValid() ? entry.icon
+                                             : QStringLiteral("application-x-executable")),
+            entry.isValid() ? entry.name : pinned.at(i), m_appSepList);
+        item->setData(Qt::UserRole, 0);
+        item->setData(Qt::UserRole + 1, i);
+    }
+    // A separator can also sit past the last launcher: that is where it splits
+    // the pinned icons from the merely running windows.
+    addSeparatorsAt(pinned.size());
+    // Indexes further out land among windows this dialog cannot enumerate;
+    // list them at the end instead of dropping them (they would look "off").
+    QList<int> beyond;
+    for (int which = 1; which <= 2; ++which) {
+        const int pos = appSeparatorPos(which);
+        if (pos > pinned.size() && !beyond.contains(pos))
+            beyond.append(pos);
+    }
+    std::sort(beyond.begin(), beyond.end());
+    for (int pos : std::as_const(beyond))
+        addSeparatorsAt(pos);
+
+    m_appSepSelected = selected;
 }
 
 void SettingsDialog::reloadLayoutList()
@@ -1776,26 +1942,30 @@ void SettingsDialog::reloadLayoutList()
     static const QStringList kHiddenFromLayout = {
         QStringLiteral("clock"), QStringLiteral("nextwallpaper")};
     int springNumber = 0;
+    int sepNumber = 0;
     for (int i = 0; i < order.size(); ++i) {
         const QString token = order.at(i);
         if (kHiddenFromLayout.contains(token))
             continue;
         const bool spring = token == QLatin1String("spring");
-        // Separators are numbered: they are otherwise indistinguishable, so
-        // there is no way to tell that Up/Down moved the one that was selected.
-        // Renamed sections keep the default name in parentheses, or the list
-        // stops saying which widget a row is.
+        const bool separator = DockConfig::isRepeatableToken(token);
+        // Separators are numbered (each kind on its own count): they are
+        // otherwise indistinguishable, so there is no way to tell that Up/Down
+        // moved the one that was selected. Renamed sections keep the default
+        // name in parentheses, or the list stops saying which widget a row is.
         const QString name = m_config->widgetName(token);
         QString shown;
-        if (spring)
-            shown = tr("%1 %2").arg(sectionLabel(token)).arg(++springNumber);
+        if (separator)
+            shown = tr("%1 %2").arg(sectionLabel(token))
+                        .arg(spring ? ++springNumber : ++sepNumber);
         else if (name == sectionLabel(token))
             shown = sectionLabel(token);
         else
             shown = tr("%1 (%2)").arg(name, sectionLabel(token));
         auto *item = new QListWidgetItem(
-            QIcon::fromTheme(spring ? QStringLiteral("distribute-horizontal-margin")
-                                    : QStringLiteral("view-list-symbolic")),
+            QIcon::fromTheme(!separator ? QStringLiteral("view-list-symbolic")
+                             : spring   ? QStringLiteral("distribute-horizontal-margin")
+                                        : QStringLiteral("distribute-vertical-margin")),
             shown, m_layoutList);
         item->setData(Qt::UserRole, token);
         item->setData(Qt::UserRole + 1, i); // index in widgetOrder, springs included

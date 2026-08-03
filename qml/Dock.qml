@@ -466,6 +466,7 @@ Item {
         case "session": return config.showSessionButton && power && power.available
         case "settings": return config.showSettingsButton
         case "spring": return true
+        case "sep": return true
         }
         return false
     }
@@ -499,6 +500,7 @@ Item {
         case "session": return sessionComp
         case "settings": return settingsComp
         case "spring": return springComp
+        case "sep": return staticSepComp
         }
         return null
     }
@@ -533,6 +535,7 @@ Item {
         case "showdesktop": return qsTr("Show desktop")
         case "settings": return qsTr("Configure kdock")
         case "spring": return qsTr("Dynamic separator")
+        case "sep": return qsTr("Static separator")
         }
         return ""
     }
@@ -696,14 +699,15 @@ Item {
 
                     readonly property string token: modelData
                     readonly property bool isSpring: token === "spring"
+                    readonly property bool isStaticSep: token === "sep"
                     readonly property bool block: root.isBlock(token)
                     readonly property bool draggable: !block
 
                     // Name of this section, drawn around its content. The apps
                     // block is excluded: it labels each of its own icons with
-                    // the separate app setting.
+                    // the separate app setting; the separators draw no name.
                     readonly property bool labelled: root.widgetLabelVisible && !isSpring
-                                                     && token !== "apps"
+                                                     && !isStaticSep && token !== "apps"
                     readonly property string label: labelled ? root.widgetNameOf(token) : ""
                     // Renames and show/hide both move the widest drawn name.
                     onLabelChanged: root.scheduleLabelMeasure()
@@ -828,7 +832,10 @@ Item {
                                 target: contentLoader.item
                                 property: "hovered"
                                 value: secMouse.containsMouse
-                                when: contentLoader.item !== null && !sec.block && !sec.isSpring
+                                // Separators draw no hover state and declare no
+                                // such property: binding it warns on every load.
+                                when: contentLoader.item !== null && !sec.block
+                                      && !sec.isSpring && !sec.isStaticSep
                             }
                         }
 
@@ -914,9 +921,15 @@ Item {
                                 onTriggered: config.insertSpring(sec.index + 1)
                             }
                             IconMenuItem {
-                                visible: sec.isSpring
+                                text: qsTr("Add static separator")
+                                iconName: "list-add"
+                                onTriggered: config.insertSeparator(sec.index + 1)
+                            }
+                            IconMenuItem {
+                                visible: sec.isSpring || sec.isStaticSep
                                 height: visible ? implicitHeight : 0
-                                text: qsTr("Remove dynamic separator")
+                                text: sec.isSpring ? qsTr("Remove dynamic separator")
+                                                   : qsTr("Remove static separator")
                                 iconName: "list-remove"
                                 onTriggered: config.removeSectionAt(sec.index)
                             }
@@ -2341,6 +2354,27 @@ Item {
             // Expansion handled by the section wrapper's Layout.fill*.
             implicitWidth: 0
             implicitHeight: 0
+        }
+    }
+
+    // Static separator: a fixed gap of config.separatorSize along the dock's
+    // main axis, with the same thin line the apps block draws for its own
+    // separators. Never grows the dock across its thickness: the cross-axis
+    // size is that of a widget icon, which is already accounted for there.
+    Component {
+        id: staticSepComp
+        Item {
+            implicitWidth: root.horizontal ? config.separatorSize : root.widgetIconPx
+            implicitHeight: root.horizontal ? root.widgetIconPx : config.separatorSize
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: root.horizontal ? 2 : parent.width * 0.6
+                height: root.horizontal ? parent.height * 0.6 : 2
+                radius: 1
+                color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                               theme.foreground.b, 0.25)
+            }
         }
     }
 

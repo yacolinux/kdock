@@ -710,9 +710,10 @@ void DockConfig::reconcileWidgetOrder()
 {
     const QStringList known = knownWidgetTokens();
     QStringList result;
-    // Keep known tokens (deduplicated) and spring tokens, in their saved order.
+    // Keep known tokens (deduplicated) and the repeatable separator tokens,
+    // in their saved order.
     for (const QString &token : std::as_const(m_widgetOrder)) {
-        if (token == QLatin1String("spring")) {
+        if (isRepeatableToken(token)) {
             result.append(token);
         } else if (known.contains(token) && !result.contains(token)) {
             result.append(token);
@@ -755,12 +756,20 @@ void DockConfig::insertSpring(int at)
     emit widgetOrderChanged();
 }
 
+void DockConfig::insertSeparator(int at)
+{
+    at = qBound(0, at, m_widgetOrder.size());
+    m_widgetOrder.insert(at, QStringLiteral("sep"));
+    m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
+    emit widgetOrderChanged();
+}
+
 void DockConfig::removeSectionAt(int at)
 {
     if (at < 0 || at >= m_widgetOrder.size())
         return;
-    if (m_widgetOrder.at(at) != QLatin1String("spring"))
-        return; // only dynamic separators are removable; widgets use show* flags
+    if (!isRepeatableToken(m_widgetOrder.at(at)))
+        return; // only separators are removable; widgets use their show* flags
     m_widgetOrder.removeAt(at);
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
     emit widgetOrderChanged();
@@ -1514,6 +1523,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("session"),       tr("Session / power")},
         {QStringLiteral("settings"),      tr("Settings button")},
         {QStringLiteral("spring"),        tr("Dynamic separator")},
+        {QStringLiteral("sep"),           tr("Static separator")},
     };
     return labels.value(token, token);
 }

@@ -86,6 +86,13 @@ private:
     void selectFromCombos();
     void updateEnabledCheck();
     void reloadLayoutList();
+    // Second list of the Layout tab: the pinned launchers with the two static
+    // separators of the apps block (separator1/separator2) drawn where they
+    // land, so they are placed by moving a row instead of typing an index.
+    void reloadAppSeparatorList();
+    // Position of separator <which> (1 or 2), or -1 when it is off.
+    int appSeparatorPos(int which) const;
+    void setAppSeparatorPos(int which, int pos);
     static QString sectionLabel(const QString &token);
     void reloadPinnedList();
     void savePinnedList();
@@ -123,6 +130,12 @@ private:
     QListWidget *m_pinnedList;
     QListWidget *m_favoritesList = nullptr;
     QListWidget *m_layoutList;
+    QListWidget *m_appSepList = nullptr;
+    // Which apps-block separator (1, 2 or 0 for none) the second Layout list
+    // has selected. Every edit rebuilds that list, and the row a separator sits
+    // on changes as it moves, so the selection is tracked by separator instead
+    // of by row: without this Up/Down deselect what they just moved.
+    int m_appSepSelected = 0;
     QListWidget *m_relanzadoresList;
     QListWidget *m_relanzadorAppsList;
     QListWidget *m_scriptRunnersList = nullptr;

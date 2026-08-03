@@ -174,9 +174,17 @@ public:
     // See widgetName() for the user-renamed variant.
     static QString defaultWidgetLabel(const QString &token);
 
-    // Ordered dock sections. Widget tokens plus zero or more "spring"
-    // (dynamic separator) tokens. See reconcileWidgetOrder().
-    static QStringList knownWidgetTokens(); // apps + every widget, no springs
+    // Ordered dock sections. Widget tokens plus zero or more of the repeatable
+    // tokens below. See reconcileWidgetOrder().
+    static QStringList knownWidgetTokens(); // apps + every widget, no separators
+
+    // Tokens that may appear any number of times in widgetOrder (every other
+    // token is unique and comes from knownWidgetTokens()): the dynamic
+    // separator, which expands, and the static one, a separatorSize px gap.
+    static bool isRepeatableToken(const QString &token)
+    {
+        return token == QLatin1String("spring") || token == QLatin1String("sep");
+    }
 
     // Up to this many docks can coexist on a single monitor.
     static constexpr int kMaxDocksPerScreen = 3;
@@ -569,6 +577,8 @@ public:
     // Drag & drop / context-menu editing of the section order (from QML).
     Q_INVOKABLE void moveSection(int from, int to);
     Q_INVOKABLE void insertSpring(int at);
+    // Fixed-size gap of separatorSize px between two sections.
+    Q_INVOKABLE void insertSeparator(int at);
     Q_INVOKABLE void removeSectionAt(int at);
 
 signals:

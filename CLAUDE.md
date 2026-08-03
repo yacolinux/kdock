@@ -120,6 +120,25 @@ nunca se instanció (ver las dos trampas de arriba). Control positivo: rompé el
 propósito (`Item { property int x: noExiste.nada }`), recompilá, corré, confirmá que aparece
 el error, y revertí. Salió gratis y confirmó el arnés (2026-07-30).
 
+**Y podés *ver* el dock renderizado** —el control positivo más barato, y lo único que prueba
+que algo se dibuja donde va— capturando la ventana bajo Xvfb, sin tocar el dock del usuario
+(2026-08-02, con esto se cerró la feature de separadores):
+
+```bash
+XDG_DATA_HOME=/tmp/kdock-t QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software ./build/kdock & sleep 6
+import -window $(xwininfo -root -children | awk '/"kdock": \("kdock"/ {print $1}') /tmp/dock.png
+```
+
+Tres detalles, los tres dan un PNG **negro** que parece "no renderiza":
+
+- **`QT_QUICK_BACKEND=software`**: sin eso el contenido GL no aparece en la captura de X.
+- **`autohide=false` en el `.conf`**: si no, el dock se esconde solo y capturás la franja vacía.
+- **`import -window <id>`** (no `-window root`, que también sale negro). El id sale del
+  `xwininfo`; ojo que hay tres ventanas "kdock" y la buena es la de `("kdock" "kdock")`.
+
+Para un dock vertical (`edge=2/3`) la imagen sale alta y flaca: `convert … -rotate 90` para
+leerla de un vistazo.
+
 Bajo Xvfb el dock es una ventana X normal y su tamaño lo dicta el contenido
 (`SizeViewToRootObject`), así que se puede medir el grosor sin GUI:
 
@@ -208,6 +227,16 @@ Dos usos más de la misma sonda, los dos salieron gratis (2026-08-02, colores r�
   de verdad (todos los docks, sus claves viejas) y cualquier escritura cae en la copia. Es la
   forma de confirmar qué van a leer los docks instalados sin reiniciarle ninguno al usuario.
   El `dockId` va hardcodeado en el `dlg.cpp`, así que para mirar otro dock hay que recompilar.
+
+Y un tercero, el que más rinde: **manejar el diálogo desde el código** en vez de mirarlo. La
+sonda encuentra los widgets con `findChildren<QPushButton*>()` / `findChild<QTabWidget*>()`,
+llama `->click()` / `setCurrentRow()` en el orden que haría el usuario e imprime lo que quedó
+en el `DockConfig` después de cada paso. Es un test funcional de la solapa completa que corre
+en dos segundos bajo Xvfb, y encontró en la primera corrida un bug que la captura no muestra:
+una lista que se reconstruye con cada edición **pierde la selección**, así que el segundo clic
+en *Bajar* no hacía nada (2026-08-02). Dos apuntes: `findChildren` devuelve en orden de
+creación, así que dos botones con el mismo texto se distinguen por índice sin tocar el código
+de producción; y no hace falta `app.exec()` si no vas a capturar.
 
 ### Arnés de un componente QML suelto (popups del dock)
 
@@ -302,6 +331,14 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   los siete: no lleva `src/<x>control.{h,cpp}`, ni `main.cpp`, ni `dockmanager.*`, ni
   `dockwindow.*` — no hay backend que instanciar ni context property que registrar. Quedan
   `DockConfig` (con su `knownWidgetTokens()`), `Dock.qml` y el checkbox del diálogo.
+- **Una sección que se repite (`spring`, `sep`) NO va en `knownWidgetTokens()`**: esa lista
+  se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
+  `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te
+  olvidás, el token **desaparece del `widgetOrder` en el próximo load** sin imprimir nada.
+  Y en `Dock.qml`, además del `Component` + `componentFor()` + `sectionVisible()`, hay que
+  excluirla del `Binding` de `hovered` del delegate: un componente de sección que no declara
+  esa property escupe *"Property 'hovered' does not exist on QQuickItem"* en cada arranque
+  (lo agarró el arnés de Xvfb al primer intento, 2026-08-02).
 - **Una clave nueva del grupo del menú se toca en CINCO lugares**: `Q_PROPERTY` + getter +
   señal, `load()`, `reloadMenuConfig()`, el `seedKey()` de `setMenuConfigShared()` y el setter
   vía `writeMenuConfigValue()` (no `m_settings.setValue()` directo). Si te salteás alguno
