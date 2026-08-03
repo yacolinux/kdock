@@ -439,6 +439,7 @@ Item {
     function sectionVisible(token) {
         switch (token) {
         case "menu": return config.showMenuButton
+        case "tilemenu": return config.showTileMenu && tileLauncher
         case "apps": return true
         case "clipboard": return config.showClipboard && clipboardHistory
         case "disks": return config.showDisks && disks && disks.available
@@ -474,6 +475,7 @@ Item {
     function componentFor(token) {
         switch (token) {
         case "menu": return menuComp
+        case "tilemenu": return tileMenuComp
         case "apps": return appsComp
         case "clipboard": return clipboardComp
         case "disks": return disksComp
@@ -510,7 +512,8 @@ Item {
     // and springs are draggable and dispatch their action from the section.
     function isBlock(token) {
         return token === "apps" || token === "systray" || token === "relanzadores"
-               || token === "scriptrunners" || token === "menu" || token === "session"
+               || token === "scriptrunners" || token === "menu" || token === "tilemenu"
+               || token === "session"
                || token === "battery" || token === "clipboard" || token === "disks"
                || token === "network" || token === "iconthemes"
                || token === "colorschemes"
@@ -534,6 +537,7 @@ Item {
         case "autohide": return config.autohide ? qsTr("Dock auto-hides") : qsTr("Dock stays visible")
         case "showdesktop": return qsTr("Show desktop")
         case "settings": return qsTr("Configure kdock")
+        case "tilemenu": return qsTr("Menú de mosaicos (pantalla completa)")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
         }
@@ -1776,6 +1780,70 @@ Item {
                     if (menuRoot._config.edge === 0) return -height - 8          // bottom dock -> above
                     if (menuRoot._config.edge === 1) return menuRoot.height + 8  // top dock -> below
                     return 0
+                }
+            }
+        }
+    }
+
+    // Full-screen tile menu. A block, like the application menu: it owns its
+    // own mouse handling. There is no popup here — the menu is a window of the
+    // separate kdock-tilemenu process, and this widget only toggles it.
+    Component {
+        id: tileMenuComp
+        Item {
+            id: tileRoot
+            // Same exemption the Applications Menu gets: always the base icon
+            // size, never the widget icon scale.
+            implicitWidth: root.appIconPx
+            implicitHeight: root.appIconPx
+
+            Image {
+                id: tileIcon
+                anchors.centerIn: parent
+                width: root.appIconPx
+                height: width
+                source: "image://icon/" + (config.tileMenuIcon || "view-list-icons")
+                        + root.widgetIconSuffix
+                sourceSize: Qt.size(root.appIconPx * Screen.devicePixelRatio,
+                                    root.appIconPx * Screen.devicePixelRatio)
+                scale: tileMouse.containsMouse ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+            ToolTip {
+                popupType: Popup.Window
+                visible: tileMouse.containsMouse
+                delay: 400
+                text: qsTr("Menú de mosaicos")
+            }
+            MouseArea {
+                id: tileMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                // A block, so the section-level MouseArea is disabled here and
+                // the right button has to be handled by this one.
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) { tileCtxMenu.popup(); return }
+                    // The dock's connector, so the menu opens on this monitor.
+                    tileLauncher.toggle(config.screenName)
+                }
+            }
+
+            Menu {
+                id: tileCtxMenu
+                popupType: Popup.Window
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
+                IconMenuItem {
+                    text: qsTr("Configurar el menú de mosaicos…")
+                    iconName: "configure"
+                    onTriggered: tileLauncher.openSettings()
+                }
+                MenuSeparator {}
+                IconMenuItem {
+                    text: qsTr("Dock settings…")
+                    iconName: "configure"
+                    onTriggered: dockWindow.openSettings()
                 }
             }
         }

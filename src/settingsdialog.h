@@ -19,6 +19,7 @@ class AppearanceControl;
 class ColoredTabWidget;
 class IconColorProvider;
 class PreviewsLauncher;
+class TileMenuLauncher;
 class Theme;
 class QButtonGroup;
 class QComboBox;
@@ -54,6 +55,7 @@ private:
     QWidget *createGeneralTab();
     QWidget *createWidgetsTab();
     QWidget *createMenuTab();
+    QWidget *createTileMenuGroup(QWidget *parent);
     QWidget *createAudioTab();
     // Repopulate the Audio tab's device rows from the current AudioControl state.
     void rebuildAudioTab();
@@ -168,6 +170,7 @@ private:
     // Previews tab. The launcher outlives the tab widgets (buildTabs() recreates
     // them whenever another dock is selected).
     PreviewsLauncher *m_previewsLauncher = nullptr;
+    TileMenuLauncher *m_tileLauncher = nullptr;
     QCheckBox *m_previewsEnabled = nullptr;
     QLabel *m_previewsStatus = nullptr;
 };

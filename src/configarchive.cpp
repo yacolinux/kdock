@@ -19,17 +19,42 @@ QString ConfigArchive::configDir()
     return QFileInfo(DockConfig::settingsFilePath()).absolutePath();
 }
 
+// The three families of settings files that live in the kdock data dir: the
+// docks themselves, the preview strips and the tile menu. The accessory
+// binaries keep their own files, and leaving them out of the backup meant a
+// restore silently dropped the tile layout the user had built.
+static const QStringList &configGlobs()
+{
+    static const QStringList globs{QStringLiteral("kdock*.conf"),
+                                   QStringLiteral("previews*.conf"),
+                                   QStringLiteral("tilemenu*.conf")};
+    return globs;
+}
+
 static bool isConfigEntry(const QString &name)
 {
-    // Plain "kdock*.conf" file name, no path separators (anti zip-slip).
-    static const QRegularExpression re(QStringLiteral("^kdock[\\w.#-]*\\.conf$"));
+    // Plain file name, no path separators (anti zip-slip).
+    static const QRegularExpression re(
+        QStringLiteral("^(kdock|previews|tilemenu)[\\w.#-]*\\.conf$"));
     return re.match(name).hasMatch();
+}
+
+// Which glob an archive entry belongs to, so importing only clears the families
+// the archive actually carries (see importFrom).
+static QString familyOf(const QString &name)
+{
+    for (const QString &glob : configGlobs()) {
+        const QString prefix = glob.left(glob.indexOf(QLatin1Char('*')));
+        if (name.startsWith(prefix))
+            return glob;
+    }
+    return {};
 }
 
 bool ConfigArchive::exportTo(const QString &zipPath, QString *error)
 {
     const QDir dir(configDir());
-    const QStringList files = dir.entryList({QStringLiteral("kdock*.conf")}, QDir::Files);
+    const QStringList files = dir.entryList(configGlobs(), QDir::Files);
     if (files.isEmpty()) {
         if (error)
             *error = QStringLiteral("No configuration files found in %1").arg(dir.path());
@@ -76,12 +101,16 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
 
     // Collect valid config entries; require kdock.conf to be present.
     QList<QPair<QString, QByteArray>> entries;
+    QStringList families;
     bool hasShared = false;
     for (const QZipReader::FileInfo &fi : zr.fileInfoList()) {
         if (!fi.isFile || !isConfigEntry(fi.filePath))
             continue;
         if (fi.filePath == QLatin1String("kdock.conf"))
             hasShared = true;
+        const QString family = familyOf(fi.filePath);
+        if (!family.isEmpty() && !families.contains(family))
+            families.append(family);
         entries.append({fi.filePath, zr.fileData(fi.filePath)});
     }
     if (!hasShared) {
@@ -96,15 +125,18 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
     // Back up the current config before replacing it.
     const QString backup =
         QStringLiteral("backup-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
-    const QStringList current = dir.entryList({QStringLiteral("kdock*.conf")}, QDir::Files);
+    const QStringList current = dir.entryList(configGlobs(), QDir::Files);
     if (!current.isEmpty()) {
         dir.mkpath(backup);
         for (const QString &name : current)
             QFile::copy(dir.filePath(name), dir.filePath(backup + QLatin1Char('/') + name));
     }
 
-    // Clean replace: remove current kdock*.conf, then write the archive entries.
-    for (const QString &name : current)
+    // Clean replace, but only of the families the archive carries: an archive
+    // made before the tile menu existed must not delete the layout the user has
+    // built since. (Everything is in the backup directory either way.)
+    const QStringList doomed = dir.entryList(families, QDir::Files);
+    for (const QString &name : doomed)
         QFile::remove(dir.filePath(name));
 
     for (const auto &e : entries) {

@@ -72,6 +72,8 @@ class DockConfig : public QObject
     Q_PROPERTY(bool iconRunningDots READ iconRunningDots WRITE setIconRunningDots NOTIFY iconRunningDotsChanged)
     Q_PROPERTY(bool iconRunningLine READ iconRunningLine WRITE setIconRunningLine NOTIFY iconRunningLineChanged)
     Q_PROPERTY(bool showMenuButton READ showMenuButton WRITE setShowMenuButton NOTIFY showMenuButtonChanged)
+    Q_PROPERTY(bool showTileMenu READ showTileMenu WRITE setShowTileMenu NOTIFY showTileMenuChanged)
+    Q_PROPERTY(QString tileMenuIcon READ tileMenuIcon WRITE setTileMenuIcon NOTIFY tileMenuIconChanged)
     Q_PROPERTY(bool showSessionButton READ showSessionButton WRITE setShowSessionButton NOTIFY showSessionButtonChanged)
     Q_PROPERTY(bool showSettingsButton READ showSettingsButton WRITE setShowSettingsButton NOTIFY showSettingsButtonChanged)
     Q_PROPERTY(bool showMenuPower READ showMenuPower WRITE setShowMenuPower NOTIFY showMenuPowerChanged)
@@ -396,6 +398,11 @@ public:
     // the shared settings file, so every dock offers the same palette.
     QStringList panelPresetColors() const { return m_panelPresetColors; }
     static constexpr int kPresetColorCount = 8;
+    // Pure helpers, public so anything that offers the same palette reads it
+    // from here instead of keeping its own copy of the eight defaults —
+    // kdock-tilemenu's tile color submenu does exactly that.
+    static QStringList normalizedPresetColors(const QStringList &colors);
+    static QStringList defaultPresetColors();
     // Tiled panel background image (absolute path; empty = none).
     QString panelImage() const { return m_panelImage; }
     QUrl panelImageUrl() const { return m_panelImage.isEmpty() ? QUrl() : QUrl::fromLocalFile(m_panelImage); }
@@ -433,6 +440,10 @@ public:
     bool iconRunningDots() const { return m_iconRunningDots; }
     bool iconRunningLine() const { return m_iconRunningLine; }
     bool showMenuButton() const { return m_showMenuButton; }
+    // The full-screen tile menu lives in its own process (kdock-tilemenu);
+    // these two are the only things about it the dock has to know.
+    bool showTileMenu() const { return m_showTileMenu; }
+    QString tileMenuIcon() const { return m_tileMenuIcon; }
     bool showSessionButton() const { return m_showSessionButton; }
     bool showSettingsButton() const { return m_showSettingsButton; }
     bool showMenuPower() const { return m_showMenuPower; }
@@ -536,6 +547,8 @@ public:
     void setIconRunningDots(bool on);
     void setIconRunningLine(bool on);
     void setShowMenuButton(bool show);
+    void setShowTileMenu(bool show);
+    void setTileMenuIcon(const QString &icon);
     void setShowSessionButton(bool show);
     void setShowSettingsButton(bool show);
     void setShowMenuPower(bool show);
@@ -634,6 +647,8 @@ signals:
     void iconRunningDotsChanged();
     void iconRunningLineChanged();
     void showMenuButtonChanged();
+    void showTileMenuChanged();
+    void tileMenuIconChanged();
     void showSessionButtonChanged();
     void showSettingsButtonChanged();
     void showMenuPowerChanged();
@@ -696,8 +711,6 @@ private:
     // (seeding it from this dock's legacy per-screen key on first run) and
     // normalize the list to kPresetColorCount entries.
     void reloadPresetColors();
-    static QStringList normalizedPresetColors(const QStringList &colors);
-    static QStringList defaultPresetColors();
 
     // Shared-favorites storage in the shared settings file.
     static QStringList sharedFavorites();
@@ -758,6 +771,8 @@ private:
     bool m_iconRunningDots = true;
     bool m_iconRunningLine = false;
     bool m_showMenuButton = false;
+    bool m_showTileMenu = false;
+    QString m_tileMenuIcon = QStringLiteral("view-list-icons");
     bool m_showSessionButton = false;
     bool m_showSettingsButton = false;
     bool m_showMenuPower = true;

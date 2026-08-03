@@ -28,6 +28,7 @@
 #include "settingsdialog.h"
 #include "systraymodel.h"
 #include "systrayimageprovider.h"
+#include "tilemenulauncher.h"
 #include "theme.h"
 #include "volumecontrol.h"
 
@@ -149,6 +150,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("showdesktop"), monitor);
     rootContext()->setContextProperty(QStringLiteral("appMenu"),
                                       new AppMenu(m_apps, m_config, this));
+    m_tileLauncher = new TileMenuLauncher(this);
+    rootContext()->setContextProperty(QStringLiteral("tileLauncher"), m_tileLauncher);
 
     setResizeMode(QQuickView::SizeViewToRootObject); // content drives surface size
     setSource(QUrl(QStringLiteral("qrc:/qml/Dock.qml")));

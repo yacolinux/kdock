@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=kdock Tile Menu
+Comment=Full-screen tiled application menu
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock-tilemenu
+Icon=view-list-icons
+Categories=Utility;
+NoDisplay=true
+# No X-KDE-Wayland-Interfaces / X-KDE-DBUS-Restricted-Interfaces here: this
+# binary asks the compositor for nothing privileged. The entry exists so the
+# window carries a name and an icon in the task switcher (it shows up there
+# while "Mantener abierto" is on), and so a KWin rule has an app id to match.

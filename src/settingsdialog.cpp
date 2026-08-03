@@ -13,6 +13,7 @@
 #include "configarchive.h"
 #include "iconpickerdialog.h"
 #include "previewslauncher.h"
+#include "tilemenulauncher.h"
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
 #include "systray.h"
@@ -1130,6 +1131,8 @@ QWidget *SettingsDialog::createMenuTab()
 
     layout->addLayout(form);
 
+    layout->addWidget(createTileMenuGroup(tab));
+
     // Favorites editor (same pattern as the pinned-apps editor).
     layout->addWidget(new QLabel(tr("Menu favorites:"), tab));
     m_favoritesList = new QListWidget(tab);
@@ -1209,6 +1212,101 @@ QWidget *SettingsDialog::createMenuTab()
 // Applications section lists per-stream volume. Rows are rebuilt live from
 // AudioControl::changed(). Invoked directly by the dock's volume-widget
 // right-click (DockWindow::openAudioSettings -> showAudioTab).
+QWidget *SettingsDialog::createTileMenuGroup(QWidget *parent)
+{
+    // A group inside the Menu tab rather than a twelfth tab: eleven titles
+    // already ask for 1086 px of tab bar and one more drops it into scroll-arrow
+    // mode without warning (see AGENTS.md). Everything about how the tile menu
+    // looks lives in its own panel anyway — kdock only owns the widget.
+    auto *box = new QGroupBox(tr("Menú de mosaicos (pantalla completa)"), parent);
+    auto *layout = new QVBoxLayout(box);
+
+    auto *info = new QLabel(
+        tr("Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los "
+           "docks y paneles visibles), con los íconos en una grilla que podés reacomodar "
+           "arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia "
+           "configuración: el botón de abajo abre su panel."),
+        box);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    if (!TileMenuLauncher::installed()) {
+        auto *missing = new QLabel(tr("kdock-tilemenu no está instalado."), box);
+        missing->setStyleSheet(QStringLiteral("color: gray;"));
+        layout->addWidget(missing);
+        return box;
+    }
+
+    auto *form = new QFormLayout;
+
+    auto *showTile = new QCheckBox(tr("Mostrar el botón en este dock"), box);
+    showTile->setChecked(m_config->showTileMenu());
+    connect(showTile, &QCheckBox::toggled, m_config, &DockConfig::setShowTileMenu);
+    connect(m_config, &DockConfig::showTileMenuChanged, showTile,
+            [this, showTile] { showTile->setChecked(m_config->showTileMenu()); });
+    form->addRow(tr("Widget:"), showTile);
+
+    auto *iconBtn = new QPushButton(box);
+    iconBtn->setStyleSheet(QStringLiteral("text-align:left; padding:4px 8px;"));
+    const auto refreshIcon = [this, iconBtn] {
+        const QString n = m_config->tileMenuIcon();
+        iconBtn->setIcon(QIcon::fromTheme(n));
+        iconBtn->setText(QStringLiteral(" ") + n);
+    };
+    refreshIcon();
+    connect(iconBtn, &QPushButton::clicked, this, [this, refreshIcon] {
+        IconPickerDialog dlg(m_config->tileMenuIcon(), this);
+        if (dlg.exec() == QDialog::Accepted && !dlg.selectedIcon().isEmpty()) {
+            m_config->setTileMenuIcon(dlg.selectedIcon());
+            refreshIcon();
+        }
+    });
+    form->addRow(tr("Ícono del widget:"), iconBtn);
+
+    auto *preload = new QCheckBox(tr("Dejarlo cargado al iniciar kdock"), box);
+    preload->setChecked(TileMenuLauncher::preload());
+    preload->setToolTip(tr("Sin esto, el proceso arranca en el primer clic (medio segundo) y "
+                           "queda residente: las aperturas siguientes son instantáneas."));
+    connect(preload, &QCheckBox::toggled, this, [](bool on) {
+        TileMenuLauncher::setPreload(on);
+    });
+    form->addRow(tr("Precargar:"), preload);
+
+    layout->addLayout(form);
+
+    auto *row = new QHBoxLayout;
+    auto *configureBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("configure")),
+                                         tr("Configurar…"), box);
+    row->addWidget(configureBtn);
+    row->addStretch();
+    layout->addLayout(row);
+
+    auto *status = new QLabel(box);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+
+    const auto refreshStatus = [status] {
+        status->setText(TileMenuLauncher::running()
+                            ? tr("Estado: en ejecución (%1)").arg(TileMenuLauncher::binaryPath())
+                            : tr("Estado: detenido (%1)").arg(TileMenuLauncher::binaryPath()));
+    };
+    refreshStatus();
+    connect(configureBtn, &QPushButton::clicked, this, [this, refreshStatus] {
+        if (!m_tileLauncher)
+            m_tileLauncher = new TileMenuLauncher(this);
+        m_tileLauncher->openSettings();
+        QTimer::singleShot(600, this, refreshStatus);
+    });
+
+    // Bound to `box`, so the timer dies when buildTabs() deletes the tab.
+    auto *poll = new QTimer(box);
+    poll->setInterval(2000);
+    connect(poll, &QTimer::timeout, box, refreshStatus);
+    poll->start();
+
+    return box;
+}
+
 QWidget *SettingsDialog::createAudioTab()
 {
     auto *tab = new QWidget;

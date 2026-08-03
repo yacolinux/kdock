@@ -626,6 +626,9 @@ void DockConfig::load()
     m_iconRunningDots = m_settings.value(QStringLiteral("iconRunningDots"),
                                          !m_iconRunningBackground).toBool();
     m_showMenuButton = m_settings.value(QStringLiteral("showMenuButton"), false).toBool();
+    m_showTileMenu = m_settings.value(QStringLiteral("showTileMenu"), false).toBool();
+    m_tileMenuIcon = m_settings.value(QStringLiteral("tileMenuIcon"),
+                                      QStringLiteral("view-list-icons")).toString();
     m_showSessionButton = m_settings.value(QStringLiteral("showSessionButton"), false).toBool();
     m_showSettingsButton = m_settings.value(QStringLiteral("showSettingsButton"), false).toBool();
     m_showMenuPower = m_settings.value(QStringLiteral("showMenuPower"), true).toBool();
@@ -689,7 +692,8 @@ void DockConfig::load()
 QStringList DockConfig::knownWidgetTokens()
 {
     // Order here is also the default section order (menu, apps, then widgets).
-    return {QStringLiteral("menu"),        QStringLiteral("apps"),
+    return {QStringLiteral("menu"),        QStringLiteral("tilemenu"),
+            QStringLiteral("apps"),
             QStringLiteral("clipboard"),   QStringLiteral("disks"),
             QStringLiteral("network"),
             QStringLiteral("iconthemes"),  QStringLiteral("colorschemes"),
@@ -976,6 +980,24 @@ void DockConfig::setShowMenuButton(bool show)
     m_showMenuButton = show;
     m_settings.setValue(QStringLiteral("showMenuButton"), show);
     emit showMenuButtonChanged();
+}
+
+void DockConfig::setShowTileMenu(bool show)
+{
+    if (m_showTileMenu == show)
+        return;
+    m_showTileMenu = show;
+    m_settings.setValue(QStringLiteral("showTileMenu"), show);
+    emit showTileMenuChanged();
+}
+
+void DockConfig::setTileMenuIcon(const QString &icon)
+{
+    if (m_tileMenuIcon == icon)
+        return;
+    m_tileMenuIcon = icon;
+    m_settings.setValue(QStringLiteral("tileMenuIcon"), icon);
+    emit tileMenuIconChanged();
 }
 
 void DockConfig::setShowSessionButton(bool show)
@@ -1497,6 +1519,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
 {
     static const QHash<QString, QString> labels = {
         {QStringLiteral("menu"),          tr("Application menu")},
+        {QStringLiteral("tilemenu"),      tr("Menú de mosaicos")},
         {QStringLiteral("apps"),          tr("Applications")},
         {QStringLiteral("clipboard"),     tr("Clipboard")},
         {QStringLiteral("disks"),         tr("Disks")},

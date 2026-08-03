@@ -15,10 +15,27 @@ cmake --build build -j
 `env -u CC -u CXX` es obligatorio: las variables apuntan a ccache y CMake falla si están
 seteadas.
 
-**Son dos binarios**: `kdock` y `kdock-previews` (`build/previews/kdock-previews`, árbol
-`previews/`, agregado con `add_subdirectory`). El segundo es accesorio: dibuja tiras de
-vista previa de ventanas, corre junto al dock y se prende desde *Configuración → Previews*.
-Compila los dos el `cmake --build build`. Detalles en `AGENTS.md` → *Dock Preview*.
+**Son tres binarios**, los tres los compila el mismo `cmake --build build`:
+
+- `kdock`;
+- `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
+  de ventanas, se prende desde *Configuración → Previews*. Detalles en `AGENTS.md` →
+  *Dock Preview*;
+- `kdock-tilemenu` (`build/tilemenu/kdock-tilemenu`, árbol `tilemenu/`): el menú de
+  aplicaciones a pantalla completa, lo prende el widget `tilemenu` del dock. Detalles en
+  `AGENTS.md` → *Menú de mosaicos*.
+
+**`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
+es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
+privilegio de KWin**. O sea que —a diferencia de `kdock` y de `kdock-previews`— se corre
+directo desde `build/`, sin `.desktop` temporal, sin tocar ksycoca, y **anda bajo Xvfb como
+una ventana X cualquiera**, así que se le puede sacar una captura de la UI entera en cada
+iteración:
+
+```bash
+./build/tilemenu/kdock-tilemenu --show      # en la sesión real, sin instalar nada
+./build/tilemenu/kdock-tilemenu --dump-layout "cat:Internet"   # la grilla en ASCII, sin GUI
+```
 
 **Instalación** (el dock del usuario corre desde `/usr/local/bin/kdock`): backup primero
 —binario + `.desktop` a `/usr/local/share/kdock-backup/<timestamp>/` y los `.conf` a
@@ -28,10 +45,19 @@ sigue mapeado en memoria y el install lo reemplaza sin `ETXTBSY`. Sí hay que re
 para que tome el nuevo (su menú *Dock → Reiniciar* se re-lanza solo); reiniciarle el dock
 al usuario sin avisar deja la pantalla sin dock, así que preguntá antes.
 
-El install ahora escribe **cuatro** cosas (los dos binarios y los dos `.desktop`). Después
-de instalar hay que refrescar ksycoca: KWin busca los `.desktop` por ahí y sin eso no
-concede los privilegios (`kdock-previews` se queda sin capturas y las tarjetas caen a
-ícono). Pero **`kbuildsycoca6` a secas es peligroso en esta máquina** (ver abajo):
+Los dos accesorios se reinician distinto y sin riesgo de dejar la pantalla pelada: cada uno
+sale por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu`, método `quit`) y vuelve a
+levantarse solo — el de previews al prender su casilla, el del menú de mosaicos en el próximo
+clic del widget. O sea que actualizar `kdock-tilemenu` es `install` + matarlo; no hace falta
+tocar el dock.
+
+El install escribe **seis** cosas: los tres binarios y sus tres `.desktop`. Después de
+instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
+`.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
+tarjetas caen a ícono). **`kdock-tilemenu` no necesita el refresco** —no pide ningún
+privilegio, y su `.desktop` es solo para el nombre y el ícono del gestor de tareas—, así que si
+lo único que tocaste fue el menú de mosaicos, saltealo y evitás el riesgo de abajo. Y ojo:
+**`kbuildsycoca6` a secas es peligroso en esta máquina** (ver abajo):
 
 ```bash
 env XDG_DATA_DIRS="/opt/kde/share:$XDG_DATA_DIRS" /opt/kde/bin/kbuildsycoca6
@@ -147,6 +173,46 @@ xvfb-run -s "-screen 0 1920x1080x24" bash -c '
   XDG_DATA_HOME=/tmp/kd-t QT_QPA_PLATFORM=xcb ./build/kdock & sleep 5
   xwininfo -root -children | grep -i kdock; kill %1'
 ```
+
+**Arnés de `kdock-tilemenu`**: es el más barato de los tres, porque su ventana es un toplevel
+normal. La captura sale de la raíz de X y se puede **manejar con `xdotool`**, así que el
+arrastre se prueba de verdad, de punta a punta:
+
+```bash
+rm -rf /tmp/tm && mkdir -p /tmp/tm/kdock
+ln -s ~/.local/share/applications      /tmp/tm/applications
+ln -s ~/.local/share/desktop-directories /tmp/tm/desktop-directories
+ln -s ~/.local/share/icons             /tmp/tm/icons
+printf '[General]\nlastSection=cat:Development\n' > /tmp/tm/kdock/tilemenu.conf
+xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
+  XDG_DATA_HOME=/tmp/tm QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+      ./build/tilemenu/kdock-tilemenu --show > /tmp/tm.log 2>&1 &
+  APP=$!; sleep 8
+  xdotool mousemove 310 168 mousedown 1
+  for x in 340 400 450 500; do xdotool mousemove $x $((168 + x - 310)); sleep 0.08; done
+  xdotool mousemove 475 500; sleep 0.4
+  import -window root /tmp/ghost.png     # el fantasma del destino
+  xdotool mouseup 1; sleep 1
+  import -window root /tmp/after.png
+  kill $APP'
+XDG_DATA_HOME=/tmp/tm ./build/tilemenu/kdock-tilemenu --dump-layout "cat:Development"
+```
+
+Cuatro cosas de este arnés:
+
+- **Los tres enlaces son obligatorios.** `XDG_DATA_HOME` hay que aislarlo (si no, el arnés le
+  escribe la config real), pero entonces no se ven ni los `.desktop`, ni los `.directory`, ni
+  los íconos: el menú sale **vacío y parece un bug del código**.
+- **`xdotool` sirve para el mouse pero no para el teclado.** Bajo Xvfb no hay gestor de
+  ventanas, así que no hay foco: `windowactivate` falla y `type` no llega al buscador (se ve el
+  placeholder intacto y parece que la búsqueda está rota). Los clics y los arrastres van por
+  XTEST y sí llegan. Para probar la búsqueda, usá el modelo desde una sonda de consola
+  (`TileModel::setQuery()`), no la UI.
+- **`xdotool search --name` devuelve varias ventanas** (hay una auxiliar de 1x1); elegí por
+  geometría (`getwindowgeometry --shell`, la de ancho > 1000) o le mandás los eventos a la que
+  no es.
+- **El `--dump-layout` después del arrastre es la prueba**: dice si el mosaico se movió de
+  verdad y si quedó guardado, que es lo que la captura no muestra.
 
 **Arnés de `kdock-previews`**: igual, pero la config es `previews.conf` + `previews-<screen>.conf`
 y hace falta `enabled=true` en la compartida (el switch maestro), o no se crea ninguna tira
@@ -331,6 +397,9 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   los siete: no lleva `src/<x>control.{h,cpp}`, ni `main.cpp`, ni `dockmanager.*`, ni
   `dockwindow.*` — no hay backend que instanciar ni context property que registrar. Quedan
   `DockConfig` (con su `knownWidgetTokens()`), `Dock.qml` y el checkbox del diálogo.
+  Y un widget cuyo backend es un **lanzador de otro binario** (el `tilemenu`, con
+  `TileMenuLauncher`) se salta `dockmanager.*`: el objeto es fino y sin estado, así que lo crea
+  el propio `DockWindow` en su ctor —igual que `AppMenu`— en vez de viajar por `Shared`.
 - **Una sección que se repite (`spring`, `sep`) NO va en `knownWidgetTokens()`**: esa lista
   se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
   `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te
@@ -345,11 +414,37 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   compila igual y anda igual… hasta que el usuario prende *"Compartir configuración del menú
   entre docks"*: ahí la opción que falta se resetea al default o no se propaga. `menuColumns`
   es el ejemplo a copiar.
-- **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **dos** listas: la
-  del `CMakeLists.txt` de arriba (para `qml/`) y la de `previews/CMakeLists.txt` (para
-  `previews/qml/`).
+- **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **tres** listas: la
+  del `CMakeLists.txt` de arriba (para `qml/`), la de `previews/CMakeLists.txt` (para
+  `previews/qml/`) y la de `tilemenu/CMakeLists.txt` (para `tilemenu/qml/`). Esta última tiene
+  además un **segundo** `qt_add_resources` con `BASE ".."` que mete `qml/IconMenuItem.qml` de
+  kdock **verbatim**: con ese `BASE` cae en `:/qml/`, o sea el mismo directorio del recurso que
+  los `.qml` del menú, y se usa como tipo vecino sin ningún import.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
+- **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de
+  `"segunda parte")` en la línea siguiente —el reflejo de cualquiera que venga del `.cpp`— es
+  un **error de sintaxis** (*"Unexpected token `string literal`"*) que tira la carga del
+  archivo entero. Va con `+`, o todo en una línea. Lo agarró el arnés al primer intento
+  (2026-08-03), pero solo porque el arnés existe: `qmllint` **no lo reportó**.
+- **Un `Menu` o un `ToolTip` declarados dentro del delegate se instancian por fila.** En el
+  menú de mosaicos eso eran ~450 `Menu` (cada uno con su `Instantiator` de colores) y ~450
+  `ToolTip` para "Todas las aplicaciones": **783 MB de RSS y 3,5 s** para abrir la sección,
+  contra **245 MB y 0,9 s** con un solo menú en la raíz parametrizado por "qué mosaico lo
+  abrió" y el `ToolTip` **adjunto** (`ToolTip.text`/`ToolTip.visible`), que ya comparte una
+  instancia por ventana (medido 2026-08-03). Para el tooltip el arreglo es de una línea; vale
+  la pena medir RSS con `grep VmRSS /proc/<pid>/status` antes de dar por buena una grilla
+  grande.
+- **`showMaximized()` no hace nada sin gestor de ventanas.** En la sesión real KWin lo
+  respeta —y de paso resta los *struts* de los docks, que es todo el truco del menú de
+  mosaicos—, pero bajo Xvfb no hay quién lo atienda y la `QQuickView` sale de **160x160**, que
+  parece un bug de layout. Por eso `TileWindow::showOn()` también hace
+  `setGeometry(screen()->availableGeometry())`: en Wayland lo pisa el `configure` del
+  compositor, y bajo X pelado es lo único que llena la pantalla.
+- **Un auto-placement que prueba cada celda contra la lista de lo ya puesto es O(n³).** Con
+  "Todas las aplicaciones" (~450 mosaicos) eso no termina nunca. La grilla de ocupación
+  (`QSet` de celdas) más un cursor que solo avanza lo deja lineal; ver
+  `TileLayout::placement()`.
 - **`QUrl` percent-codifica las llaves del uuid de KWin.** El uuid llega como
   `{461eb7ac-…}` y una URL `image://thumb/{461eb7ac-…}@3` le llega al provider como
   `%7B461eb7ac-…%7D@3`, así que la búsqueda en la caché falla y **la tarjeta queda vacía

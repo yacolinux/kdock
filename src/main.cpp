@@ -24,6 +24,7 @@
 #include "wallpapercontrol.h"
 #include "powercontrol.h"
 #include "previewslauncher.h"
+#include "tilemenulauncher.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
 #include "darkmodeappearance.h"
@@ -192,6 +193,11 @@ int main(int argc, char *argv[])
     // this is the whole of kdock's involvement at startup.
     PreviewsLauncher previews;
     previews.startIfEnabled();
+
+    // Same deal for the full-screen tile menu: it normally comes up on the
+    // widget's first click, but the user can ask for it to be resident from the
+    // start so that click is instant too.
+    TileMenuLauncher::startIfPreloading();
 
     return app.exec();
 }

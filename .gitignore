@@ -19,6 +19,7 @@ build/
 *.png
 *.jpg
 *.jpeg
+*.webp
 
 # Transcripts y volcados de sesiones de IA (traen rutas locales y session ids).
 # La excepción importa: `previews/CMakeLists.txt` cae bajo el patrón y sin el

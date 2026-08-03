@@ -33,6 +33,7 @@ class DisksControl;
 class NetworkControl;
 class AppearanceControl;
 class WindowMonitor;
+class TileMenuLauncher;
 
 class DockWindow : public QQuickView
 {
@@ -107,6 +108,9 @@ private:
     WallpaperControl *m_wallpaperControl = nullptr;
     PowerControl *m_power = nullptr;
     AppearanceControl *m_appearance = nullptr;
+    // Drives the separate kdock-tilemenu process (context property
+    // "tileLauncher"); owned by this window.
+    TileMenuLauncher *m_tileLauncher = nullptr;
     bool m_hidden = false;
     bool m_primary = false;
     bool m_screenChangePending = false;

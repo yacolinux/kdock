@@ -56,6 +56,8 @@ src/
   systray.{h,cpp}         — DBus StatusNotifierItem host + watcher (SNI protocol, org.kde.* names)
   systrayimageprovider.{h,cpp} — image://systray/<service> provider for pixmap-only tray icons
   systraymodel.{h,cpp}    — QAbstractListModel filtering visible systray icons
+  tilemenulauncher.{h,cpp} — kdock's whole side of the full-screen tile menu: find the
+                            binary, toggle it over D-Bus, open its panel (token tilemenu)
 qml/
   SystrayMenu.qml         — A tray item's own menu, built from the DBusMenu tree (recursive, created at runtime)
   Dock.qml                — Main UI: section-based layout (GridLayout driven by config.widgetOrder) rendering the apps block + widgets (volume, brightness, clock, clock2, overview, movetodesktop, movetoscreen, maxmin, closewindow, nextwallpaper, darkmode, autohide, showdesktop, systray, relanzadores, scriptrunners, session, settings) + separators (springs and static gaps) + app menu button; per-icon and per-section drag & drop, context menus, autohide
@@ -518,6 +520,122 @@ dock. kdock solo lo prende, lo apaga y le abre su panel.
   (autorización incluida) sin UI de por medio: sin archivos + `NoAuthorized` = falta el
   `.desktop`.
 
+### Menú de mosaicos — binario accesorio `kdock-tilemenu` (`tilemenu/`)
+
+Menú de aplicaciones **a pantalla completa** con los íconos en una matriz que el usuario
+reacomoda arrastrando (referencia: el applet `plasma-applet-tiledmenu-prime`). **No es parte
+de kdock**: es un tercer binario, con su propio árbol, su propia config y su propio panel de
+ajustes, que el widget `tilemenu` prende y apaga. Mismo reparto que `kdock-previews`.
+
+- **La ventana es un toplevel normal *maximizado*, no una superficie layer-shell.** Es la
+  decisión que define el binario: KWin ya resta los *struts* de las superficies layer-shell al
+  calcular el área de maximización, así que "maximizado" **es** "todo el escritorio menos los
+  docks y paneles visibles", para cualquier borde, cualquier cantidad de docks y también los
+  paneles de Plasma — sin una línea de geometría nuestra. Un dock en **autohide** no reserva
+  nada, así que el menú cubre toda la pantalla y el dock (capa `top`, por encima de las
+  ventanas normales) se dibuja encima al revelarse: tampoco hay caso especial. Y el foco de
+  teclado es el de una ventana común, sin el baile de `keyboard_interactivity` double-buffered
+  que necesita `AppMenuPopup`.
+  - Por eso este target **no compila `src/layershell.cpp`** ni setea
+    `QT_WAYLAND_SHELL_INTEGRATION` (lo *desetea* si lo hereda con el valor de kdock, que apunta
+    a un plugin estático que solo existe dentro del binario de kdock).
+  - **No pide ningún privilegio de KWin** (no usa `org_kde_plasma_window_management` ni
+    `ScreenShot2`), así que se corre directo desde `build/` y su `.desktop` no necesita
+    refrescar ksycoca. Ese `.desktop` existe solo para darle nombre e ícono en el gestor de
+    tareas, donde aparece cuando está puesto *Mantener abierto*.
+  - **En Wayland el cliente no elige el monitor de un toplevel.** `TileWindow::showOn()` aplica
+    `setScreen()` con la ventana abajo, pero es una *pista*: en la práctica KWin la coloca en
+    la pantalla activa, que es donde está el puntero que acaba de hacer clic en el dock. El
+    `--screen` del D-Bus existe para eso.
+  - `setGeometry(availableGeometry())` acompaña al `showMaximized()`. En Wayland manda el
+    `configure` del compositor y se ignora; es lo que hace que la ventana llene la pantalla
+    **bajo un X pelado sin gestor de ventanas** (el arnés de Xvfb), donde `showMaximized()` no
+    tiene quién lo respete y la vista saldría de 160x160.
+
+- **El motor de disposición vive entero en C++** (`tilemenu/src/tilelayout.cpp`). El QML solo
+  dibuja y arrastra: cada soltada pregunta y después obedece. Es lo que hace la feature
+  testeable — `--dump-layout` y una sonda de consola ejercitan auto-placement, colisiones,
+  swaps, resizes y grupos sin ninguna ventana en pantalla.
+  - **Una disposición por sección**, con las claves de `AppMenu::sections()`
+    (`cat:__favorites__`, `cat:Internet`, `menu:Web/Apps`…). Una sección que nadie tocó no
+    tiene ningún registro y se acomoda sola, en el orden que devuelve `AppMenu`; el primer
+    arrastre la **materializa** (se anota tal cual está en pantalla) y a partir de ahí es del
+    usuario. `isCustomized()` decide si se muestran las cabeceras de grupo y el índice A-Z
+    ("saltar a la K" no significa nada con los mosaicos puestos a mano).
+  - **Los grupos son bandas de filas de una única matriz.** Un mosaico guarda
+    `(grupo, col, fila)` pero el modelo publica además `absRow` = `startRow(grupo) + fila`, así
+    que hay **un solo espacio de coordenadas**: un `Repeater` posiciona todo, la cabecera de la
+    banda `g` va en `g*headerH + startRow(g)*pitch` y el mosaico en
+    `(g+1)*headerH + absRow*pitch`. Soltar "dentro de un grupo" es la aritmética de siempre, no
+    un drop target aparte.
+  - **Colisión deliberadamente manual, sin auto-compactar**: libre → coloca; **un** mosaico del
+    **mismo tamaño** → **swap**; cualquier otro solapamiento → **rechazo** (`moveTile()`
+    devuelve false y el QML lo devuelve a su lugar). Una disposición hecha a mano no se
+    reacomoda sola porque se movió un vecino. `dropKind()` responde lo mismo *antes* de soltar,
+    así el fantasma no miente (azul libre / verde swap / rojo rechazo).
+  - **Agrandar sí reubica**, nunca falla: `resizeTile()` prueba en el lugar y, si no entra,
+    manda el mosaico al primer hueco de su banda donde sí entre.
+  - **Los registros de apps desinstaladas se conservan** (`Section::orphans`) para que una
+    reinstalación recupere su lugar, pero se mantienen **fuera** de `tiles`: un mosaico que no
+    se dibuja no puede participar de una colisión.
+  - **El auto-placement es lineal, no cúbico** (importa: "Todas las aplicaciones" son ~450
+    mosaicos). Los huecos salen de un `QSet` de celdas ocupadas y de un cursor que solo avanza
+    — todos los mosaicos nuevos son 1x1 y el barrido es row-major, así que una celda que quedó
+    atrás no puede liberarse. Probar cada celda candidata contra la lista de mosaicos ya
+    puestos era O(n³).
+  - **`liveIds()` está cacheado por sección** e invalidado por `AppMenu::changed` /
+    `favoritesChanged`: `placement()` corre en cada celda que cruza el puntero durante un
+    arrastre, y cada corrida le preguntaba a `AppMenu` por las apps de la sección.
+
+- **Persistencia**: un único JSON compacto en `~/.local/share/kdock/tilemenu.conf`
+  (`[General] layout=`). Un blob y no una clave por sección porque las claves de sección llevan
+  `/` y `:`, que QSettings lee como jerarquía de grupos. Exportar/importar escribe el mismo
+  JSON indentado a un archivo.
+- **La disposición es una sola para toda la sesión**: hay un solo proceso, así que todos los
+  docks abren el mismo menú y ven lo mismo. No hay variante por monitor ni interruptor de
+  compartir.
+
+- **`TileModel` es un `QAbstractListModel`, no una `QVariantList`**, para que una soltada sea
+  un `dataChanged()` de una fila en vez de reconstruir el lienzo: el mosaico se anima a su
+  celda nueva con `Behavior on x/y` y el resto no parpadea. `refresh()` compara la secuencia de
+  ids y solo hace `beginResetModel()` cuando cambió el conjunto.
+- **El menú contextual y el tooltip son compartidos, uno para todo el lienzo** (medido
+  2026-08-03): declarados dentro del delegate, "Todas las aplicaciones" instanciaba ~450 `Menu`
+  (con su `Instantiator` de colores) y ~450 `ToolTip` — **783 MB de RSS y 3,5 s** para abrir la
+  sección, contra **245 MB y 0,9 s** una vez compartidos. El menú vive en `TileMenu.qml` y se
+  parametriza con `root.ctxTile`; el tooltip usa la API **adjunta**
+  (`ToolTip.text`/`ToolTip.visible`), que ya comparte una sola instancia por ventana.
+- **Geometría del lienzo**: `columns` fijas por config (default 10; `0` = ajustar al ancho) y
+  la **celda** es lo que se estira para llenar el espacio, acotada por `cellMin`/`cellMax`. Las
+  columnas fijas son lo que hace que una posición guardada valga igual en cualquier monitor: lo
+  que se adapta es el tamaño de la celda, no la matriz.
+- **Cierre**: Esc, la ✕ de la esquina, perder el foco y lanzar una app — los cuatro anulados
+  por el casillero **Mantener abierto** de la esquina (persistido en `keepOpen`), con el que la
+  ventana queda como una ventana más y se puede mandar al fondo y volver por el alt-tab. El
+  cierre por foco tiene dos guardias: una ventana muerta de 400 ms tras `show()` (el compositor
+  todavía está entregando el foco) y un contador de diálogos propios arriba, o abrir la
+  configuración cerraría el menú que la abrió.
+- **Ciclo de vida**: el primer clic del widget lo lanza (`--toggle`) y queda residente; los
+  clics siguientes son un toggle por D-Bus (`org.kdock.TileMenu` en `/TileMenu`, y ser dueño
+  del nombre del bus **es** el candado de instancia única). Opción *Precargar* para levantarlo
+  con kdock. La ventana se `hide()`, nunca se destruye.
+- **Lo que se toca en kdock, y es poco**: `src/tilemenulauncher.{h,cpp}`, dos claves en
+  `DockConfig` (`showTileMenu`, `tileMenuIcon`) con su línea en `knownWidgetTokens()`, el
+  `Component` de `Dock.qml` (bloque, como `menu`), una context property en `DockWindow`, el
+  grupo de la solapa **Menu** y una línea en `main.cpp` para el precargado.
+- **UI**: Configuración → **Menu** → grupo *"Menú de mosaicos (pantalla completa)"* (casillero
+  del widget, ícono, precargar, estado del proceso y botón *Configurar…*). Deliberadamente
+  **no** es una solapa nueva: con once títulos la barra ya pide 1086 px y la duodécima la manda
+  a modo flechas de scroll sin avisar. Todo lo demás vive en el panel propio del binario
+  (`TileSettingsDialog`: Grilla, Apariencia, Barra lateral, Comportamiento, Disposición).
+- **Backup**: `ConfigArchive` archiva ahora las **tres** familias (`kdock*.conf`,
+  `previews*.conf`, `tilemenu*.conf`), así la disposición entra al `.zip`. Al importar solo se
+  borran las familias de las que el archivo trae al menos una entrada, para que un `.zip` viejo
+  no se lleve puesta la disposición que el usuario armó después.
+- **Diagnóstico**: `kdock-tilemenu --dump-layout [sección]` imprime la disposición resuelta
+  como arte ASCII (grilla + leyenda) y sale. No abre ninguna ventana y solo lee, así que sirve
+  con el menú corriendo. Es a este binario lo que `--dump-captures` es a `kdock-previews`.
+
 ## Code Conventions
 
 - **C++17**, Qt 6 (≥ 6.5).
@@ -648,6 +766,11 @@ still render and work; they just can't be toggled from the UI anymore).
 | `PreviewConfig` | `config.*` (binario `kdock-previews`) | Contexto de `PreviewStrip.qml`: `edge`, `alignment`, `opacity`, `panelColor`/`panelColorSet`/`panelPresetColors`/`resetPanelColor()`, `stripThickness` + read-only `stripThicknessPx`/`cardWidthPx`/`pad`, `stripLength` (0=todo el borde), `screenMargin`, `reserveSpace`, `autohide`, `showTitles`, `showScrollBar`, `cardSpacing`, `autoFitCards`, `fitMinCardWidth`, `captureMode` (0=una captura al primer foco/default, 1=periódico), `refreshInterval`, `activeRefreshInterval` (solo en modo 1), `includeMinimized`, `currentDesktopOnly`, `thisMonitorOnly`, `screenName` |
 | `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; read-only `cardScale` (auto-fit); `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)`, `setAvailableLength(px)` (auto-fit) |
 | `PreviewWindow` | `previewWindow` | `setHidden(bool)`, `openSettings()`, `restart()`, `quit()` |
+| `TileMenuLauncher` | `tileLauncher` (en kdock) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-tilemenu`: si el proceso corre, D-Bus; si no, lo lanza |
+| `TileConfig` | `tileConfig.*` (binario `kdock-tilemenu`) | Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Apariencia: `sidebar` (0 izq/1 der/2 oculta), `sidebarWidth`, `showIcons`, `showLabels`, `iconScale` (%), `labelPosition`, `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `presetColors` (read-only, los ocho colores rápidos del `kdock.conf` compartido). Comportamiento: `showSearch`, `showPower`, `showLetterIndex`, `closeOnLaunch`, `closeOnFocusLoss`, `keepOpen`, `rememberSection`, `lastSection`. **Una sola señal `settingsChanged` para todas** |
+| `TileLayout` | `tileLayout` | El motor, todo `Q_INVOKABLE`: `bands(section)`, `totalRows(section)`, `isCustomized(section)`, `dropKind(section,id,group,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveTile(...)` (false = rechazado), `resizeTile(...)`, `setTileProperty(section,id,key,value)` (`bg`/`image`/`label`/`icon`/`showIcon`/`showLabel`), `resetTile`, `addGroup`/`renameGroup`/`setGroupCollapsed`/`moveGroup`/`removeGroup`, `resetSection`/`resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
+| `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, **`absRow`** (fila dentro de todo el lienzo: el único espacio de coordenadas), `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `searching`, `rows`, `bands`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
+| `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
 | `WindowMonitor` | `showdesktop` | `showDesktopSupported`, `showDesktopActive`, `toggleShowDesktop()`; null on X11 |

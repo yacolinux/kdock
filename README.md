@@ -12,7 +12,7 @@
 
 kdock **no enlaza contra KDE Frameworks ni contra Plasma**. Los protocolos Wayland se
 generan directamente desde sus XML con `qtwaylandscanner`, y todo lo demás se resuelve por
-D-Bus o por CLI. El resultado son dos binarios sueltos, sin plugins que instalar y sin
+D-Bus o por CLI. El resultado son tres binarios sueltos, sin plugins que instalar y sin
 arrastrar medio Plasma como dependencia.
 
 Probado a diario en **KDE Plasma 6 / KWin**; la barra de tareas también funciona en
@@ -108,6 +108,7 @@ Frameworks:
 | Modo oscuro | Clic izquierdo: esquema normal; clic derecho: modo oscuro | — |
 | Relanzadores | Mini-dock anidado: un ícono despliega una barra con otros lanzadores | — |
 | Script Runner | Ejecuta un script shell configurable | `sh` |
+| Menú de mosaicos | Abre y cierra el menú de pantalla completa | `kdock-tilemenu` (D-Bus) |
 
 ### `kdock-previews` (binario accesorio)
 
@@ -136,6 +137,46 @@ KWin**.
 - Capturas **una por ventana al pasar a primer plano** (o refresco periódico, experimental),
   filtros por monitor / escritorio virtual / minimizadas, y auto-ocultado opcional.
 
+### `kdock-tilemenu` (binario accesorio)
+
+**Menú de aplicaciones a pantalla completa**, con los íconos en una matriz que se reacomoda
+arrastrándolos (la referencia es el applet Tiled Menu de Plasma, y de ahí el nombre). Es un
+tercer binario con su propio árbol (`tilemenu/`), su propia configuración y su propio panel;
+lo prende y lo apaga el widget *Menú de mosaicos* del dock.
+
+Ocupa **todo el escritorio libre: todo menos los docks y paneles visibles**, estén en el borde
+que estén y sean los que sean. No hay una línea de geometría para lograrlo — la ventana es un
+toplevel normal *maximizado*, y el compositor ya sabe restar el espacio que los paneles
+reservan. Un dock con auto-ocultado sale gratis por el mismo camino: el menú cubre la pantalla
+entera y el dock se dibuja encima al aparecer.
+
+- **Cada sección recuerda su propia disposición** — Favoritos, "Todas", cada categoría y cada
+  submenú `.menu`. Arrancan ordenadas solas por nombre y pasan a ser tuyas en cuanto arrastrás
+  el primer mosaico. Es la diferencia con el applet de referencia, donde solo el lienzo de
+  anclados se puede acomodar a mano.
+- **Mosaicos de varios tamaños** (1×1, 2×1, 1×2, 2×2, 4×2, 4×4), cada uno con su color o
+  imagen de fondo, y con el ícono y el nombre opcionales por separado — además de poder
+  renombrarlo o cambiarle el ícono sin tocar el `.desktop`.
+- **Grupos con etiqueta**: bandas con título dentro del lienzo, que se renombran, se
+  reordenan, se colapsan y reciben mosaicos arrastrados.
+- **Al soltar no pasa nada raro**: si la celda está libre, va; si la ocupa un mosaico del mismo
+  tamaño, se intercambian; cualquier otro caso se rechaza y el mosaico vuelve a su lugar. Nada
+  se reacomoda solo porque moviste a un vecino, y un fantasma de color te dice cuál de los tres
+  casos es *antes* de soltar.
+- **Buscador**, **índice alfabético** lateral (en las secciones que no acomodaste a mano),
+  barra de categorías a izquierda o derecha —u oculta—, fila de sesión, y navegación por
+  teclado.
+- **Mantener abierto**: un casillero en la esquina que apaga los cuatro caminos de cierre
+  automático (Esc, la ✕, perder el foco, lanzar una app). Con él puesto el menú queda como una
+  ventana más, que se puede mandar al fondo y recuperar con el alt-tab.
+- La disposición es **una sola para toda la sesión** —todos los docks abren el mismo menú— y se
+  exporta e importa como JSON.
+
+Se lanza en el primer clic del widget y queda residente, así que las aperturas siguientes son
+instantáneas. A diferencia de `kdock-previews`, **no necesita ningún permiso especial de
+KWin**.
+
+
 ---
 
 ## Requisitos
@@ -161,7 +202,7 @@ aparecen bajo KDE.
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # instala los dos binarios y sus .desktop
+sudo cmake --install build     # instala los tres binarios y sus .desktop
 ```
 
 > Si tu entorno exporta `CC="ccache gcc"` / `CXX="ccache g++"`, CMake AutoMoc falla:
@@ -189,7 +230,10 @@ Después de instalar hay que refrescar el índice para que KWin encuentre los `.
 kbuildsycoca6
 ```
 
-Si ejecutás el binario desde otra ruta (`build/kdock` durante desarrollo), copiá el
+`kdock-tilemenu` no aparece acá porque no pide nada privilegiado: se puede correr desde donde
+sea, sin `.desktop` y sin refrescar el índice.
+
+Si ejecutás uno de los otros dos desde otra ruta (`build/kdock` durante desarrollo), copiá el
 `.desktop` a `~/.local/share/applications/` con el `Exec=` apuntando a la ruta absoluta de
 *ese* binario. Sin esto el dock arranca igual, pero sin lista de ventanas; y
 `kdock-previews`, sin la segunda clave, deja todas las tarjetas con el ícono de la app en vez
@@ -221,6 +265,7 @@ La configuración vive en el directorio de datos XDG:
   kdock.conf                  # opciones compartidas (relanzadores, script runners, tema…)
   kdock-<monitor>[-<n>].conf  # un archivo por dock
   previews.conf               # kdock-previews (compartido + uno por pantalla)
+  tilemenu.conf               # kdock-tilemenu: opciones y disposición de los mosaicos
   clipboard-history.txt
 ```
 
@@ -233,6 +278,7 @@ La configuración vive en el directorio de datos XDG:
 | `src/` | El dock: backends, modelo, configuración, diálogo de opciones |
 | `qml/` | La UI del dock y sus popups |
 | `previews/` | Binario accesorio de vistas previas (árbol propio, reusa 5 archivos de `src/`) |
+| `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |

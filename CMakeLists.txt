@@ -57,6 +57,7 @@ qt_add_executable(kdock
     src/appearancecontrol.cpp   src/appearancecontrol.h
     src/darkmodeappearance.cpp  src/darkmodeappearance.h
     src/previewslauncher.cpp    src/previewslauncher.h
+    src/tilemenulauncher.cpp    src/tilemenulauncher.h
 )
 
 qt_generate_wayland_protocol_client_sources(kdock FILES
@@ -101,3 +102,4 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kdock.desktop
 # runs alongside kdock, keeps its own config, and is toggled from Settings →
 # Previews. Deliberately a separate target so nothing here changes for kdock.
 add_subdirectory(previews)
+add_subdirectory(tilemenu)
