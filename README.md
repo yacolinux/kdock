@@ -78,7 +78,9 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   de KDE y los que crean los navegadores para sus web apps — declarados en los archivos
   `.menu` de XDG, que listan sus miembros por nombre de archivo y no por categoría (de
   hecho, los `.desktop` de las web apps no traen `Categories` en absoluto). El clic derecho
-  sobre el botón del menú abre el editor de menús, configurable.
+  sobre el botón del menú abre el editor de menús, configurable. **Todas las filas de la
+  barra lateral llevan ícono**, tanto las categorías freedesktop como los submenús propios,
+  con alternativas por si el set de íconos elegido no trae alguno de los nombres estándar.
 - **Vista de lista o de grilla** en el menú, de 1 a 8 columnas, con tamaño de ícono y
   espaciado regulables: las celdas se calculan desde el ícono, así que unas pocas apps no
   se desparraman por todo el popup.
@@ -164,8 +166,8 @@ entera y el dock se dibuja encima al aparecer.
   se reacomoda solo porque moviste a un vecino, y un fantasma de color te dice cuál de los tres
   casos es *antes* de soltar.
 - **Buscador**, **índice alfabético** lateral (en las secciones que no acomodaste a mano),
-  barra de categorías a izquierda o derecha —u oculta—, fila de sesión, y navegación por
-  teclado.
+  barra de categorías —con ícono en todas sus filas— a izquierda o derecha, u oculta; fila de
+  sesión, y navegación por teclado.
 - **Mantener abierto**: un casillero en la esquina que apaga los cuatro caminos de cierre
   automático (Esc, la ✕, perder el foco, lanzar una app). Con él puesto el menú queda como una
   ventana más, que se puede mandar al fondo y recuperar con el alt-tab.
