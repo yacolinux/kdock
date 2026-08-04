@@ -435,6 +435,13 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   un **error de sintaxis** (*"Unexpected token `string literal`"*) que tira la carga del
   archivo entero. Va con `+`, o todo en una línea. Lo agarró el arnés al primer intento
   (2026-08-03), pero solo porque el arnés existe: `qmllint` **no lo reportó**.
+- **Un `Menu` de QtQuick.Controls no se dimensiona solo a su ítem más largo.** Mordió tres
+  veces en el menú de mosaicos: el ancho implícito sale corto y la última letra de la etiqueta
+  más ancha queda **cortada por el borde del popup** — sin puntos suspensivos, así que no
+  parece una elisión sino un bug de render. Pasa sobre todo cuando el menú mezcla ítems
+  *checkable* (que reservan una columna para el tilde) con `IconMenuItem` (que dibuja su
+  propio ícono). El arreglo es una línea por menú:
+  `width: Math.max(implicitWidth + 16, <mínimo>)`. Vale también para los submenús.
 - **Un `Menu` o un `ToolTip` declarados dentro del delegate se instancian por fila.** En el
   menú de mosaicos eso eran ~450 `Menu` (cada uno con su `Instantiator` de colores) y ~450
   `ToolTip` para "Todas las aplicaciones": **783 MB de RSS y 3,5 s** para abrir la sección,

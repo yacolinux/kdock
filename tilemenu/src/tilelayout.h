@@ -107,6 +107,10 @@ public:
     // different size); the caller snaps the tile back.
     Q_INVOKABLE bool moveTile(const QString &section, const QString &id, int group, int col,
                               int row);
+    // Send a tile to another band without dragging: it lands on the first free
+    // slot there. The bands can be far apart on a tall canvas, and a drag has no
+    // auto-scroll, so this is the only workable path for those.
+    Q_INVOKABLE bool moveTileToGroup(const QString &section, const QString &id, int group);
     // Never fails: if the bigger tile would overlap, it is relocated to the
     // first slot in its group where it does fit (appending a row if needed).
     Q_INVOKABLE bool resizeTile(const QString &section, const QString &id, int w, int h);

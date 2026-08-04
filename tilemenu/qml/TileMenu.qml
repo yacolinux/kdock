@@ -625,6 +625,50 @@ Item {
 
         MenuSeparator {}
 
+        // The only workable way to put a tile in a distant band: dragging works
+        // only as far as the viewport reaches, and the canvas does not scroll
+        // while a tile is held.
+        Menu {
+            id: groupMenu
+            title: qsTr("Mover a grupo")
+            popupType: Popup.Window
+            width: Math.max(implicitWidth + 16, 220)
+            enabled: !tiles.searching
+
+            Instantiator {
+                model: root.showBands ? tiles.bands : []
+                delegate: MenuItem {
+                    id: groupItem
+                    required property var modelData
+                    text: groupItem.modelData.title.length > 0
+                          ? groupItem.modelData.title
+                          : qsTr("Grupo %1").arg(groupItem.modelData.index + 1)
+                    checkable: true
+                    checked: tileCtxMenu.t
+                             && tileCtxMenu.t.group === groupItem.modelData.index
+                    onTriggered: tileLayout.moveTileToGroup(tiles.section, tileCtxMenu.tid,
+                                                            groupItem.modelData.index)
+                }
+                onObjectAdded: (i, o) => groupMenu.insertItem(i, o)
+                onObjectRemoved: (i, o) => groupMenu.removeItem(o)
+            }
+
+            MenuSeparator {}
+            IconMenuItem {
+                text: qsTr("Grupo nuevo…")
+                iconName: "list-add"
+                onTriggered: {
+                    var name = win.promptText(qsTr("Nuevo grupo"), qsTr("Nombre:"), "")
+                    if (name === "")
+                        return
+                    var g = tileLayout.addGroup(tiles.section, name)
+                    tileLayout.moveTileToGroup(tiles.section, tileCtxMenu.tid, g)
+                }
+            }
+        }
+
+        MenuSeparator {}
+
         MenuItem {
             text: qsTr("Mostrar ícono")
             checkable: true

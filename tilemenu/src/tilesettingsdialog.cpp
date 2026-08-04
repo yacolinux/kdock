@@ -220,6 +220,11 @@ QWidget *TileSettingsDialog::createAppearanceGroup()
     connect(iconScale, &QSpinBox::valueChanged, m_config, &TileConfig::setIconScale);
     form->addRow(tr("Escala del ícono:"), iconScale);
 
+    auto *bold = new QCheckBox(tr("Nombres en negrita"), box);
+    bold->setChecked(m_config->labelBold());
+    connect(bold, &QCheckBox::toggled, m_config, &TileConfig::setLabelBold);
+    form->addRow(tr("Negrita:"), bold);
+
     auto *labelPos = new QComboBox(box);
     labelPos->addItem(tr("Debajo del ícono"));
     labelPos->addItem(tr("Al lado (en mosaicos anchos)"));

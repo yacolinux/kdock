@@ -459,6 +459,25 @@ bool TileLayout::moveTile(const QString &section, const QString &id, int group, 
     return true;
 }
 
+bool TileLayout::moveTileToGroup(const QString &section, const QString &id, int group)
+{
+    Section &s = materialize(section);
+    group = qBound(0, group, s.groups.size() - 1);
+    const int idx = indexOfTile(s.tiles, id);
+    if (idx < 0)
+        return false;
+    if (s.tiles.at(idx).group == group)
+        return true;
+
+    TileRecord to = s.tiles.at(idx);
+    to.group = group;
+    firstFreeSlot(s.tiles, group, columns(), to.w, to.h, id, &to.col, &to.row);
+    s.tiles[idx] = to;
+    save();
+    emit changed(section);
+    return true;
+}
+
 bool TileLayout::resizeTile(const QString &section, const QString &id, int w, int h)
 {
     Section &s = materialize(section);

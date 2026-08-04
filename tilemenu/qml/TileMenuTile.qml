@@ -137,6 +137,7 @@ Item {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             font.pixelSize: 12
+            font.bold: tileConfig.labelBold
         }
     }
 
@@ -164,6 +165,7 @@ Item {
             maximumLineCount: 2
             wrapMode: Text.Wrap
             font.pixelSize: 13
+            font.bold: tileConfig.labelBold
         }
     }
 

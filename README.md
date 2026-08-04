@@ -158,9 +158,12 @@ entera y el dock se dibuja encima al aparecer.
   anclados se puede acomodar a mano.
 - **Mosaicos de varios tamaños** (1×1, 2×1, 1×2, 2×2, 4×2, 4×4), cada uno con su color o
   imagen de fondo, y con el ícono y el nombre opcionales por separado — además de poder
-  renombrarlo o cambiarle el ícono sin tocar el `.desktop`.
+  renombrarlo o cambiarle el ícono sin tocar el `.desktop`. Los nombres van en negrita por
+  omisión, conmutable desde el panel.
 - **Grupos con etiqueta**: bandas con título dentro del lienzo, que se renombran, se
-  reordenan, se colapsan y reciben mosaicos arrastrados.
+  reordenan y se colapsan. Un mosaico entra a una banda arrastrándolo, o desde su menú
+  contextual → *Mover a grupo*, que además ofrece crear una banda nueva con ese mosaico
+  adentro.
 - **Al soltar no pasa nada raro**: si la celda está libre, va; si la ocupa un mosaico del mismo
   tamaño, se intercambian; cualquier otro caso se rechaza y el mosaico vuelve a su lugar. Nada
   se reacomoda solo porque moviste a un vecino, y un fantasma de color te dice cuál de los tres

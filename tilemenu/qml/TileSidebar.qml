@@ -71,6 +71,7 @@ Rectangle {
                            - (sectionRow.modelData.icon.length > 0 ? 24 : 0) - 8
                     text: sectionRow.modelData.label
                     color: theme.foreground
+                    font.bold: tileConfig.labelBold
                     elide: Text.ElideRight
                     verticalAlignment: Text.AlignVCenter
                 }

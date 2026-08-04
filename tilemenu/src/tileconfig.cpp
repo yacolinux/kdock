@@ -43,6 +43,7 @@ void TileConfig::load()
     m_showLabels = readBool("showLabels", true);
     m_iconScale = readInt("iconScale", 55, 20, 100);
     m_labelPosition = readInt("labelPosition", 0, 0, 1);
+    m_labelBold = readBool("labelBold", true);
     m_backgroundMode = readInt("backgroundMode", 0, 0, 1);
     m_backgroundColor = QColor(m_settings.value(QStringLiteral("backgroundColor")).toString());
     m_backgroundOpacity =
@@ -185,6 +186,14 @@ void TileConfig::setLabelPosition(int position)
         return;
     m_labelPosition = position;
     store(QStringLiteral("labelPosition"), position);
+}
+
+void TileConfig::setLabelBold(bool on)
+{
+    if (m_labelBold == on)
+        return;
+    m_labelBold = on;
+    store(QStringLiteral("labelBold"), on);
 }
 
 void TileConfig::setBackgroundMode(int mode)
