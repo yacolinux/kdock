@@ -36,7 +36,7 @@ QHash<int, QByteArray> TileModel::roleNames() const
         {CommentRole, "comment"},    {IconRole, "icon"},
         {FavoriteRole, "favorite"},  {GroupRole, "group"},
         {ColRole, "col"},            {RowRole, "row"},
-        {AbsRowRole, "absRow"},      {WidthRole, "span"},
+        {WidthRole, "span"},
         {HeightRole, "vspan"},       {BackgroundRole, "background"},
         {ImageRole, "image"},        {ShowIconRole, "showIcon"},
         {ShowLabelRole, "showLabel"},
@@ -73,8 +73,6 @@ QVariant TileModel::data(const QModelIndex &index, int role) const
         return t.col;
     case RowRole:
         return t.row;
-    case AbsRowRole:
-        return t.absRow;
     case WidthRole:
         return t.w;
     case HeightRole:
@@ -92,11 +90,26 @@ QVariant TileModel::data(const QModelIndex &index, int role) const
     return {};
 }
 
+void TileModel::setCurrentGroup(int group)
+{
+    if (m_currentGroup == group)
+        return;
+    m_currentGroup = group;
+    emit currentGroupChanged();
+    refresh();
+}
+
 void TileModel::setSection(const QString &section)
 {
     if (m_section == section)
         return;
     m_section = section;
+    // Each section has its own tabs; there is no reason the third tab of one
+    // would mean anything in the next.
+    if (m_currentGroup != 0) {
+        m_currentGroup = 0;
+        emit currentGroupChanged();
+    }
     if (m_config->rememberSection())
         m_config->setLastSection(section);
     emit sectionChanged();
@@ -144,7 +157,6 @@ QList<TileRecord> TileModel::searchPlacement() const
             continue;
         r.col = i % cols;
         r.row = i / cols;
-        r.absRow = r.row;
         out.append(r);
         ++i;
     }
@@ -155,8 +167,25 @@ void TileModel::refresh()
 {
     reloadApps();
 
-    const QList<TileRecord> next = searching() ? searchPlacement()
-                                               : m_layout->placement(m_section);
+    // Clamp first: a tab can disappear under us (removed from the panel, or the
+    // section changed), and asking for tiles of a group that no longer exists
+    // would just draw nothing with no way back.
+    const int tabCount = qMax(1, m_layout->groups(m_section).size());
+    if (m_currentGroup >= tabCount || m_currentGroup < 0) {
+        m_currentGroup = qBound(0, m_currentGroup, tabCount - 1);
+        emit currentGroupChanged();
+    }
+
+    QList<TileRecord> next;
+    if (searching()) {
+        // A search crosses every tab: it is a hit list, not an arrangement.
+        next = searchPlacement();
+    } else {
+        for (const TileRecord &t : m_layout->placement(m_section)) {
+            if (t.group == m_currentGroup)
+                next.append(t);
+        }
+    }
 
     // Same tiles in the same order (the common case: a move, a resize, a color
     // change) — update in place so the QML delegates survive and animate.
@@ -183,13 +212,13 @@ void TileModel::refresh()
     if (searching()) {
         int rows = 0;
         for (const TileRecord &t : m_tiles)
-            rows = qMax(rows, t.absRow + t.h);
+            rows = qMax(rows, t.row + t.h);
         m_rows = rows;
-        m_bands = {};
+        m_groups = {};
         m_customized = false;
     } else {
-        m_rows = m_layout->totalRows(m_section);
-        m_bands = m_layout->bands(m_section);
+        m_rows = m_layout->rowsOfGroup(m_section, m_currentGroup);
+        m_groups = m_layout->groups(m_section);
         m_customized = m_layout->isCustomized(m_section);
     }
     emit layoutChanged();

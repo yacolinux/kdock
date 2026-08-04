@@ -35,6 +35,8 @@ class TileConfig : public QObject
     Q_PROPERTY(bool showLabels READ showLabels WRITE setShowLabels NOTIFY settingsChanged)
     Q_PROPERTY(int iconScale READ iconScale WRITE setIconScale NOTIFY settingsChanged)
     Q_PROPERTY(int labelPosition READ labelPosition WRITE setLabelPosition NOTIFY settingsChanged)
+    // Where the group tabs go: 0 arriba, 1 abajo, 2 izquierda, 3 derecha.
+    Q_PROPERTY(int groupTabs READ groupTabs WRITE setGroupTabs NOTIFY settingsChanged)
     Q_PROPERTY(bool labelBold READ labelBold WRITE setLabelBold NOTIFY settingsChanged)
     Q_PROPERTY(int backgroundMode READ backgroundMode WRITE setBackgroundMode NOTIFY settingsChanged)
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY settingsChanged)
@@ -73,6 +75,7 @@ public:
     bool showLabels() const { return m_showLabels; }
     int iconScale() const { return m_iconScale; }
     int labelPosition() const { return m_labelPosition; }
+    int groupTabs() const { return m_groupTabs; }
     bool labelBold() const { return m_labelBold; }
     int backgroundMode() const { return m_backgroundMode; }
     QColor backgroundColor() const { return m_backgroundColor; }
@@ -105,6 +108,7 @@ public:
     void setShowLabels(bool on);
     void setIconScale(int percent);
     void setLabelPosition(int position);
+    void setGroupTabs(int position);
     void setLabelBold(bool on);
     void setBackgroundMode(int mode);
     void setBackgroundColor(const QColor &color);
@@ -148,6 +152,7 @@ private:
     bool m_showLabels = true;
     int m_iconScale = 55;
     int m_labelPosition = 0;
+    int m_groupTabs = 0;
     bool m_labelBold = true;
     int m_backgroundMode = 0;
     QColor m_backgroundColor;

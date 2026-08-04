@@ -160,10 +160,12 @@ entera y el dock se dibuja encima al aparecer.
   imagen de fondo, y con el ícono y el nombre opcionales por separado — además de poder
   renombrarlo o cambiarle el ícono sin tocar el `.desktop`. Los nombres van en negrita por
   omisión, conmutable desde el panel.
-- **Grupos con etiqueta**: bandas con título dentro del lienzo, que se renombran, se
-  reordenan y se colapsan. Un mosaico entra a una banda arrastrándolo, o desde su menú
-  contextual → *Mover a grupo*, que además ofrece crear una banda nueva con ese mosaico
-  adentro.
+- **Grupos como solapas**: cada sección puede partirse en grupos con nombre, que aparecen
+  como una barra de solapas arriba, abajo o a un costado (a elección), y solo cuando hay más
+  de uno. Un mosaico pasa a otro grupo **arrastrándolo sobre su solapa** o desde su menú
+  contextual → *Mover a grupo*, que además ofrece crear un grupo nuevo con ese mosaico
+  adentro. El panel de configuración trae un editor de grupos —una sección por vez— para
+  crearlos, renombrarlos, ordenarlos y quitarlos.
 - **Al soltar no pasa nada raro**: si la celda está libre, va; si la ocupa un mosaico del mismo
   tamaño, se intercambian; cualquier otro caso se rechaza y el mosaico vuelve a su lugar. Nada
   se reacomoda solo porque moviste a un vecino, y un fantasma de color te dice cuál de los tres

@@ -14,12 +14,13 @@
 // the way AppMenu returns it. The first drag "materializes" the section: every
 // tile it currently shows is written down, and from then on it is the user's.
 //
-// ## Groups are bands of rows
-// A section is a list of groups, and each group owns a contiguous band of rows
-// inside one single matrix. Tiles store (group, col, row) but the model also
-// publishes `absRow` = startRow(group) + row, so the canvas has exactly one
-// coordinate space: one Repeater positions everything, drag arithmetic is the
-// same everywhere, and "which group did they drop into" is groupAtRow().
+// ## Groups are tabs
+// A section is a list of groups, and the menu shows one of them at a time behind
+// a tab bar. Tiles store (group, col, row) and every group starts its own matrix
+// at row 0, so the canvas only ever draws the current group and the drag
+// arithmetic is plain (col, row) — no shared coordinate space to keep in step.
+// (They used to be stacked bands inside one matrix; the `absRow` that scheme
+// needed is gone.)
 
 #pragma once
 
@@ -50,9 +51,6 @@ struct TileRecord
     int showIcon = -1;
     int showLabel = -1;
 
-    // Filled by placement(), not persisted.
-    int absRow = 0;
-
     bool covers(int c, int r) const
     {
         return c >= col && c < col + w && r >= row && r < row + h;
@@ -67,7 +65,6 @@ struct TileRecord
 struct TileGroup
 {
     QString title;
-    bool collapsed = false;
 };
 
 class TileLayout : public QObject
@@ -86,15 +83,16 @@ public:
     int columns() const;
     Q_INVOKABLE void setAutoColumns(int columns);
 
-    // The tiles of a section, in model order, with group/col/row/absRow filled.
+    // The tiles of a section, in model order, with group/col/row filled.
     // Apps with no record are auto-placed in the first free slot; records whose
     // app is gone are kept in storage (a reinstall finds its place again) but
     // are not returned here.
     QList<TileRecord> placement(const QString &section) const;
-    // [{ title, collapsed, index, startRow, rows }] for the section's bands.
-    Q_INVOKABLE QVariantList bands(const QString &section) const;
-    // Total rows the canvas needs, headers excluded.
-    Q_INVOKABLE int totalRows(const QString &section) const;
+    // [{ index, title, tiles, rows }] — one entry per tab, in tab order.
+    Q_INVOKABLE QVariantList groups(const QString &section) const;
+    // Rows the canvas needs for one group (at least 1, so an empty tab still has
+    // somewhere to drop into).
+    Q_INVOKABLE int rowsOfGroup(const QString &section, int group) const;
     // Whether the user has ever arranged this section (drives the A-Z rail:
     // "jump to K" is meaningless once the tiles are placed by hand).
     Q_INVOKABLE bool isCustomized(const QString &section) const;
@@ -107,9 +105,9 @@ public:
     // different size); the caller snaps the tile back.
     Q_INVOKABLE bool moveTile(const QString &section, const QString &id, int group, int col,
                               int row);
-    // Send a tile to another band without dragging: it lands on the first free
-    // slot there. The bands can be far apart on a tall canvas, and a drag has no
-    // auto-scroll, so this is the only workable path for those.
+    // Send a tile to another tab: it lands on the first free slot there. Dragging
+    // a tile onto a tab does this, and so does its context menu — with one group
+    // on screen at a time there is no other way.
     Q_INVOKABLE bool moveTileToGroup(const QString &section, const QString &id, int group);
     // Never fails: if the bigger tile would overlap, it is relocated to the
     // first slot in its group where it does fit (appending a row if needed).
@@ -119,7 +117,6 @@ public:
     Q_INVOKABLE void resetTile(const QString &section, const QString &id);
     Q_INVOKABLE int addGroup(const QString &section, const QString &title);
     Q_INVOKABLE void renameGroup(const QString &section, int group, const QString &title);
-    Q_INVOKABLE void setGroupCollapsed(const QString &section, int group, bool collapsed);
     Q_INVOKABLE void moveGroup(const QString &section, int from, int to);
     // The tiles fall into the neighbouring group. The last group cannot go.
     Q_INVOKABLE void removeGroup(const QString &section, int group);
@@ -159,7 +156,7 @@ private:
                               int h, const QString &ignoreId, int *col, int *row);
     static bool fits(const QList<TileRecord> &placed, const TileRecord &candidate,
                      const QString &ignoreId);
-    // Rows each group occupies, in order; a collapsed group takes none.
+    // Rows each group occupies, in order (at least one each).
     static QList<int> groupRows(const QList<TileGroup> &groups, const QList<TileRecord> &tiles);
 
     TileConfig *m_config;

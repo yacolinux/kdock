@@ -5,10 +5,10 @@
 // is handed exactly the desktop area the docks and panels left free — there is
 // no geometry math here for "where is the dock".
 //
-// The canvas is a single matrix. Group bands own contiguous ranges of rows, and
-// every tile carries the row it occupies within the whole canvas (`absRow`), so
-// positioning a tile, positioning a band header and working out what cell the
-// pointer is over are all the same arithmetic.
+// Groups are tabs: the canvas draws exactly one group, so a tile sits at its own
+// (col, row) and the drag arithmetic is plain. Dropping a tile on another tab
+// moves it there — with the other groups off screen, that and the tile's context
+// menu are the only routes.
 
 import QtQuick
 import QtQuick.Controls.Basic
@@ -19,7 +19,6 @@ Item {
 
     readonly property int pad: 16
     readonly property int gap: tileConfig.cellSpacing
-    readonly property int headerH: 34
 
     readonly property bool sidebarVisible: tileConfig.sidebar !== 2
     readonly property bool sidebarLeft: tileConfig.sidebar === 0
@@ -46,10 +45,23 @@ Item {
         : tileConfig.cellSize
     readonly property int pitch: cell + gap
 
-    // Band headers only exist once the section has been arranged: an untouched
-    // section has exactly one nameless group and showing its header would be
-    // noise.
-    readonly property bool showBands: tiles.customized && !tiles.searching
+    // One tab says nothing and eats the space, so the bar shows up only once
+    // there is a second group. A search crosses every group, so it hides too.
+    readonly property bool tabsVisible: tiles.groups.length > 1 && !tiles.searching
+    readonly property bool tabsVertical: tileConfig.groupTabs >= 2
+
+    // Pointer position while a tile is being dragged, in root coordinates,
+    // reported by the tile's MouseArea.
+    property point dragPointer: Qt.point(-1, -1)
+    // Tab the pointer is over while dragging, or -1. The tile itself is clipped
+    // by the canvas once it leaves it, so this follows the pointer, which is
+    // both what the user is aiming with and always in range.
+    readonly property int dragOverTab: {
+        if (!canvas.dragTile || !groupTabs.visible)
+            return -1
+        var p = groupTabs.mapFromItem(root, root.dragPointer.x, root.dragPointer.y)
+        return groupTabs.tabAt(p.x, p.y)
+    }
 
     onColumnsChanged: tileLayout.setAutoColumns(columns)
     Component.onCompleted: tileLayout.setAutoColumns(columns)
@@ -254,12 +266,75 @@ Item {
                     }
                 }
 
-                Flickable {
-                    id: canvasArea
+                // The column the tab bar and the canvas share. Having it makes
+                // every anchor below a plain edge-to-edge one instead of a
+                // three-way conditional over sidebar side and A-Z rail.
+                Item {
+                    id: canvasCol
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.left: root.sidebarLeft ? parent.left : rail.right
                     anchors.right: root.sidebarLeft ? rail.left : parent.right
+
+                TileGroupTabs {
+                    id: groupTabs
+                    visible: root.tabsVisible
+                    side: tileConfig.groupTabs
+                    model: tiles.groups
+                    currentIndex: tiles.currentGroup
+                    dropTarget: root.dragOverTab
+
+                    anchors.top: (root.tabsVertical || tileConfig.groupTabs === 0)
+                                 ? parent.top : undefined
+                    anchors.bottom: (root.tabsVertical || tileConfig.groupTabs === 1)
+                                    ? parent.bottom : undefined
+                    anchors.left: (!root.tabsVertical || tileConfig.groupTabs === 2)
+                                  ? parent.left : undefined
+                    anchors.right: (!root.tabsVertical || tileConfig.groupTabs === 3)
+                                   ? parent.right : undefined
+                    // Only the cross axis is set here; the other two anchors
+                    // above stretch the bar along its own axis.
+                    width: !visible ? 0 : (root.tabsVertical ? implicitWidth : undefined)
+                    height: !visible ? 0 : (root.tabsVertical ? undefined : implicitHeight)
+
+                    onPicked: (i) => tiles.currentGroup = i
+                    onAddRequested: {
+                        var name = win.promptText(qsTr("Nuevo grupo"), qsTr("Nombre:"), "")
+                        if (name !== "")
+                            tiles.currentGroup = tileLayout.addGroup(tiles.section, name)
+                    }
+                    onRenameRequested: (i) => {
+                        var current = i < tiles.groups.length ? tiles.groups[i].title : ""
+                        var name = win.promptText(qsTr("Renombrar grupo"), qsTr("Nombre:"),
+                                                  current)
+                        if (name !== "")
+                            tileLayout.renameGroup(tiles.section, i, name)
+                    }
+                    onMoveRequested: (i, to) => {
+                        tileLayout.moveGroup(tiles.section, i, to)
+                        tiles.currentGroup = to
+                    }
+                    onRemoveRequested: (i) => {
+                        if (win.confirm(qsTr("Quitar grupo"),
+                                        qsTr("Los mosaicos de este grupo pasan al grupo vecino. ¿Seguir?")))
+                            tileLayout.removeGroup(tiles.section, i)
+                    }
+                }
+
+                Flickable {
+                    id: canvasArea
+                    anchors.top: tileConfig.groupTabs === 0 && groupTabs.visible
+                                 ? groupTabs.bottom : parent.top
+                    anchors.topMargin: tileConfig.groupTabs === 0 && groupTabs.visible ? 8 : 0
+                    anchors.bottom: tileConfig.groupTabs === 1 && groupTabs.visible
+                                    ? groupTabs.top : parent.bottom
+                    anchors.bottomMargin: tileConfig.groupTabs === 1 && groupTabs.visible ? 8 : 0
+                    anchors.left: tileConfig.groupTabs === 2 && groupTabs.visible
+                                  ? groupTabs.right : parent.left
+                    anchors.leftMargin: tileConfig.groupTabs === 2 && groupTabs.visible ? 8 : 0
+                    anchors.right: tileConfig.groupTabs === 3 && groupTabs.visible
+                                   ? groupTabs.left : parent.right
+                    anchors.rightMargin: tileConfig.groupTabs === 3 && groupTabs.visible ? 8 : 0
                     clip: true
                     contentWidth: width
                     contentHeight: canvas.height
@@ -269,49 +344,23 @@ Item {
                     Item {
                         id: canvas
                         width: canvasArea.width
-                        height: tiles.rows * root.pitch
-                                + (root.showBands ? tiles.bands.length * root.headerH : 0)
-                                + root.pad
+                        height: tiles.rows * root.pitch + root.pad
 
                         // Centered when the matrix is narrower than the space.
                         readonly property int gridW: root.columns * root.pitch - root.gap
                         readonly property int xOffset: Math.max(0, Math.floor((width - gridW) / 2))
-                        readonly property int hh: root.showBands ? root.headerH : 0
 
                         property Item dragTile: null
                         property string selectedId: ""
 
                         // --- geometry <-> matrix ---------------------------
-                        // Top of band `i`'s header.
-                        function bandTop(i) {
-                            if (!root.showBands)
-                                return 0
-                            var acc = 0
-                            var list = tiles.bands
-                            for (var j = 0; j < list.length && j < i; ++j)
-                                acc += canvas.hh + list[j].rows * root.pitch
-                            return acc
+                        // Only the current group is on screen, so a tile sits at
+                        // its own (col, row): no shared axis to offset against.
+                        function tileY(row) {
+                            return row * root.pitch
                         }
-                        // y of a tile: (band + 1) headers above it, plus every
-                        // row of the canvas before it.
-                        function tileY(absRow, group) {
-                            return (group + 1) * canvas.hh + absRow * root.pitch
-                        }
-                        function bandAtY(y) {
-                            if (!root.showBands)
-                                return 0
-                            var list = tiles.bands
-                            var acc = 0
-                            for (var i = 0; i < list.length; ++i) {
-                                acc += canvas.hh + list[i].rows * root.pitch
-                                if (y < acc)
-                                    return i
-                            }
-                            return Math.max(0, list.length - 1)
-                        }
-                        function rowAtY(y, group) {
-                            var local = y - canvas.bandTop(group) - canvas.hh
-                            return Math.max(0, Math.round(local / root.pitch))
+                        function rowAtY(y) {
+                            return Math.max(0, Math.round(y / root.pitch))
                         }
                         function colAtX(x, span) {
                             var c = Math.round((x - canvas.xOffset) / root.pitch)
@@ -319,25 +368,31 @@ Item {
                         }
 
                         // --- drag target, recomputed once per cell ----------
-                        readonly property int dragBand: dragTile
-                            ? canvas.bandAtY(dragTile.y + root.cell / 2) : 0
                         readonly property int dragCol: dragTile
                             ? canvas.colAtX(dragTile.x, dragTile.span) : 0
                         readonly property int dragRow: dragTile
-                            ? canvas.rowAtY(dragTile.y, canvas.dragBand) : 0
+                            ? canvas.rowAtY(dragTile.y) : 0
                         // The engine answers, so the ghost never lies: 0 free,
                         // 1 swap, 2 refused. Only re-runs when a cell changes,
                         // because its inputs are integers.
                         readonly property int dragKind: dragTile
                             ? tileLayout.dropKind(tiles.section, dragTile.tileId,
-                                                  canvas.dragBand, canvas.dragCol,
+                                                  tiles.currentGroup, canvas.dragCol,
                                                   canvas.dragRow)
                             : 2
 
                         function dropTile() {
                             if (!dragTile)
                                 return
-                            tileLayout.moveTile(tiles.section, dragTile.tileId, canvas.dragBand,
+                            // Dropped on another tab: that is a move between
+                            // groups, and the only drag route to one now that
+                            // the others are off screen.
+                            if (root.dragOverTab >= 0 && root.dragOverTab !== tiles.currentGroup) {
+                                tileLayout.moveTileToGroup(tiles.section, dragTile.tileId,
+                                                           root.dragOverTab)
+                                return
+                            }
+                            tileLayout.moveTile(tiles.section, dragTile.tileId, tiles.currentGroup,
                                                 canvas.dragCol, canvas.dragRow)
                         }
 
@@ -373,7 +428,7 @@ Item {
                                     continue
                                 var t = tiles.get(i)
                                 var ddx = t.col - from.col
-                                var ddy = t.absRow - from.absRow
+                                var ddy = t.row - from.row
                                 if (dx !== 0 && (ddx * dx <= 0 || Math.abs(ddy) > 1))
                                     continue
                                 if (dy !== 0 && ddy * dy <= 0)
@@ -391,7 +446,7 @@ Item {
                             }
                         }
                         function ensureVisible(t) {
-                            var y = canvas.tileY(t.absRow, t.group)
+                            var y = canvas.tileY(t.row)
                             if (y < canvasArea.contentY)
                                 canvasArea.contentY = y
                             else if (y + root.cell > canvasArea.contentY + canvasArea.height)
@@ -403,8 +458,7 @@ Item {
                                 return
                             var t = tiles.get(i)
                             canvas.selectedId = t.tileId
-                            canvasArea.contentY = Math.max(0, canvas.tileY(t.absRow, t.group)
-                                                              - root.pitch)
+                            canvasArea.contentY = Math.max(0, canvas.tileY(t.row) - root.pitch)
                         }
 
                         // Right-click on empty canvas.
@@ -412,19 +466,6 @@ Item {
                             anchors.fill: parent
                             acceptedButtons: Qt.RightButton
                             onClicked: canvasMenu.popup()
-                        }
-
-                        Repeater {
-                            model: root.showBands ? tiles.bands : []
-                            delegate: TileGroupBand {
-                                required property var modelData
-                                bandData: modelData
-                                ui: root
-                                bandCount: tiles.bands.length
-                                x: 2
-                                width: canvas.width - 4
-                                y: canvas.bandTop(modelData.index)
-                            }
                         }
 
                         Repeater {
@@ -441,8 +482,12 @@ Item {
                             visible: canvas.dragTile !== null
                             z: 90
                             x: canvas.xOffset + canvas.dragCol * root.pitch
-                            y: canvas.bandTop(canvas.dragBand) + canvas.hh
-                               + canvas.dragRow * root.pitch
+                            y: canvas.dragRow * root.pitch
+                            // Over a tab the drop is a group change, and the
+                            // ghost would be pointing at a cell nobody is aiming
+                            // for.
+                            opacity: root.dragOverTab >= 0
+                                     && root.dragOverTab !== tiles.currentGroup ? 0 : 1
                             width: canvas.dragTile
                                    ? canvas.dragTile.span * root.pitch - root.gap : 0
                             height: canvas.dragTile
@@ -455,6 +500,7 @@ Item {
                         }
                     }
                 }
+                } // canvasCol
             }
 
             // --- session / power row -------------------------------------
@@ -625,9 +671,8 @@ Item {
 
         MenuSeparator {}
 
-        // The only workable way to put a tile in a distant band: dragging works
-        // only as far as the viewport reaches, and the canvas does not scroll
-        // while a tile is held.
+        // With one group on screen at a time, this and dropping the tile on a tab
+        // are the two ways to move it to another group.
         Menu {
             id: groupMenu
             title: qsTr("Mover a grupo")
@@ -636,7 +681,7 @@ Item {
             enabled: !tiles.searching
 
             Instantiator {
-                model: root.showBands ? tiles.bands : []
+                model: tiles.searching ? [] : tiles.groups
                 delegate: MenuItem {
                     id: groupItem
                     required property var modelData

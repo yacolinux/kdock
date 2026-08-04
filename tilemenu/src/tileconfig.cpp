@@ -43,6 +43,7 @@ void TileConfig::load()
     m_showLabels = readBool("showLabels", true);
     m_iconScale = readInt("iconScale", 55, 20, 100);
     m_labelPosition = readInt("labelPosition", 0, 0, 1);
+    m_groupTabs = readInt("groupTabs", 0, 0, 3);
     m_labelBold = readBool("labelBold", true);
     m_backgroundMode = readInt("backgroundMode", 0, 0, 1);
     m_backgroundColor = QColor(m_settings.value(QStringLiteral("backgroundColor")).toString());
@@ -186,6 +187,15 @@ void TileConfig::setLabelPosition(int position)
         return;
     m_labelPosition = position;
     store(QStringLiteral("labelPosition"), position);
+}
+
+void TileConfig::setGroupTabs(int position)
+{
+    position = qBound(0, position, 3);
+    if (m_groupTabs == position)
+        return;
+    m_groupTabs = position;
+    store(QStringLiteral("groupTabs"), position);
 }
 
 void TileConfig::setLabelBold(bool on)

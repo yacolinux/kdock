@@ -42,7 +42,7 @@ qt_add_resources(kdock-tilemenu "tilemenu-qml"
     FILES
         qml/TileMenu.qml
         qml/TileMenuTile.qml
-        qml/TileGroupBand.qml
+        qml/TileGroupTabs.qml
         qml/TileSidebar.qml
         qml/TileSizeMenu.qml
 )

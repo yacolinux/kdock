@@ -6,6 +6,9 @@
 //
 // It joins two sources: TileLayout says *where* each tile sits, AppMenu says
 // what the app is called and which icon it has.
+//
+// The menu shows one group at a time behind a tab bar, so the model holds the
+// tiles of `currentGroup` only.
 
 #pragma once
 
@@ -25,9 +28,10 @@ class TileModel : public QAbstractListModel
     Q_PROPERTY(QString section READ section WRITE setSection NOTIFY sectionChanged)
     Q_PROPERTY(QString query READ query WRITE setQuery NOTIFY queryChanged)
     Q_PROPERTY(bool searching READ searching NOTIFY queryChanged)
-    // Rows the canvas needs; the QML sizes the Flickable's content from it.
+    // Rows the current group needs; the QML sizes the Flickable from it.
     Q_PROPERTY(int rows READ rows NOTIFY layoutChanged)
-    Q_PROPERTY(QVariantList bands READ bands NOTIFY layoutChanged)
+    Q_PROPERTY(QVariantList groups READ groups NOTIFY layoutChanged)
+    Q_PROPERTY(int currentGroup READ currentGroup WRITE setCurrentGroup NOTIFY currentGroupChanged)
     Q_PROPERTY(bool customized READ customized NOTIFY layoutChanged)
 
 public:
@@ -40,7 +44,6 @@ public:
         GroupRole,
         ColRole,
         RowRole,
-        AbsRowRole,
         WidthRole,
         HeightRole,
         BackgroundRole,
@@ -61,7 +64,9 @@ public:
     void setQuery(const QString &query);
     bool searching() const { return !m_query.trimmed().isEmpty(); }
     int rows() const { return m_rows; }
-    QVariantList bands() const { return m_bands; }
+    QVariantList groups() const { return m_groups; }
+    int currentGroup() const { return m_currentGroup; }
+    void setCurrentGroup(int group);
     bool customized() const { return m_customized; }
 
     Q_INVOKABLE void refresh();
@@ -76,6 +81,7 @@ public:
 signals:
     void sectionChanged();
     void queryChanged();
+    void currentGroupChanged();
     void layoutChanged();
 
 private:
@@ -93,7 +99,8 @@ private:
     QString m_query;
     QList<TileRecord> m_tiles;
     QHash<QString, QVariantMap> m_apps;
-    QVariantList m_bands;
+    QVariantList m_groups;
+    int m_currentGroup = 0;
     int m_rows = 0;
     bool m_customized = false;
 };

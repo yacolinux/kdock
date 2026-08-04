@@ -572,29 +572,53 @@ ajustes, que el widget `tilemenu` prende y apaga. Mismo reparto que `kdock-previ
     usuario. `isCustomized()` decide si se muestran las cabeceras de grupo y el índice A-Z
     ("saltar a la K" no significa nada con los mosaicos puestos a mano).
   - **Cómo se le agregan y se le sacan miembros a un grupo**, que es lo que no se descubre
-    solo: arrastrando el mosaico dentro de la banda, o —y esta es la vía que hace falta—
-    desde el menú contextual del mosaico, **Mover a grupo ▸**, que lista las bandas de la
-    sección con un tilde en la actual y termina en *Grupo nuevo…* (crea la banda y le manda
-    ese mosaico de una). **No existe "sacar de un grupo"**: un mosaico siempre pertenece a
-    alguna banda, así que sacarlo es mandarlo a otra (típicamente la primera, sin nombre).
-    Borrar la banda desde su cabecera manda sus mosaicos a la vecina.
-    El menú no es un lujo: el arrastre solo llega hasta donde llega el viewport, porque el
-    lienzo **no hace auto-scroll** mientras se sostiene un mosaico, y en una sección alta la
-    banda nueva queda al fondo. `moveTileToGroup()` lo deja en el primer hueco libre de la
-    banda destino.
-  - **Los grupos son bandas de filas de una única matriz.** Un mosaico guarda
-    `(grupo, col, fila)` pero el modelo publica además `absRow` = `startRow(grupo) + fila`, así
-    que hay **un solo espacio de coordenadas**: un `Repeater` posiciona todo, la cabecera de la
-    banda `g` va en `g*headerH + startRow(g)*pitch` y el mosaico en
-    `(g+1)*headerH + absRow*pitch`. Soltar "dentro de un grupo" es la aritmética de siempre, no
-    un drop target aparte.
+    solo: **arrastrando el mosaico sobre la solapa destino** (la solapa se resalta y el
+    fantasma de celda se apaga), o desde el menú contextual del mosaico, **Mover a grupo ▸**,
+    que lista los grupos de la sección con un tilde en el actual y termina en *Grupo nuevo…*
+    (crea el grupo y le manda ese mosaico de una). **No existe "sacar de un grupo"**: un
+    mosaico siempre pertenece a alguno, así que sacarlo es mandarlo a otro. Quitar un grupo
+    manda sus mosaicos al vecino. `moveTileToGroup()` lo deja en el primer hueco libre del
+    destino. Y desde el panel propio hay un **editor de Grupos** (`createGroupsGroup()`): un
+    combo de sección + la lista de sus grupos, con agregar, renombrar, quitar, subir y bajar.
+    Mueve grupos, no mosaicos — para eso están el arrastre y el menú del mosaico, y el panel
+    lo dice.
+  - **El objetivo del arrastre sale del puntero, no del centro del mosaico** (mordió
+    2026-08-03): el mosaico cuelga de donde lo agarraste, así que su centro puede seguir bien
+    adentro del lienzo con el puntero ya sobre una solapa. `TileMenuTile` reporta la posición
+    del puntero en coordenadas de la raíz (`root.dragPointer`) y `dragOverTab` resuelve con
+    eso. De paso resuelve que el mosaico quede recortado por el lienzo al salirse: lo que
+    importa es dónde apunta el usuario.
+  - **Los grupos son solapas**: el lienzo dibuja **uno solo por vez**, el que dice
+    `TileModel::currentGroup`. Cada grupo arranca su propia matriz en la fila 0, así que un
+    mosaico se posiciona con su `(col, fila)` y no hay eje compartido que mantener en sincro.
+    La barra (`qml/TileGroupTabs.qml`) va en el borde que diga `config.groupTabs`
+    (0 arriba / 1 abajo / 2 izquierda / 3 derecha) y **aparece solo cuando la sección tiene
+    más de un grupo** — una sola solapa no informa nada y come espacio. La barra y el lienzo
+    viven dentro de un `Item` contenedor (`canvasCol`), que es lo que deja los anclajes en
+    un borde contra otro en vez de un condicional a tres bandas entre el lado de la barra
+    lateral y el riel A-Z.
+    - Antes eran **bandas apiladas** en una única matriz, con un `absRow` que sumaba las filas
+      de las bandas anteriores y cabeceras intercaladas. Se cambió a solapas a pedido
+      (2026-08-03); con eso desaparecieron `absRow`, `startRow`, el alto de cabecera y **el
+      plegado**, que con solapas no significa nada (la clave `c` del JSON se ignora al leer).
+  - **`placement()` es *la disposición*, no *la vista*, y el filtro de qué se dibuja va en el
+    modelo.** Devuelve todos los mosaicos de la sección, de todos los grupos, porque eso es lo
+    que necesitan las funciones de edición y el contador de mosaicos por solapa;
+    `TileModel::refresh()` se queda solo con los de `currentGroup`. La distinción se pagó
+    cara con la versión de bandas: ahí el modelo dibujaba también las de una banda plegada,
+    a la que `groupRows()` ya le daba 0 filas, y salían dos síntomas de un solo bug —plegar
+    no hacía nada **y** la banda siguiente encimaba sus íconos sobre la plegada (reportado
+    con captura, 2026-08-03).
+  - `TileModel::refresh()` **acota `currentGroup` antes de usarlo**: una solapa puede
+    desaparecer bajo los pies (borrada desde el panel, o cambio de sección), y pedir los
+    mosaicos de un grupo que ya no existe dibujaría un lienzo vacío sin forma de volver.
   - **Colisión deliberadamente manual, sin auto-compactar**: libre → coloca; **un** mosaico del
     **mismo tamaño** → **swap**; cualquier otro solapamiento → **rechazo** (`moveTile()`
     devuelve false y el QML lo devuelve a su lugar). Una disposición hecha a mano no se
     reacomoda sola porque se movió un vecino. `dropKind()` responde lo mismo *antes* de soltar,
     así el fantasma no miente (azul libre / verde swap / rojo rechazo).
   - **Agrandar sí reubica**, nunca falla: `resizeTile()` prueba en el lugar y, si no entra,
-    manda el mosaico al primer hueco de su banda donde sí entre.
+    manda el mosaico al primer hueco de su grupo donde sí entre.
   - **Los registros de apps desinstaladas se conservan** (`Section::orphans`) para que una
     reinstalación recupere su lugar, pero se mantienen **fuera** de `tiles`: un mosaico que no
     se dibuja no puede participar de una colisión.
@@ -647,7 +671,8 @@ ajustes, que el widget `tilemenu` prende y apaga. Mismo reparto que `kdock-previ
   del widget, ícono, precargar, estado del proceso y botón *Configurar…*). Deliberadamente
   **no** es una solapa nueva: con once títulos la barra ya pide 1086 px y la duodécima la manda
   a modo flechas de scroll sin avisar. Todo lo demás vive en el panel propio del binario
-  (`TileSettingsDialog`: Grilla, Apariencia, Barra lateral, Comportamiento, Disposición).
+  (`TileSettingsDialog`: Grilla, Apariencia, Barra lateral, Comportamiento, **Grupos**,
+  Disposición).
 - **Backup**: `ConfigArchive` archiva ahora las **tres** familias (`kdock*.conf`,
   `previews*.conf`, `tilemenu*.conf`), así la disposición entra al `.zip`. Al importar solo se
   borran las familias de las que el archivo trae al menos una entrada, para que un `.zip` viejo
@@ -787,9 +812,9 @@ still render and work; they just can't be toggled from the UI anymore).
 | `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; read-only `cardScale` (auto-fit); `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)`, `setAvailableLength(px)` (auto-fit) |
 | `PreviewWindow` | `previewWindow` | `setHidden(bool)`, `openSettings()`, `restart()`, `quit()` |
 | `TileMenuLauncher` | `tileLauncher` (en kdock) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-tilemenu`: si el proceso corre, D-Bus; si no, lo lanza |
-| `TileConfig` | `tileConfig.*` (binario `kdock-tilemenu`) | Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Apariencia: `sidebar` (0 izq/1 der/2 oculta), `sidebarWidth`, `showIcons`, `showLabels`, `iconScale` (%), `labelPosition`, `labelBold` (default **true**), `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `presetColors` (read-only, los ocho colores rápidos del `kdock.conf` compartido). Comportamiento: `showSearch`, `showPower`, `showLetterIndex`, `closeOnLaunch`, `closeOnFocusLoss`, `keepOpen`, `rememberSection`, `lastSection`. **Una sola señal `settingsChanged` para todas** |
-| `TileLayout` | `tileLayout` | El motor, todo `Q_INVOKABLE`: `bands(section)`, `totalRows(section)`, `isCustomized(section)`, `dropKind(section,id,group,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveTile(...)` (false = rechazado), **`moveTileToGroup(section,id,group)`**, `resizeTile(...)`, `setTileProperty(section,id,key,value)` (`bg`/`image`/`label`/`icon`/`showIcon`/`showLabel`), `resetTile`, `addGroup`/`renameGroup`/`setGroupCollapsed`/`moveGroup`/`removeGroup`, `resetSection`/`resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
-| `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, **`absRow`** (fila dentro de todo el lienzo: el único espacio de coordenadas), `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `searching`, `rows`, `bands`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
+| `TileConfig` | `tileConfig.*` (binario `kdock-tilemenu`) | Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Apariencia: `sidebar` (0 izq/1 der/2 oculta), `sidebarWidth`, `showIcons`, `showLabels`, `iconScale` (%), `labelPosition`, `labelBold` (default **true**), `groupTabs` (borde de la barra de solapas), `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `presetColors` (read-only, los ocho colores rápidos del `kdock.conf` compartido). Comportamiento: `showSearch`, `showPower`, `showLetterIndex`, `closeOnLaunch`, `closeOnFocusLoss`, `keepOpen`, `rememberSection`, `lastSection`. **Una sola señal `settingsChanged` para todas** |
+| `TileLayout` | `tileLayout` | El motor, todo `Q_INVOKABLE`: `groups(section)` (`{index, title, tiles, rows}` por solapa), `rowsOfGroup(section,group)`, `isCustomized(section)`, `dropKind(section,id,group,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveTile(...)` (false = rechazado), **`moveTileToGroup(section,id,group)`**, `resizeTile(...)`, `setTileProperty(section,id,key,value)` (`bg`/`image`/`label`/`icon`/`showIcon`/`showLabel`), `resetTile`, `addGroup`/`renameGroup`/`moveGroup`/`removeGroup`, `resetSection`/`resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
+| `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `currentGroup` (rw: la solapa visible), `searching`, `rows` (del grupo actual), `groups`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
 | `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |

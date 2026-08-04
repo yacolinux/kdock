@@ -21,7 +21,6 @@ Item {
     required property int group
     required property int col
     required property int row
-    required property int absRow
     required property int span
     required property int vspan
     required property string background
@@ -56,7 +55,7 @@ Item {
         property: "y"
         when: !tile.dragging
         restoreMode: Binding.RestoreNone
-        value: tile.canvasItem ? tile.canvasItem.tileY(tile.absRow, tile.group) : 0
+        value: tile.canvasItem ? tile.canvasItem.tileY(tile.row) : 0
     }
 
     Behavior on x {
@@ -201,6 +200,15 @@ Item {
         drag.threshold: 8
 
         onPressed: if (tile.canvasItem) tile.canvasItem.selectedId = tile.tileId
+
+        // Where the pointer is, in root coordinates. The tab bar drop targets
+        // off this and not off the tile's own centre: the tile hangs below
+        // wherever it was grabbed, so its centre can still be deep in the canvas
+        // while the pointer is already on a tab.
+        onPositionChanged: (event) => {
+            if (tile.dragging && tile.ui)
+                tile.ui.dragPointer = tile.mapToItem(tile.ui, event.x, event.y)
+        }
 
         // MouseArea suppresses clicked() when a drag happened, so a dropped tile
         // never also launches its app.

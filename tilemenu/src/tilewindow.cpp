@@ -148,7 +148,7 @@ void TileWindow::launch(const QString &id)
 void TileWindow::openSettings()
 {
     if (!m_settingsDialog)
-        m_settingsDialog = new TileSettingsDialog(m_config, m_layout);
+        m_settingsDialog = new TileSettingsDialog(m_config, m_layout, m_menu);
     m_settingsDialog->show();
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();

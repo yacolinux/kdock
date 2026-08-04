@@ -240,10 +240,6 @@ QList<int> TileLayout::groupRows(const QList<TileGroup> &groups, const QList<Til
     QList<int> rows;
     rows.reserve(groups.size());
     for (int g = 0; g < groups.size(); ++g) {
-        if (groups.at(g).collapsed) {
-            rows.append(0);
-            continue;
-        }
         int bottom = 0;
         for (const TileRecord &t : tiles) {
             if (t.group == g)
@@ -321,23 +317,10 @@ QList<TileRecord> TileLayout::placement(const QString &section) const
         done.insert(id);
     }
 
-    // 3. One coordinate space: every tile also carries its row within the whole
-    //    canvas, so the QML positions tiles and group headers off the same axis.
-    const QList<int> rows = groupRows(groups, out);
-    QList<int> start;
-    start.reserve(groups.size());
-    int acc = 0;
-    for (int g = 0; g < groups.size(); ++g) {
-        start.append(acc);
-        acc += rows.at(g);
-    }
-    for (TileRecord &r : out)
-        r.absRow = start.at(r.group) + r.row;
-
     return out;
 }
 
-QVariantList TileLayout::bands(const QString &section) const
+QVariantList TileLayout::groups(const QString &section) const
 {
     auto it = m_sections.constFind(section);
     QList<TileGroup> groups = it != m_sections.constEnd() ? it.value().groups : QList<TileGroup>();
@@ -348,30 +331,30 @@ QVariantList TileLayout::bands(const QString &section) const
     const QList<int> rows = groupRows(groups, tiles);
 
     QVariantList out;
-    int acc = 0;
     for (int g = 0; g < groups.size(); ++g) {
         QVariantMap m;
         m[QStringLiteral("index")] = g;
         m[QStringLiteral("title")] = groups.at(g).title;
-        m[QStringLiteral("collapsed")] = groups.at(g).collapsed;
-        m[QStringLiteral("startRow")] = acc;
         m[QStringLiteral("rows")] = rows.at(g);
+        int count = 0;
+        for (const TileRecord &t : tiles) {
+            if (t.group == g)
+                ++count;
+        }
+        m[QStringLiteral("tiles")] = count;
         out.append(m);
-        acc += rows.at(g);
     }
     return out;
 }
 
-int TileLayout::totalRows(const QString &section) const
+int TileLayout::rowsOfGroup(const QString &section, int group) const
 {
     auto it = m_sections.constFind(section);
     QList<TileGroup> groups = it != m_sections.constEnd() ? it.value().groups : QList<TileGroup>();
     if (groups.isEmpty())
         groups.append(TileGroup());
-    int total = 0;
-    for (int r : groupRows(groups, placement(section)))
-        total += r;
-    return total;
+    const QList<int> rows = groupRows(groups, placement(section));
+    return rows.value(qBound(0, group, rows.size() - 1), 1);
 }
 
 bool TileLayout::isCustomized(const QString &section) const
@@ -405,8 +388,6 @@ TileLayout::Section &TileLayout::materialize(const QString &section)
     }
 
     s.tiles = drawn;
-    for (TileRecord &r : s.tiles)
-        r.absRow = 0; // derived, never stored
     s.orphans = orphans;
     return s;
 }
@@ -468,7 +449,6 @@ bool TileLayout::moveTileToGroup(const QString &section, const QString &id, int 
         return false;
     if (s.tiles.at(idx).group == group)
         return true;
-
     TileRecord to = s.tiles.at(idx);
     to.group = group;
     firstFreeSlot(s.tiles, group, columns(), to.w, to.h, id, &to.col, &to.row);
@@ -573,16 +553,6 @@ void TileLayout::renameGroup(const QString &section, int group, const QString &t
     emit changed(section);
 }
 
-void TileLayout::setGroupCollapsed(const QString &section, int group, bool collapsed)
-{
-    Section &s = materialize(section);
-    if (group < 0 || group >= s.groups.size() || s.groups.at(group).collapsed == collapsed)
-        return;
-    s.groups[group].collapsed = collapsed;
-    save();
-    emit changed(section);
-}
-
 void TileLayout::moveGroup(const QString &section, int from, int to)
 {
     Section &s = materialize(section);
@@ -683,7 +653,6 @@ void TileLayout::load()
             const QJsonObject go = groups.at(g).toObject();
             TileGroup group;
             group.title = go.value(QStringLiteral("t")).toString();
-            group.collapsed = go.value(QStringLiteral("c")).toBool();
             s.groups.append(group);
             const QJsonArray tiles = go.value(QStringLiteral("tiles")).toArray();
             for (const QJsonValue &tv : tiles) {
@@ -708,8 +677,6 @@ void TileLayout::save()
             QJsonObject go;
             if (!s.groups.at(g).title.isEmpty())
                 go[QStringLiteral("t")] = s.groups.at(g).title;
-            if (s.groups.at(g).collapsed)
-                go[QStringLiteral("c")] = true;
             QJsonArray tiles;
             for (const QList<TileRecord> *list : {&s.tiles, &s.orphans}) {
                 for (const TileRecord &r : *list) {
@@ -777,16 +744,15 @@ QString TileLayout::dump(const QString &section) const
                    .arg(cols)
                    .arg(tiles.size());
 
-        const QVariantList bandList = bands(key);
-        for (const QVariant &bv : bandList) {
-            const QVariantMap band = bv.toMap();
-            const int g = band.value(QStringLiteral("index")).toInt();
-            const int rows = band.value(QStringLiteral("rows")).toInt();
-            out += QStringLiteral("  [band %1] \"%2\"%3\n")
+        const QVariantList tabList = groups(key);
+        for (const QVariant &bv : tabList) {
+            const QVariantMap tab = bv.toMap();
+            const int g = tab.value(QStringLiteral("index")).toInt();
+            const int rows = tab.value(QStringLiteral("rows")).toInt();
+            out += QStringLiteral("  [tab %1] \"%2\"  %3 tile(s)\n")
                        .arg(g)
-                       .arg(band.value(QStringLiteral("title")).toString(),
-                            band.value(QStringLiteral("collapsed")).toBool()
-                                ? QStringLiteral(" (collapsed)") : QString());
+                       .arg(tab.value(QStringLiteral("title")).toString())
+                       .arg(tab.value(QStringLiteral("tiles")).toInt());
 
             QStringList legend;
             for (int r = 0; r < rows; ++r) {
