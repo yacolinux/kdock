@@ -598,9 +598,11 @@ void DockConfig::load()
                                             QStringLiteral("org.kde.konsole")})
                    .toStringList();
     m_screenName = m_settings.value(QStringLiteral("screenName")).toString();
+    m_alias = m_settings.value(QStringLiteral("alias")).toString();
     m_panelMode = m_settings.value(QStringLiteral("panelMode"), false).toBool();
     m_compact = m_settings.value(QStringLiteral("compact"), false).toBool();
     m_alignment = m_settings.value(QStringLiteral("alignment"), Center).toInt();
+    m_showAppIcons = m_settings.value(QStringLiteral("showAppIcons"), true).toBool();
     m_showVolume = m_settings.value(QStringLiteral("showVolume"), true).toBool();
     m_showSystray = m_settings.value(QStringLiteral("showSystray"), false).toBool();
     m_systrayIconScale = m_settings.value(QStringLiteral("systrayIconScale"), 100).toInt();
@@ -786,6 +788,18 @@ void DockConfig::setAlignment(int alignment)
     m_alignment = alignment;
     m_settings.setValue(QStringLiteral("alignment"), alignment);
     emit alignmentChanged();
+}
+
+void DockConfig::setShowAppIcons(bool show)
+{
+    if (m_showAppIcons == show)
+        return;
+    m_showAppIcons = show;
+    m_settings.setValue(QStringLiteral("showAppIcons"), show);
+    emit showAppIconsChanged();
+    // The apps block leaves (or comes back to) the cross axis, so the dock —
+    // and with it the layer-shell exclusive zone — has to resize.
+    emit dockThicknessChanged();
 }
 
 void DockConfig::setShowVolume(bool show)
@@ -1330,6 +1344,37 @@ void DockConfig::setScreenName(const QString &name)
     emit screenNameChanged();
 }
 
+void DockConfig::setAlias(const QString &alias)
+{
+    const QString trimmed = alias.trimmed();
+    if (m_alias == trimmed)
+        return;
+    m_alias = trimmed;
+    if (trimmed.isEmpty())
+        m_settings.remove(QStringLiteral("alias"));
+    else
+        m_settings.setValue(QStringLiteral("alias"), trimmed);
+    emit aliasChanged();
+}
+
+bool DockConfig::copySettingsTo(const QString &dstDockId) const
+{
+    const QString dstPath = instanceSettingsFilePath(dstDockId);
+    QSettings dst(dstPath, QSettings::IniFormat);
+    const QStringList keys = m_settings.allKeys();
+    for (const QString &key : keys) {
+        if (key == QLatin1String("alias"))
+            continue; // the alias belongs to the original, not the copy
+        dst.setValue(key, m_settings.value(key));
+    }
+    // Bind the copy to its own output (the source file still carries its own).
+    const QString screen = screenOfDockId(dstDockId);
+    if (!screen.isEmpty())
+        dst.setValue(QStringLiteral("screenName"), screen);
+    dst.sync();
+    return dst.status() == QSettings::NoError;
+}
+
 void DockConfig::setPanelMode(bool panelMode)
 {
     if (m_panelMode == panelMode)
@@ -1436,8 +1481,11 @@ int DockConfig::widgetCellThickness() const
 int DockConfig::dockThickness() const
 {
     // The icon size stays the floor even in label-only mode: the widget
-    // sections (volume, clock, systray…) are still drawn at that size.
-    return qMax(m_iconSize, qMax(appCellThickness(), widgetCellThickness()))
+    // sections (volume, clock, systray…) are still drawn at that size. With the
+    // apps block off, its cells (and the app names measured for them) drop out
+    // of the formula, so a widgets-only dock is as thin as its widgets.
+    const int appThickness = m_showAppIcons ? appCellThickness() : 0;
+    return qMax(m_iconSize, qMax(appThickness, widgetCellThickness()))
            + (m_compact ? 12 : 20);
 }
 

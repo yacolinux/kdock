@@ -31,6 +31,7 @@ qt_add_executable(kdock
     src/clockwidget.cpp       src/clockwidget.h
     src/clockwidget2.cpp      src/clockwidget2.h
     src/clipboardhistory.cpp  src/clipboardhistory.h
+    src/waylandclipboard.cpp  src/waylandclipboard.h
     src/overviewcontrol.cpp   src/overviewcontrol.h
     src/desktopcontrol.cpp    src/desktopcontrol.h
     src/monitorcontrol.cpp    src/monitorcontrol.h
@@ -53,7 +54,12 @@ qt_add_executable(kdock
     src/configarchive.cpp       src/configarchive.h
     src/powercontrol.cpp        src/powercontrol.h
     src/diskscontrol.cpp        src/diskscontrol.h
+    src/nmdbus.cpp              src/nmdbus.h
     src/networkcontrol.cpp      src/networkcontrol.h
+    src/networksettings.cpp     src/networksettings.h
+    src/networksettingswidget.cpp src/networksettingswidget.h
+    src/connectioneditor.cpp    src/connectioneditor.h
+    src/routesdialog.cpp        src/routesdialog.h
     src/appearancecontrol.cpp   src/appearancecontrol.h
     src/darkmodeappearance.cpp  src/darkmodeappearance.h
     src/previewslauncher.cpp    src/previewslauncher.h
@@ -65,6 +71,10 @@ qt_generate_wayland_protocol_client_sources(kdock FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/plasma-window-management.xml
+    # Clipboard access without keyboard focus (see src/waylandclipboard.h).
+    # Unlike plasma-window-management this one is *not* in KWin's restricted
+    # interface list, so no .desktop privilege is involved.
+    ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-data-control-v1.xml
 )
 
 qt_add_resources(kdock "qml"

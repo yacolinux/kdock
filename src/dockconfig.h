@@ -45,6 +45,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool panelMode READ panelMode WRITE setPanelMode NOTIFY panelModeChanged)
     Q_PROPERTY(bool compact READ compact WRITE setCompact NOTIFY compactChanged)
     Q_PROPERTY(int alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged)
+    Q_PROPERTY(bool showAppIcons READ showAppIcons WRITE setShowAppIcons NOTIFY showAppIconsChanged)
     Q_PROPERTY(bool showVolume READ showVolume WRITE setShowVolume NOTIFY showVolumeChanged)
     Q_PROPERTY(bool showSystray READ showSystray WRITE setShowSystray NOTIFY showSystrayChanged)
     Q_PROPERTY(int systrayIconScale READ systrayIconScale WRITE setSystrayIconScale NOTIFY systrayIconScaleChanged)
@@ -137,6 +138,10 @@ class DockConfig : public QObject
     Q_PROPERTY(bool autoShrinkIcons READ autoShrinkIcons WRITE setAutoShrinkIcons NOTIFY autoShrinkIconsChanged)
     Q_PROPERTY(int autoShrinkMinIconSize READ autoShrinkMinIconSize WRITE setAutoShrinkMinIconSize NOTIFY autoShrinkMinIconSizeChanged)
     Q_PROPERTY(int dockThickness READ dockThickness NOTIFY dockThicknessChanged)
+    // User-chosen friendly name for this dock (empty = the default
+    // "<screen> — Dock <n>" derived from the dockId). Persisted per-dock so a
+    // copy onto another monitor starts unnamed (see DockManager::previewDockOnScreen).
+    Q_PROPERTY(QString alias READ alias WRITE setAlias NOTIFY aliasChanged)
 
 public:
     enum Edge { Bottom = 0, Top = 1, Left = 2, Right = 3 };
@@ -315,6 +320,19 @@ public:
     // bound output shared by all slots on a monitor.
     QString dockId() const { return m_dockId; }
 
+    // Friendly display name: the alias when set, else the default
+    // "<screen> — Dock <slot+1>".
+    QString alias() const { return m_alias; }
+    void setAlias(const QString &alias);
+
+    // Copy this dock's persisted settings into dstDockId's settings file, so a
+    // new dock can start from an existing one's configuration. Copies the live
+    // in-memory state (a freshly enabled dock may not have flushed every key to
+    // disk yet), binds the copy to its own output, and deliberately skips the
+    // alias — the name belongs to the original, a copy starts unnamed. Returns
+    // false if the destination cannot be written.
+    bool copySettingsTo(const QString &dstDockId) const;
+
     int edge() const { return m_edge; }
     int iconSize() const { return m_iconSize; }
     int widgetIconScale() const { return m_widgetIconScale; }
@@ -411,6 +429,11 @@ public:
     bool panelMode() const { return m_panelMode; }      // stretch edge to edge
     bool compact() const { return m_compact; }          // no empty borders
     int alignment() const { return m_alignment; }       // icons along the edge
+    // Off turns the dock into a widgets-only bar: neither the pinned launchers
+    // nor the window buttons are drawn, and the apps block stops counting
+    // toward the thickness (see dockThickness()). The "apps" token stays in
+    // widgetOrder, so its place comes back untouched.
+    bool showAppIcons() const { return m_showAppIcons; }
     bool showVolume() const { return m_showVolume; }
     bool showSystray() const { return m_showSystray; }
     int systrayIconScale() const { return m_systrayIconScale; }
@@ -525,6 +548,7 @@ public:
     void setPanelMode(bool panelMode);
     void setCompact(bool compact);
     void setAlignment(int alignment);
+    void setShowAppIcons(bool show);
     void setShowVolume(bool show);
     void setShowSystray(bool show);
     void setSystrayIconScale(int percent);
@@ -620,9 +644,11 @@ signals:
     void panelImageChanged();
     void pinnedChanged();
     void screenNameChanged();
+    void aliasChanged();
     void panelModeChanged();
     void compactChanged();
     void alignmentChanged();
+    void showAppIconsChanged();
     void showVolumeChanged();
     void showSystrayChanged();
     void systrayIconScaleChanged();
@@ -721,6 +747,7 @@ private:
 
     QSettings m_settings;
     QString m_dockId;
+    QString m_alias; // user-chosen friendly name; empty = default "<screen> — Dock <n>"
     int m_edge = Bottom;
     int m_iconSize = 48;
     int m_widgetIconScale = 100; // % of iconSize applied to widget sections
@@ -750,6 +777,7 @@ private:
     int m_autoShrinkMinIconSize = 16;
     QHash<QString, QString> m_widgetNames; // section token -> user rename
     int m_widgetNamesRevision = 0;
+    bool m_showAppIcons = true;
     bool m_showSystray = false;
     int m_systrayIconScale = 100; // % of iconSize applied to systray icons
     QStringList m_systrayHiddenItems;

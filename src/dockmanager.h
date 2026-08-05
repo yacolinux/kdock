@@ -6,9 +6,11 @@
 // enable/disable, sync() creates or destroys the corresponding DockWindow.
 //
 // Shared services (volume, clock, brightness, overview, window monitor, ...)
-// are singletons passed to every dock's QML context. The systray host and the
-// relanzadores manager are attached only to the primary dock: the lowest-slot
-// enabled dock on the primary monitor (see primaryDockId()).
+// are singletons passed to every dock's QML context. The relanzadores manager
+// is attached only to the primary dock: the lowest-slot enabled dock on the
+// primary monitor (see primaryDockId()). The systray host goes to every dock —
+// which one draws the tray is its own "showSystray" flag, kept exclusive by
+// systrayDockId()/normalizeSystrayOwner().
 
 #pragma once
 
@@ -120,9 +122,15 @@ public:
     // file on disk so it can be recreated later.
     void removeDock(const QString &dockId);
 
-    // The dockId that hosts systray and defaults relanzadores to shown: the
-    // lowest-slot enabled dock on the primary monitor.
+    // The dockId that defaults relanzadores to shown: the lowest-slot enabled
+    // dock on the primary monitor.
     QString primaryDockId() const;
+
+    // The dock that currently claims the system tray, or empty when no dock
+    // does. Any dock can host it, but only one at a time (the settings dialog
+    // disables the checkbox elsewhere), so this is the single owner. Not const:
+    // it reads the other docks' configs through configFor().
+    QString systrayDockId();
 
     // The item model of a shown dock, or nullptr when that dock isn't running.
     // The settings dialog reads the app icon names out of it to tint its tabs.
@@ -151,6 +159,9 @@ private:
     };
 
     void migrateFirstRun();
+    // Drops every systray claim but one (see the .cpp): configs written while
+    // the tray was primary-only may flag several docks.
+    void normalizeSystrayOwner();
     void sync();
     Instance buildInstance(const QString &dockId, bool primary);
     void teardownInstance(Instance &inst);

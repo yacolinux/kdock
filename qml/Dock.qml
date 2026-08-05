@@ -19,7 +19,9 @@ Item {
     // fitLabelsDropped is the auto-shrink's last resort (see below): the names
     // go away, config is left alone, and the mode comes back on its own.
     readonly property int labelMode: fitLabelsDropped ? 0 : config.iconLabelMode
-    readonly property bool labelVisible: labelMode !== 0
+    // Also false with the apps block off: no app name is drawn, so none of them
+    // must reach measureLabels() and reserve room in the dock's thickness.
+    readonly property bool labelVisible: labelMode !== 0 && config.showAppIcons
     readonly property bool labelShowsIcon: labelMode !== 3
     readonly property int labelGap: config.iconLabelGap
     // Label metrics follow the auto-shrink factor: leaving the name box at its
@@ -440,7 +442,7 @@ Item {
         switch (token) {
         case "menu": return config.showMenuButton
         case "tilemenu": return config.showTileMenu && tileLauncher
-        case "apps": return true
+        case "apps": return config.showAppIcons
         case "clipboard": return config.showClipboard && clipboardHistory
         case "disks": return config.showDisks && disks && disks.available
         case "network": return config.showNetwork && network && network.available
@@ -476,7 +478,11 @@ Item {
         switch (token) {
         case "menu": return menuComp
         case "tilemenu": return tileMenuComp
-        case "apps": return appsComp
+        // Null, not just an invisible section: the section Loader instantiates
+        // its component even when the section is hidden, and the apps block is
+        // a Repeater over every launcher and window — it would keep rebuilding
+        // itself behind a dock that draws none of it.
+        case "apps": return config.showAppIcons ? appsComp : null
         case "clipboard": return clipboardComp
         case "disks": return disksComp
         case "network": return networkComp
@@ -942,10 +948,22 @@ Item {
                             ModeMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
+                            MenuSeparator {}
+                            IconMenuItem {
+                                text: qsTr("Nombre…")
+                                iconName: "edit-rename"
+                                onTriggered: dockWindow.openSettingsToDock()
+                            }
                             IconMenuItem {
                                 text: qsTr("Dock settings…")
                                 iconName: "configure"
                                 onTriggered: dockWindow.openSettings()
+                            }
+                            MenuSeparator {}
+                            IconMenuItem {
+                                text: qsTr("Borrar este Dock")
+                                iconName: "edit-delete"
+                                onTriggered: dockWindow.deleteDock()
                             }
                         }
                     }
@@ -1369,6 +1387,11 @@ Item {
                                 title: qsTr("Dock")
                                 popupType: Popup.Window
                                 IconMenuItem {
+                                    text: qsTr("Nombre…")
+                                    iconName: "edit-rename"
+                                    onTriggered: dockWindow.openSettingsToDock()
+                                }
+                                IconMenuItem {
                                     text: qsTr("Dock settings…")
                                     iconName: "configure"
                                     onTriggered: dockWindow.openSettings()
@@ -1383,6 +1406,12 @@ Item {
                                     text: qsTr("Salir")
                                     iconName: "application-exit"
                                     onTriggered: dockWindow.quit()
+                                }
+                                MenuSeparator {}
+                                IconMenuItem {
+                                    text: qsTr("Borrar este Dock")
+                                    iconName: "edit-delete"
+                                    onTriggered: dockWindow.deleteDock()
                                 }
                             }
                         }
@@ -1898,6 +1927,10 @@ Item {
             Menu {
                 id: clipMenu
                 popupType: Popup.Window
+                // Mixing checkable items (which reserve a tick column) with
+                // IconMenuItem makes the implicit width come out short and the
+                // last letter is clipped by the popup border.
+                width: Math.max(implicitWidth + 16, 220)
                 IconMenuItem {
                     text: qsTr("Borrar Historial")
                     iconName: "edit-clear-history"
@@ -1912,6 +1945,13 @@ Item {
                     text: qsTr("Guardar historial")
                     iconName: "document-save"
                     onTriggered: clipboardHistory.saveHistoryDialog()
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: qsTr("Guardar imágenes")
+                    checkable: true
+                    checked: clipboardHistory.captureImages
+                    onTriggered: clipboardHistory.captureImages = checked
                 }
             }
 
@@ -2034,11 +2074,40 @@ Item {
                 id: netMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                acceptedButtons: Qt.LeftButton
-                onClicked: {
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    // The section menu never reaches a block widget (secMouse is
+                    // disabled for those), so the right click is this widget's
+                    // own menu — same arrangement as the clipboard.
+                    if (mouse.button === Qt.RightButton) { netMenu.popup(); return }
                     if (netPopup.visible) { netPopup.close(); return }
                     if (Date.now() - netPopup.closedAt < 300) return
                     netPopup.open()
+                }
+            }
+
+            Menu {
+                id: netMenu
+                popupType: Popup.Window
+                width: Math.max(implicitWidth + 16, 220)
+                IconMenuItem {
+                    text: qsTr("Configurar redes…")
+                    iconName: "configure"
+                    onTriggered: dockWindow.openNetworkSettings()
+                }
+                IconMenuItem {
+                    text: qsTr("Buscar redes Wi-Fi")
+                    iconName: "view-refresh"
+                    enabled: network && network.wifiAvailable && network.wifiEnabled
+                    onTriggered: network.requestScan()
+                }
+                MenuSeparator {}
+                MenuItem {
+                    text: qsTr("Wi-Fi")
+                    checkable: true
+                    enabled: network && network.wifiAvailable
+                    checked: network ? network.wifiEnabled : false
+                    onTriggered: network.setWifiEnabled(checked)
                 }
             }
 

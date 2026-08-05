@@ -47,6 +47,11 @@ public:
     // Switch the dialog to the Audio tab (used by the volume widget's
     // right-click). No-op when the tab isn't present.
     void showAudioTab();
+    // Same for the Redes tab (network widget's right-click).
+    void showNetworkTab();
+    // Same for the Monitores tab, also selecting the row of the given dockId
+    // (used by the dock's right-click → Dock → Nombre).
+    void showMonitorsTab(const QString &dockId);
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -57,6 +62,9 @@ private:
     QWidget *createMenuTab();
     QWidget *createTileMenuGroup(QWidget *parent);
     QWidget *createAudioTab();
+    // Devices + connections editor for NetworkManager. Not per-dock: the
+    // machine's networks look the same whichever dock is selected.
+    QWidget *createNetworkTab();
     // Repopulate the Audio tab's device rows from the current AudioControl state.
     void rebuildAudioTab();
     // Queue a rebuild for the next event-loop turn (coalesced). Never call
@@ -96,6 +104,9 @@ private:
     int appSeparatorPos(int which) const;
     void setAppSeparatorPos(int which, int pos);
     static QString sectionLabel(const QString &token);
+    // How a dock is named to the user: "<monitor> — Dock <n>". Shared by the
+    // Monitors tab list and the systray "already taken by" note.
+    static QString dockLabel(const QString &dockId);
     void reloadPinnedList();
     void savePinnedList();
     void addPinnedApp();
@@ -151,6 +162,8 @@ private:
     // AudioControl::changed(); m_audioSliderDown suppresses the rebuild while a
     // volume slider is being dragged so the handle doesn't jump.
     int m_audioTabIndex = -1;
+    int m_networkTabIndex = -1;
+    int m_monitorsTabIndex = -1;
     QGroupBox *m_audioOutGroup = nullptr;
     QGroupBox *m_audioInGroup = nullptr;
     QGroupBox *m_audioAppGroup = nullptr;

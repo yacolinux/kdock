@@ -257,11 +257,18 @@ veces, una con `app.setPalette()` claro y otra oscuro: el diálogo hereda el esq
 Encontró el bug de que las solapas coloreadas se pasaban de los 1000 px del diálogo (las
 diez ya piden ~940) y la barra caía en modo flechas de scroll.
 
-**La barra de solapas se desborda cada vez que agregás una.** Volvió a pasar con la solapa
-*DarkMode* (2026-08-02): once títulos piden **1086 px** y el `QTabBar` cae en modo flechas
-**sin avisar**, escondiendo las últimas — el diálogo pasó a 1120 px. Antes de agregar una
-solapa, medí: un `main` de diez líneas que arma un `ColoredTabWidget` con los títulos e
-imprime `coloredTabBar()->sizeHint().width()` (no hace falta ni GUI ni captura).
+**La barra de solapas ya no se desborda por el ancho: está en columna** (`QTabWidget::West`,
+puesto en el ctor de `ColoredTabWidget`, 2026-08-04). Antes cada solapa nueva costaba ~90 px
+de ancho y a la undécima el `QTabBar` caía en modo flechas **sin avisar** (1086 px de títulos
+contra 1000 de diálogo); ahora cuesta ~30 px de alto y entran ~28. Dos cosas que hay que
+saber igual:
+
+- **Si tocás el pintado, acordate de que en vertical el label lo dibujamos nosotros.** Qt rota
+  la etiqueta 90° para West/East, así que volver a `CE_TabBarTabLabel` reintroduce el
+  desborde, solo que en el otro eje.
+- **Antes de agregar una solapa, seguí midiendo**, ahora el alto: un `main` de diez líneas que
+  arma un `ColoredTabWidget` con los títulos e imprime `coloredTabBar()->sizeHint()` (no hace
+  falta ni GUI ni captura). Con doce títulos da 142×480.
 
 ### Sonda del diálogo *real* (linkeando los `.o` del proyecto)
 
@@ -311,6 +318,35 @@ una lista que se reconstruye con cada edición **pierde la selección**, así qu
 en *Bajar* no hacía nada (2026-08-02). Dos apuntes: `findChildren` devuelve en orden de
 creación, así que dos botones con el mismo texto se distinguen por índice sin tocar el código
 de producción; y no hace falta `app.exec()` si no vas a capturar.
+
+### Arnés del portapapeles en la sesión real (klipper como control)
+
+Bajo Xvfb **no hay data-control** (es X11), así que el backend nuevo del portapapeles solo se
+puede probar en la sesión Wayland de verdad. Una sonda que linkee `waylandclipboard.cpp` (o
+`clipboardhistory.cpp`) e imprima lo que captura alcanza, y **Klipper sirve de control desde la
+CLI** en las dos direcciones:
+
+```bash
+qdbus6 org.kde.klipper /klipper setClipboardContents "kdock prueba"   # -> la sonda debe verlo
+qdbus6 org.kde.klipper /klipper getClipboardContents                  # tras nuestro setText()
+spectacle-custom -b -n -c                                             # copia una imagen
+```
+
+Lo que prueba de verdad: la sonda **no abre ninguna ventana ni toma foco**, así que si ve el
+texto, la captura en segundo plano funciona (que es justo lo que no andaba). Con
+`XDG_DATA_HOME` a un directorio descartable se ve además el JSON y los PNG que quedan en
+disco. Para el caso de las contraseñas, una segunda sonda con `QMimeData` que traiga
+`x-kde-passwordManagerHint` confirma que **no** se guarda.
+
+### Manejar el diálogo desde código encuentra lo que la captura no muestra
+
+Vale para cualquier solapa, y para la de Redes fue decisivo: una sonda que linkea los `.o`,
+instancia el widget de la solapa, lo maneja con `findChildren` + `->click()` en el orden que
+haría el usuario y después **verifica contra el sistema** (acá, releyendo la conexión de
+NetworkManager con un `NetworkSettings` aparte). Dieciocho comprobaciones corren en dos
+segundos bajo Xvfb, y encontró dos bugs que ninguna captura mostraba: el botón *Aplicar* que
+no se armaba al editar la IP, y un `findChildren` de la propia sonda que agarraba el botón
+equivocado (dos "Agregar" en la misma ventana — desambiguá por página, no por índice).
 
 ### Arnés de un componente QML suelto (popups del dock)
 
@@ -364,6 +400,10 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `PreviewConfig::stripThicknessPx()` (en px, no en %, para no depender del tamaño de
   pantalla), acotada por `PreviewConfig::kMinThickness`/`kMaxThickness` — **las mismas
   constantes las usa el spinbox del panel**, no repitas el rango a mano.
+  Y desde 2026-08-04 la fórmula tiene **una rama**: con `showAppIcons=false` el
+  `appCellThickness()` sale del `qMax`. Si agregás algo que dependa de las apps, acordate de
+  las dos ramas — y de que `root.labelVisible` en `Dock.qml` es lo que corta la medición de
+  los nombres de apps (si no, el dock reserva ancho para nombres que no dibuja).
 - **Una entrada de esa fórmula se mide en QML**: `config.effectiveLabelWidth`, el ancho del
   nombre más largo que el dock dibuja (`iconLabelWidth` es solo el tope). `Dock.qml` lo mide
   off-screen y lo reporta con `config.setMeasuredLabelWidth()`; el detalle está en
@@ -428,6 +468,19 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   además un **segundo** `qt_add_resources` con `BASE ".."` que mete `qml/IconMenuItem.qml` de
   kdock **verbatim**: con ese `BASE` cae en `:/qml/`, o sea el mismo directorio del recurso que
   los `.qml` del menú, y se usa como tipo vecino sin ningún import.
+- **Un componente de sección se instancia aunque la sección esté invisible.** El `Loader` del
+  delegate de `sectionRepeater` no mira `sec.visible`: `visible: false` solo deja de
+  *dibujarlo*. Para una sección cara (el bloque `apps`, que es un `Repeater` sobre todos los
+  lanzadores y ventanas) hay que devolver **`null` desde `componentFor()`**, o sigue vivo y
+  actualizándose detrás de un dock que no lo muestra (así se apaga `showAppIcons`).
+- **La systray puede vivir en cualquier dock, pero en uno solo.** Cada dock tiene su
+  `SystrayModel` (una vista filtrada sobre el `SystrayHost` del proceso) y el gate es su
+  `config.showSystray`; la exclusividad es **política de la UI**, no una traba técnica. Dos
+  cosas que muerden si tocás esto: al arrancar, `DockManager::normalizeSystrayOwner()` limpia
+  las marcas de más —las configs viejas traen `showSystray=true` en varios docks porque solo el
+  primario la dibujaba— y sin eso ves la bandeja duplicada; y la exclusividad se prueba con la
+  sonda que maneja el diálogo desde código (dos docks *known* sobre una pantalla que no existe
+  → `DockManager` no crea ninguna ventana y la sonda no necesita ningún backend real).
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de
@@ -485,6 +538,48 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `QIcon::themeSearchPaths()` en solo `:/icons` (ningún ícono resuelve y todo sale nulo —
   usá `xcb` bajo Xvfb), y la config del usuario apunta a pantallas reales, así que hay que
   copiar `kdock-<screen>.conf` a `kdock-screen.conf` y poner `enabledScreens=screen`.
+- **El portapapeles de Wayland es `ext-data-control-v1`, no `wlr-data-control`, y no pide
+  privilegio.** Este KWin **no publica** el global `zwlr_data_control_manager_v1` (renombró su
+  implementación; `wayland-info | grep data_control` lo confirma en dos segundos), y
+  `ext_data_control_manager_v1` **no está** en el `interfacesBlackList` de
+  `kwin/src/wayland_server.cpp` — o sea que, a diferencia de `org_kde_plasma_window_management`,
+  no hay que tocar el `.desktop` ni refrescar ksycoca. Si te ponés a "arreglar" la
+  autorización, estás persiguiendo un problema que no existe.
+- **Cualquier transferencia del portapapeles va asíncrona o te cuelga el dock.** Los datos
+  viajan por un pipe contra otro proceso: un `read()` bloqueante espera a una app que puede no
+  escribir nunca, y un `write()` bloqueante se traba en cuanto el payload pasa los 64 KB del
+  buffer del pipe (una captura de pantalla son megabytes). Va con `QSocketNotifier` +
+  watchdog, y **`wl_display_flush()` después de `receive()`**: sin el flush el pedido no sale
+  y el otro lado nunca escribe. Además `SIGPIPE` a `SIG_IGN`, porque el lector se puede ir a
+  la mitad. Ojo también con leerse a uno mismo: el compositor te manda el evento `selection`
+  **también cuando el dueño sos vos**.
+- **Para escribir settings de NetworkManager hace falta `qDBusRegisterMetaType`.** Leer anda
+  con los `operator>>` de `QDBusArgument`, así que la falta no se nota… hasta el `Update()` o
+  el `AddConnection()`, que salen con la firma equivocada. Son dos: `NMSettingsMap`
+  (`a{sa{sv}}`) y `QList<QVariantMap>` (`aa{sv}`, para `address-data`/`route-data`). Están en
+  `NM::registerTypes()` (`src/nmdbus.cpp`); llamalo antes de tocar nada.
+- **NM normaliza lo que le mandás, y hay que releerlo para saber qué guardó.** El caso que
+  muerde: con `never-default=true` **borra la puerta de enlace**. Por eso el editor relee la
+  conexión con `GetSettings` después de aplicar en vez de confiar en el formulario. Y las
+  claves modernas (`address-data`, `route-data`, `dns-data`) **sí** se pueden escribir en NM
+  1.54 — `dns-data` es `as`, así que no hace falta la conversión a uint32 en orden de red;
+  mandá las nuevas y **borrá** las legacy (`addresses`/`routes`/`dns`) para no dejar dos
+  fuentes de verdad.
+- **Una prueba del editor de redes escribe en el NetworkManager de verdad.** Como el
+  `BrightnessControl`, no hay caja de arena. Probá siempre sobre conexiones propias, sobre un
+  dispositivo sin cable (acá `enp0s31f6`), y borralas al terminar. Y ojo con el arnés de
+  `xdotool` sobre la lista de redes: un clic en una red **abierta** se conecta sin preguntar y
+  te deja una conexión guardada nueva (me pasó, 2026-08-04). Para probar la fila de
+  contraseña, seteá `pendingSsid` desde el QML del arnés en vez de tirar clics a ciegas.
+- **`QWidget` que aún no tiene padre no lo ve `findChildren()`.** Las páginas del editor de
+  conexiones se crean sueltas y solo entran al árbol cuando `addTab()` las adopta, así que el
+  barrido del constructor que conecta "cualquier edición arma el botón Aplicar" **no las
+  agarraba**: editar una dirección IP dejaba *Aplicar* gris y no había forma de guardar. Compila,
+  arranca y parece andar. Lo agarró en la primera corrida el test que maneja el diálogo desde
+  código (`findChildren` + `->click()`), no la captura.
+- **Nunca `setVisible(true)` sobre una página adentro de un `QTabWidget`.** La pinta encima de
+  la actual: dos formularios superpuestos letra por letra, que se lee como un bug de fuente y
+  no de layout (2026-08-04).
 - **El arnés de Xvfb tiene efectos reales sobre la máquina.** No es una caja de arena: el
   `BrightnessControl` reaplica al arrancar el `Brightness/lastBrightness` de la config que le
   des (`brightnessctl set`), así que correr el arnés **te cambia el brillo de la pantalla** al

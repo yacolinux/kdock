@@ -36,6 +36,7 @@
 #include <QGuiApplication>
 #include <QProcess>
 #include <QMargins>
+#include <QMessageBox>
 #include <QScreen>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -335,10 +336,43 @@ void DockWindow::openSettings()
     m_dialog->activateWindow();
 }
 
+void DockWindow::openSettingsToDock()
+{
+    openSettings();
+    if (m_dialog)
+        m_dialog->showMonitorsTab(m_config->dockId());
+}
+
+void DockWindow::deleteDock()
+{
+    if (!m_manager || m_config->dockId().isEmpty())
+        return;
+    const QString dockId = m_config->dockId();
+    const auto answer = QMessageBox::question(
+        nullptr, tr("Borrar este Dock"),
+        tr("¿Eliminar este dock?\n\nSe dejará de mostrar y su archivo de "
+           "configuración se borrará."),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes)
+        return;
+    // Defer the removal: removeDock() destroys this window synchronously, and
+    // we are inside the QML handler that invoked us.
+    DockManager *manager = m_manager;
+    QTimer::singleShot(0, manager, [manager, dockId] {
+        manager->removeDock(dockId);
+    });
+}
+
 void DockWindow::openAudioSettings()
 {
     openSettings();
     m_dialog->showAudioTab();
+}
+
+void DockWindow::openNetworkSettings()
+{
+    openSettings();
+    m_dialog->showNetworkTab();
 }
 
 void DockWindow::quit()

@@ -70,7 +70,11 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Íconos y colores del sistema**: `QIcon::fromTheme` + esquema de color leído de
   `~/.config/kdeglobals` con recarga en vivo. El fondo de las apps corriendo se tiñe con el
   color dominante del propio ícono.
-- **Bandeja del sistema** (StatusNotifierItem + DBusMenu, implementados acá).
+- **Bandeja del sistema** (StatusNotifierItem + DBusMenu, implementados acá). Va en el dock
+  que elijas —cualquiera, no solo el principal— aunque en uno solo a la vez.
+- **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
+  un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
+  de lo que le queda.
 - **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un
   color distinto para ubicarse de un vistazo (es lo que se ve en la captura de arriba).
 - **Menú de aplicaciones** estilo Kickoff: categorías XDG, búsqueda, favoritos y pie de
@@ -96,8 +100,8 @@ Frameworks:
 | Brillo | Brillo de pantalla | `brightnessctl` |
 | Batería | Carga, estado y perfil de energía | UPower + power-profiles-daemon |
 | Discos | Unidades extraíbles: montar, desmontar, expulsar, abrir | UDisks2 |
-| Red | Conexiones guardadas y switch de Wi-Fi | NetworkManager |
-| Portapapeles | Historial de texto con búsqueda, persistente | `QClipboard` |
+| Red | Redes Wi-Fi cercanas (unirse con contraseña), conexiones guardadas, switch de Wi-Fi; clic derecho abre el editor de redes | NetworkManager |
+| Portapapeles | Historial de texto e imágenes con búsqueda, persistente, capturado en segundo plano | `ext-data-control-v1` |
 | Reloj | 12/24 h, fecha, segundos (dos variantes) | — |
 | Overview | Abre el efecto Overview de KWin | kglobalaccel |
 | Mover ventana | Al siguiente escritorio virtual, o al siguiente monitor (clic derecho: al anterior) | kglobalaccel |
@@ -295,11 +299,9 @@ La configuración vive en el directorio de datos XDG:
 
 - **Wayland es el objetivo.** En X11 el binario corre como ventana normal, sin struts ni
   reserva de espacio.
-- **Wi-Fi**: solo se activan conexiones ya guardadas. Unirse a una red nueva escribiendo la
-  contraseña necesita un agente de secretos de NetworkManager, que no está implementado.
-- **Portapapeles**: en Wayland una app solo puede leer el portapapeles mientras tiene el foco
-  del teclado, y la superficie del dock es inerte al teclado. La solución correcta es
-  `wlr-data-control-unstable-v1`; todavía no está.
+- **Wi-Fi Enterprise (802.1X/EAP)**: el editor de redes cubre WPA/WPA2/WPA3-Personal, redes
+  abiertas y WEP. Una conexión con 802.1X se muestra pero no se puede guardar desde acá.
+- **Portapapeles**: guarda texto e imágenes. Otros formatos (archivos, HTML enriquecido) no.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que
   layer-shell-qt): una versión mayor nueva de Qt puede pedir ajustes.
 

@@ -100,8 +100,9 @@ Popup {
                     id: row
                     required property var modelData
                     width: ListView.view.width
-                    // 10 rows visible in the default popup height.
-                    height: 40
+                    // 10 text rows visible in the default popup height; an
+                    // image row is taller so the thumbnail is readable.
+                    height: row.modelData.isImage ? 68 : 40
 
                     background: Rectangle {
                         radius: 4
@@ -110,17 +111,40 @@ Popup {
                                : "transparent"
                     }
 
-                    contentItem: Text {
-                        text: row.modelData.preview
-                        color: theme.foreground
-                        elide: Text.ElideRight
-                        verticalAlignment: Text.AlignVCenter
+                    contentItem: Row {
+                        spacing: 8
                         leftPadding: 8
                         rightPadding: 8
+
+                        Image {
+                            visible: row.modelData.isImage
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: visible ? 96 : 0
+                            height: 60
+                            fillMode: Image.PreserveAspectFit
+                            source: row.modelData.isImage ? row.modelData.imageUrl : ""
+                            // The stored PNG can be a 4K screenshot; decode it
+                            // at thumbnail size instead of at full resolution.
+                            sourceSize: Qt.size(96 * Screen.devicePixelRatio,
+                                                60 * Screen.devicePixelRatio)
+                            asynchronous: true
+                        }
+
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: row.width - 16 - (row.modelData.isImage ? 104 : 0)
+                            text: row.modelData.preview
+                            color: theme.foreground
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
 
                     onClicked: {
-                        clipboardHistory.setClipboard(row.modelData.text)
+                        if (row.modelData.isImage)
+                            clipboardHistory.setClipboardImage(row.modelData.file)
+                        else
+                            clipboardHistory.setClipboard(row.modelData.text)
                         popup.close()
                     }
                 }

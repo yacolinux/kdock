@@ -67,9 +67,17 @@ public:
     void setPrimary(bool primary);
 
     Q_INVOKABLE void openSettings();
+    // Open the settings dialog on the Monitores tab, selecting this dock's
+    // row (right-click → Dock → Nombre).
+    Q_INVOKABLE void openSettingsToDock();
+    // Ask for confirmation and, if accepted, remove this dock entirely
+    // (right-click → Dock → Borrar este Dock).
+    Q_INVOKABLE void deleteDock();
     // Open the settings dialog directly on the Audio tab (volume widget
     // right-click).
     Q_INVOKABLE void openAudioSettings();
+    // Same, on the Redes tab (network widget right-click).
+    Q_INVOKABLE void openNetworkSettings();
     Q_INVOKABLE void quit();
     // Relaunch kdock with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restart();

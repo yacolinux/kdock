@@ -1,6 +1,7 @@
 #include "settingsdialog.h"
 
 #include "audiocontrol.h"
+#include "networksettingswidget.h"
 #include "appearancecontrol.h"
 #include "coloredtabbar.h"
 #include "desktopentry.h"
@@ -45,6 +46,7 @@
 #include <QRadioButton>
 #include <QScreen>
 #include <QScrollArea>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -135,10 +137,11 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
 
     // Keep the dialog within the screen so the bottom buttons are always visible
     // (tabs scroll internally for overflow).
-    // The width is what the colored tab bar needs: at 1000 px the eleven tabs
-    // (1086 px of titles, measured) no longer fit and the bar silently drops
-    // into scroll-arrow mode, hiding the last ones. Clamped to the screen the
-    // same way the height is.
+    // The width no longer follows the tab bar: since the tabs moved to a column
+    // down the left side (ColoredTabWidget's ctor) they cost height, not width.
+    // What is left is content — the Network tab's list + editor splitter is the
+    // widest of them — minus the ~160 px the column takes. Clamped to the
+    // screen the same way the height is.
     int w = 1120;
     int h = 900;
     if (QScreen *s = QGuiApplication::primaryScreen()) {
@@ -182,17 +185,24 @@ void SettingsDialog::buildTabs()
     if (m_scriptRunners)
         addTab(createScriptRunnersTab(), tr("Script Runner"));
     addTab(createBackupTab(), tr("Backup"));
-    if (m_manager)
+    m_monitorsTabIndex = -1;
+    if (m_manager) {
         addTab(createMonitorsTab(), tr("Monitores"));
+        m_monitorsTabIndex = m_tabWidget->count() - 1;
+    }
     // Not a per-dock setting: the previews are their own process with their own
     // config, so this tab looks the same whichever dock is selected.
     if (PreviewsLauncher::available())
         addTab(createPreviewsTab(), tr("Previews"));
-    // Audio tab last, to the right of Monitores.
+    // Audio and Redes last: neither is per-dock, and both are what the volume
+    // and network widgets' right-click jump to.
     if (m_audio && m_audio->available()) {
         addTab(createAudioTab(), tr("Audio"));
         m_audioTabIndex = m_tabWidget->count() - 1;
     }
+    m_networkTabIndex = -1;
+    addTab(createNetworkTab(), tr("Redes"));
+    m_networkTabIndex = m_tabWidget->count() - 1;
     applyTabColors();
 }
 
@@ -323,6 +333,21 @@ QWidget *SettingsDialog::createGeneralTab()
     compact->setChecked(m_config->compact());
     connect(compact, &QCheckBox::toggled, m_config, &DockConfig::setCompact);
     form->addRow(tr("Compact:"), compact);
+
+    auto *showAppIcons = new QCheckBox(tr("Mostrar los íconos de aplicaciones"), tab);
+    showAppIcons->setChecked(m_config->showAppIcons());
+    showAppIcons->setToolTip(tr("Desmarcá para usar este dock como una barra de solo "
+                                "widgets: se ocultan los lanzadores anclados y los botones "
+                                "de las ventanas abiertas, y el dock adelgaza al tamaño de "
+                                "sus widgets. La sección \"Aplicaciones\" se queda en la "
+                                "solapa Diseño, en su lugar."));
+    connect(showAppIcons, &QCheckBox::toggled, m_config, &DockConfig::setShowAppIcons);
+    // The Layout tab marks the apps row as hidden, so it has to follow.
+    connect(m_config, &DockConfig::showAppIconsChanged, this, [this] {
+        if (m_layoutList)
+            reloadLayoutList();
+    });
+    form->addRow(tr("Íconos de apps:"), showAppIcons);
 
     m_alignment = new QComboBox(tab);
     m_alignment->addItems({tr("Start (left/top)"), tr("Center"), tr("End (right/bottom)")});
@@ -915,10 +940,27 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showDarkMode, &QCheckBox::toggled, m_config, &DockConfig::setShowDarkMode);
     form->addRow(tr("Modo oscuro:"), showDarkMode);
 
-    auto *showSystray = new QCheckBox(tr("Show system tray (primary dock only)"), tab);
+    // The tray can live in any dock, but in only one at a time: several docks
+    // drawing the same StatusNotifierItems would duplicate every icon and open
+    // two menus for one click. While another dock holds it, the checkbox is
+    // disabled and says where to go turn it off (the state is recomputed by
+    // buildTabs() whenever the edited dock changes).
+    auto *showSystray = new QCheckBox(tr("Mostrar la bandeja del sistema"), tab);
     showSystray->setChecked(m_config->showSystray());
+    const QString systrayOwner = m_manager ? m_manager->systrayDockId() : QString();
+    const bool takenElsewhere = !systrayOwner.isEmpty() && systrayOwner != m_dockId;
+    showSystray->setEnabled(!takenElsewhere);
     connect(showSystray, &QCheckBox::toggled, m_config, &DockConfig::setShowSystray);
     form->addRow(tr("System tray:"), showSystray);
+
+    if (takenElsewhere) {
+        auto *note = new QLabel(tr("La bandeja ya está activa en \"%1\". Desmarcala ahí "
+                                   "para poder usarla acá.").arg(dockLabel(systrayOwner)),
+                                tab);
+        note->setWordWrap(true);
+        note->setStyleSheet(QStringLiteral("color: gray; font-style: italic;"));
+        form->addRow(QString(), note);
+    }
 
     auto *systrayScale = new QSpinBox(tab);
     systrayScale->setRange(20, 100);
@@ -1464,11 +1506,57 @@ void SettingsDialog::showAudioTab()
         m_tabWidget->setCurrentIndex(m_audioTabIndex);
 }
 
+void SettingsDialog::showNetworkTab()
+{
+    if (m_networkTabIndex >= 0 && m_networkTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_networkTabIndex);
+}
+
+void SettingsDialog::showMonitorsTab(const QString &dockId)
+{
+    // Switch to the Monitores tab and select the requested dock row, so the
+    // user lands on the exact line they asked for (right-click → Dock → Nombre).
+    if (m_monitorsTabIndex >= 0 && m_monitorsTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_monitorsTabIndex);
+    if (!m_docksList || !m_manager)
+        return;
+    for (int i = 0; i < m_docksList->count(); ++i) {
+        if (m_docksList->item(i)->data(Qt::UserRole).toString() == dockId) {
+            m_docksList->setCurrentRow(i);
+            break;
+        }
+    }
+}
+
+// Devices and saved connections (NetworkManager). All the work is in
+// NetworkSettingsWidget; this only hands it a tab.
+QWidget *SettingsDialog::createNetworkTab()
+{
+    return new NetworkSettingsWidget;
+}
+
 QString SettingsDialog::sectionLabel(const QString &token)
 {
     // Single source of truth for the section names: DockConfig also draws them
     // in the dock, and the Layout tab can rename them (see widgetName()).
     return DockConfig::defaultWidgetLabel(token);
+}
+
+QString SettingsDialog::dockLabel(const QString &dockId)
+{
+    // The alias, when set, replaces the default "<screen> — Dock <n>" name.
+    QString name;
+    {
+        QSettings s(DockConfig::instanceSettingsFilePath(dockId), QSettings::IniFormat);
+        const QString alias = s.value(QStringLiteral("alias")).toString().trimmed();
+        if (!alias.isEmpty())
+            name = alias;
+    }
+    if (name.isEmpty())
+        name = tr("%1 — Dock %2")
+            .arg(DockConfig::screenOfDockId(dockId))
+            .arg(DockConfig::slotOfDockId(dockId) + 1);
+    return name;
 }
 
 QWidget *SettingsDialog::createDarkModeTab()
@@ -2060,6 +2148,10 @@ void SettingsDialog::reloadLayoutList()
             shown = sectionLabel(token);
         else
             shown = tr("%1 (%2)").arg(name, sectionLabel(token));
+        // The apps block keeps its place in the order while switched off, so
+        // the row has to say it is not being drawn.
+        if (token == QLatin1String("apps") && !m_config->showAppIcons())
+            shown += tr("  (oculto)");
         auto *item = new QListWidgetItem(
             QIcon::fromTheme(!separator ? QStringLiteral("view-list-symbolic")
                              : spring   ? QStringLiteral("distribute-horizontal-margin")
@@ -2791,7 +2883,7 @@ QWidget *SettingsDialog::createMonitorsTab()
     auto *layout = new QVBoxLayout(tab);
 
     // Top: every configured dock, plus a "remove from list" button.
-    layout->addWidget(new QLabel(tr("Docks configurados:"), tab));
+    layout->addWidget(new QLabel(tr("Docks (Doble-click renombra):"), tab));
     m_docksList = new QListWidget(tab);
     layout->addWidget(m_docksList);
 
@@ -2834,6 +2926,28 @@ QWidget *SettingsDialog::createMonitorsTab()
         reloadMonitorsForSelectedDock();
     });
 
+    // Double-click a dock row to give it (or remove its) alias. The dock keeps
+    // its auto-name Dock 1/2/3 underneath; the alias is only a display name.
+    connect(m_docksList, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *item) {
+        if (!item || !m_manager)
+            return;
+        const QString dockId = item->data(Qt::UserRole).toString();
+        if (dockId.isEmpty())
+            return;
+        DockConfig *cfg = m_manager->configFor(dockId);
+        const QString current = cfg->alias();
+        bool ok = false;
+        const QString text = QInputDialog::getText(
+            this, tr("Nombre del dock"),
+            tr("Alias para \"%1\" (vacío = volver a \"Dock %2\"):")
+                .arg(dockLabel(dockId))
+                .arg(DockConfig::slotOfDockId(dockId) + 1),
+            QLineEdit::Normal, current, &ok);
+        if (ok)
+            cfg->setAlias(text);
+        reloadDocksList();
+    });
+
     connect(m_monitorsList, &QListWidget::itemChanged, this, [this](QListWidgetItem *item) {
         if (m_selectedTabDockId.isEmpty() || !m_manager)
             return;
@@ -2866,8 +2980,12 @@ QWidget *SettingsDialog::createMonitorsTab()
             return;
         if (QMessageBox::question(
                 this, tr("Borrar dock"),
-                tr("¿Quitar el dock \"%1\" de la lista? Se dejará de mostrar; su "
-                   "configuración se conserva en disco.").arg(m_selectedTabDockId),
+                tr("¿Eliminar el dock \"%1\"?\n\nSe dejará de mostrar y su "
+                   "archivo de configuración se borrará "
+                   "(%2).").arg(m_selectedTabDockId,
+                                QFileInfo(DockConfig::instanceSettingsFilePath(
+                                              m_selectedTabDockId))
+                                    .fileName()),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
             return;
         m_manager->clearPreviews();
@@ -2895,12 +3013,28 @@ void SettingsDialog::reloadDocksList()
     const QString previous = m_selectedTabDockId;
     m_docksList->clear();
     int selectRow = -1;
+    const QString thisScreen = DockConfig::screenOfDockId(m_dockId);
     const QStringList docks = m_manager->configuredDocks();
     for (int i = 0; i < docks.size(); ++i) {
         const QString &id = docks.at(i);
-        const QString screen = DockConfig::screenOfDockId(id);
-        const int slot = DockConfig::slotOfDockId(id);
-        QString label = tr("%1 — Dock %2").arg(screen).arg(slot + 1);
+        QString label = dockLabel(id);
+
+        // Edge position, so the list tells where each dock lives without
+        // needing the preview geometry.
+        const DockConfig *cfg = m_manager->configFor(id);
+        switch (cfg->edge()) {
+        case DockConfig::Top:    label += tr(" [Arriba]"); break;
+        case DockConfig::Left:   label += tr(" [Izquierda]"); break;
+        case DockConfig::Right:  label += tr(" [Derecha]"); break;
+        case DockConfig::Bottom:
+        default:                 label += tr(" [Abajo]"); break;
+        }
+
+        // Mark the docks living on the monitor the dialog was opened from, so
+        // the row the user was on is easy to find again.
+        if (DockConfig::screenOfDockId(id) == thisScreen)
+            label += tr(" (ESTE MONITOR)");
+
         if (!m_manager->isDockEnabled(id))
             label += tr("  (oculto)");
         auto *item = new QListWidgetItem(label, m_docksList);

@@ -19,6 +19,7 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
     , m_shared(shared)
 {
     migrateFirstRun();
+    normalizeSystrayOwner();
 
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { sync(); });
@@ -39,6 +40,39 @@ QString DockManager::primaryDockId() const
     // dock on the primary monitor. Empty if the primary has no enabled dock.
     const QStringList docks = enabledDocksForScreen(primaryScreenName());
     return docks.isEmpty() ? QString() : docks.first();
+}
+
+QString DockManager::systrayDockId()
+{
+    // Only one dock draws the tray at a time (see normalizeSystrayOwner): the
+    // first configured dock that claims it wins, so the answer is stable even if
+    // a hand-edited config flags several.
+    for (const QString &id : configuredDocks())
+        if (configFor(id)->showSystray())
+            return id;
+    return QString();
+}
+
+void DockManager::normalizeSystrayOwner()
+{
+    // The tray used to be drawn by the primary dock only, so "showSystray" could
+    // be left true in several per-dock files without any visible effect. Now
+    // every dock honours its own flag, which would show the same items twice, so
+    // the extra claims are dropped once at startup. The primary dock keeps the
+    // tray when it has it, to preserve the pre-change appearance.
+    const QString preferred = primaryDockId();
+    QString owner = (!preferred.isEmpty() && configFor(preferred)->showSystray())
+                        ? preferred
+                        : QString();
+    for (const QString &id : configuredDocks()) {
+        DockConfig *cfg = configFor(id);
+        if (!cfg->showSystray())
+            continue;
+        if (owner.isEmpty())
+            owner = id;
+        else if (id != owner)
+            cfg->setShowSystray(false);
+    }
 }
 
 QStringList DockManager::connectedScreens() const
@@ -162,16 +196,24 @@ bool DockManager::previewDockOnScreen(const QString &srcDockId,
     }
     const QString dstDockId = DockConfig::makeDockId(targetScreen, slot);
 
-    // Faithful copy of the source dock's config into the destination's file,
-    // done before any DockConfig object exists for dstDockId (configFor caches
-    // by dockId). We only create the file if it is not already there; any
-    // pre-existing (kept-after-delete) file is reused untouched and never
-    // removed on cancel. The DockConfig ctor rebinds screenName on load.
-    const QString dstPath = DockConfig::instanceSettingsFilePath(dstDockId);
-    if (!m_configs.contains(dstDockId) && !QFileInfo::exists(dstPath)) {
-        QFile::copy(DockConfig::instanceSettingsFilePath(srcDockId), dstPath);
-        m_previewCreatedFile.insert(dstDockId);
+    // The destination slot is free (see firstFreeSlotWithPreviews): no live or
+    // configured dock and no pending preview sit on it, so anything already at
+    // its file path is a stale leftover from a deleted/disabled dock. Reusing
+    // that file would make the preview show the old config (or a default stub)
+    // instead of the source's — the "solo muestra el dock por default" bug.
+    // Always (re)write it from the source's *live* settings — not a raw file
+    // copy, which would miss settings a freshly enabled dock has not flushed to
+    // disk yet, and would drag the source's screenName along. The alias is
+    // skipped, so a copy starts unnamed (see copySettingsTo).
+    if (DockConfig *cfg = m_configs.take(dstDockId))
+        delete cfg; // defensive: a leaked config would be stale
+    if (!configFor(srcDockId)->copySettingsTo(dstDockId)) {
+        if (error)
+            *error = tr("No se pudo crear la copia de \"%1\" en %2.")
+                         .arg(srcDockId, targetScreen);
+        return false;
     }
+    m_previewCreatedFile.insert(dstDockId);
 
     m_previewSource.insert(dstDockId, srcDockId);
     // Show a real preview window only when the target screen is connected;
@@ -249,8 +291,23 @@ bool DockManager::hasPreviewsFor(const QString &srcDockId) const
 
 void DockManager::removeDock(const QString &dockId)
 {
+    // Tear down the live dock before touching its config file: the DockWindow
+    // holds a pointer to the cached DockConfig we are about to delete.
+    destroyInstance(dockId);
+    // Discard any pending previews that were sourced from this dock.
+    for (const QString &dst : m_previewSource.keys()) {
+        if (m_previewSource.value(dst) == dockId)
+            dropPreview(dst, /*deleteFileIfCreated=*/true);
+    }
     DockConfig::removeKnownDock(dockId);
     DockConfig::setDockEnabled(dockId, false);
+
+    // Delete the per-dock config file so re-enabling the same monitor+slot
+    // starts fresh instead of resurrecting the removed dock's settings, and
+    // drop the cached config object bound to the deleted file.
+    QFile::remove(DockConfig::instanceSettingsFilePath(dockId));
+    if (DockConfig *cfg = m_configs.take(dockId))
+        delete cfg;
     sync();
 }
 
@@ -326,8 +383,12 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     DockConfig *cfg = configFor(dockId);
 
     auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, this);
-    SystrayModel *systrayModel =
-        primary ? new SystrayModel(m_shared.systrayHost, cfg, this) : nullptr;
+    // Every dock gets its own view of the shared tray host: the model is a
+    // filtered list over SystrayHost::items(), so several are harmless. Which
+    // dock actually draws it is the per-dock "showSystray" flag, gated in QML —
+    // keeping it out of the instance role means toggling the tray never has to
+    // tear down and rebuild a dock window.
+    auto *systrayModel = new SystrayModel(m_shared.systrayHost, cfg, this);
 
     // Per-dock clocks, bound to this monitor's format settings.
     auto *clock = new ClockWidget(this);
@@ -350,7 +411,7 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     auto *window = new DockWindow(
         cfg, m_shared.theme, model, m_shared.apps, m_shared.volume, clock,
         clock2, m_shared.brightness, m_shared.battery, m_shared.overview, m_shared.desktopControl,
-        m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power, systrayModel, primary ? m_shared.systrayHost : nullptr,
+        m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power, systrayModel, m_shared.systrayHost,
         m_shared.relanzadores, m_shared.scriptRunners, m_shared.clipboardHistory,
         m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor);
     window->setManager(this);
