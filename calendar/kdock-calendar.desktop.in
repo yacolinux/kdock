@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=kdock-calendar
+GenericName=Calendar
+Comment=Calendario de mes estilo KDE, standalone
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock-calendar
+Icon=view-calendar
+Categories=Utility;
+NoDisplay=true
+# No X-KDE-Wayland-Interfaces / X-KDE-DBUS-Restricted-Interfaces here: this
+# binary asks the compositor for nothing privileged. The entry exists so the
+# window carries a name and an icon in the task switcher, and so a KWin rule
+# has an app id to match.

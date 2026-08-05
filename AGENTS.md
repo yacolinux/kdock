@@ -333,6 +333,9 @@ protocols/
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.
 - **Font size (both clocks)**: `config.clockFontSize` (px, `0` = automatic → the historic factors `iconSize*0.35` for `clock` and `*0.455` for `clock2`; the date line derives from it with ratio `0.57`). Set in Settings → Widgets → "Clock font size" (`setSpecialValueText("Automatic")`). The widget's `Item` grows with the font via `Math.max(widgetIconSize, column.implicitWidth)`, so a large font does not get clipped.
 - **Text color**: `root.clockTextColor`, derived from the dock background's luminance — see the `dockBaseIsLight` bullet in the **Theme** section.
+- **Clic = comando configurable y alternable** (`config.clock2Command`, Settings → Widgets → "Clock click app"): el clic izquierdo llama a `ClockWidget2::launch()`, que acepta **cuatro formas** — un id de `.desktop` (`kdock-calendar`), un comando en `PATH`, un path completo a binario, o un path completo a un archivo `.desktop` (`/usr/share/applications/orage.desktop`, parseado con `DesktopEntryIndex::fromFile`). Resolución en ese orden (ver `launch()`): `.desktop` por ruta → binario por ruta → `QStandardPaths::findExecutable()` → `DesktopEntryIndex::byId()` (el index se alimenta en el arranque, así que un `.desktop` instalado después exige reiniciar el dock) → nombre pelado como último recurso. El index le llega por `ClockWidget2::setApps()` desde `DockManager::buildInstance` (`m_shared.apps`).
+- **Segundo clic = cerrar.** `launch()` es un **toggle**: el primer clic arranca la app como proceso hijo rastreado (`m_proc`, un `QProcess` por widget, vía `startTracked()`/`startTrackedExec()`), y si esa instancia sigue viva el segundo clic la cierra con `terminate()` (SIGTERM; `kill()` de respaldo a los 2,5 s para las que lo ignoren) — **sin minimizar ni ocultar**. Es lo que permite abrir/cerrar `kdock-calendar` desde el reloj. Como la app se lanza como hijo (no `startDetached`), si la cerraste a mano el estado vuelve a `NotRunning` y el clic la vuelve a abrir.
+- **Botones de la fila**: **"Apps…"** abre el picker de aplicaciones instaladas del menu editor (`QInputDialog::getItem` sobre `m_apps->all()`) y llena el box con el **id** del `.desktop` elegido; **"File…"** abre un `QFileDialog` con filtros `Desktop entries (*.desktop)` y `Executables (*)` y llena el box con el **path completo**. `setClock2Command()` hace `m_settings.sync()` inmediato (2026-08-05): QSettings difiere la escritura a disco y un reinicio justo después de guardar podía volver a leer el comando viejo.
 
 ### Clipboard history (`src/clipboardhistory.cpp` + `qml/ClipboardPopup.qml`)
 - Text-only clipboard manager, exposed to QML as `clipboardHistory` context property. Token `"clipboard"`, gated by `config.showClipboard` (default **off**, opt-in). A **drop-only anchor** block (owns its own mouse handling, popup and context menu), like `menu`/`apps`. Icon `edit-paste`.
@@ -701,6 +704,33 @@ ajustes, que el widget `tilemenu` prende y apaga. Mismo reparto que `kdock-previ
 - **Diagnóstico**: `kdock-tilemenu --dump-layout [sección]` imprime la disposición resuelta
   como arte ASCII (grilla + leyenda) y sale. No abre ninguna ventana y solo lee, así que sirve
   con el menú corriendo. Es a este binario lo que `--dump-captures` es a `kdock-previews`.
+
+### Calendario — binario accesorio `kdock-calendar` (`calendar/`)
+
+Calendario de mes **standalone** estilo KDE, pensado para lanzarse desde el widget del reloj
+(o un Script Runner): el widget **no se toca** — es un toplevel normal aparte, así que
+engancharlo nunca implica editar el QML del dock. Es un **cuarto binario**, con su propio árbol
+(`calendar/`) y **sin configuración propia**: todo el look sale de la paleta del sistema.
+
+- **Qt Widgets + pintado a mano, no QML.** Todo vive en `calendarwidget.cpp` (`paintEvent`):
+  la grilla 7×6, los **números grandes** que escalan con la celda (`min(celda) * 0.40`), el
+  encabezado con mes/año en negrita y las flechas ‹ ›, la fila de días de la semana y el pie.
+  Sin child widgets, sin QQuick, sin KDE Frameworks: solo `Qt6::Widgets`. Como los colores
+  salen de `QPalette`, sigue el tema claro/oscuro y el acento KDE automáticamente.
+- **Features KDE pero sin configurabilidad regional**: semana **lunes-primero**, fecha local
+  (`QLocale()`), **día actual** en píldora rellena con el color de acento, día seleccionado con
+  anillo, y días de otros meses / fines de semana atenuados. Extras simples: botón **Hoy**,
+  rueda / `PageUp`/`PageDown` para cambiar de mes (la selección salta al mismo día del mes),
+  flechas para mover la selección, `Esc` cierra, y el pie muestra la fecha larga del día
+  seleccionado.
+- **`--month AAAA-MM`**: arranca en otro mes (por defecto, el actual). Es la única CLI; el
+  widget del reloj lo lanza pelado y muestra el mes en curso.
+- **Sin privilegios y sin arnés especial**: como `kdock-tilemenu`, es un toplevel normal (ni
+  layer-shell ni interfaces KWin), se corre directo desde `build/calendar/kdock-calendar` y su
+  `.desktop` (solo para nombre e ícono en el gestor de tareas) no necesita refrescar ksycoca.
+  Bajo Xvfb se captura igual que el menú de mosaicos.
+- **Lo que se toca en kdock, y es nada**: solo `add_subdirectory(calendar)` en el
+  `CMakeLists.txt` raíz. No comparte ningún archivo de `src/`.
 
 ## Code Conventions
 

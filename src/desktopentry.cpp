@@ -35,15 +35,27 @@ void DesktopEntryIndex::reload()
 
 void DesktopEntryIndex::addFile(const QString &path)
 {
-    DesktopEntry e;
-    e.id = QFileInfo(path).completeBaseName();
-    const QString lowerId = e.id.toLower();
+    const QString lowerId = QFileInfo(path).completeBaseName().toLower();
     if (m_byLowerId.contains(lowerId))
         return; // already provided by a higher-priority dir
 
+    DesktopEntry e;
+    if (!parseFile(path, &e))
+        return;
+
+    m_byLowerId.insert(lowerId, e);
+    if (!e.wmClass.isEmpty())
+        m_wmClassToId.insert(e.wmClass.toLower(), lowerId);
+}
+
+bool DesktopEntryIndex::parseFile(const QString &path, DesktopEntry *out)
+{
+    DesktopEntry e;
+    e.id = QFileInfo(path).completeBaseName();
+
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
-        return;
+        return false;
 
     QTextStream in(&f);
     bool inEntry = false;
@@ -84,11 +96,17 @@ void DesktopEntryIndex::addFile(const QString &path)
     }
 
     if (!isApplication || hidden || e.exec.isEmpty())
-        return;
+        return false;
+    *out = e;
+    return true;
+}
 
-    m_byLowerId.insert(lowerId, e);
-    if (!e.wmClass.isEmpty())
-        m_wmClassToId.insert(e.wmClass.toLower(), lowerId);
+DesktopEntry DesktopEntryIndex::fromFile(const QString &path)
+{
+    DesktopEntry e;
+    if (!parseFile(path, &e))
+        return {};
+    return e;
 }
 
 DesktopEntry DesktopEntryIndex::byId(const QString &id) const

@@ -4,7 +4,11 @@
 #pragma once
 
 #include <QObject>
+#include <QStringList>
 #include <QTimer>
+
+class DesktopEntryIndex;
+class QProcess;
 
 class ClockWidget2 : public QObject
 {
@@ -33,16 +37,27 @@ public:
     void setShowSeconds(bool v);
     void setCommand(const QString &v) { m_command = v; }
 
-    // Launch the configured command (see setCommand). No-op if empty.
-    Q_INVOKABLE void launch() const;
+    // App index used to resolve the command when it names a .desktop id
+    // instead of a binary (see launch()). Shared instance, app-wide lifetime.
+    void setApps(DesktopEntryIndex *apps) { m_apps = apps; }
+
+    // Toggle the configured app: the first click launches it, the second click
+    // closes the instance this widget started (see setCommand). No-op if empty.
+    Q_INVOKABLE void launch();
 
 signals:
     void changed();
 
 private:
     void refresh();
+    // Starts the program as a tracked child so the next click can close it.
+    void startTracked(const QString &program, const QStringList &args);
+    // Same, but parses a .desktop Exec= line (and strips %-field codes).
+    void startTrackedExec(const QString &exec);
 
     QString m_command;
+    DesktopEntryIndex *m_apps = nullptr;
+    QProcess *m_proc = nullptr;   // the instance this widget launched, if alive
     bool m_format24h = true;
     bool m_showDate = false;
     bool m_showSeconds = false;

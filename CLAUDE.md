@@ -15,7 +15,7 @@ cmake --build build -j
 `env -u CC -u CXX` es obligatorio: las variables apuntan a ccache y CMake falla si están
 seteadas.
 
-**Son tres binarios**, los tres los compila el mismo `cmake --build build`:
+**Son cuatro binarios**, los cuatro los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -24,6 +24,9 @@ seteadas.
 - `kdock-tilemenu` (`build/tilemenu/kdock-tilemenu`, árbol `tilemenu/`): el menú de
   aplicaciones a pantalla completa, lo prende el widget `tilemenu` del dock. Detalles en
   `AGENTS.md` → *Menú de mosaicos*.
+- `kdock-calendar` (`build/calendar/kdock-calendar`, árbol `calendar/`): calendario de mes
+  standalone, autocontenido (Qt Widgets, sin archivos de `src/`). Se lanza desde el widget
+  del reloj (o un Script Runner); el reloj no se toca. Detalles en `AGENTS.md` → *Calendario*.
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -51,12 +54,13 @@ levantarse solo — el de previews al prender su casilla, el del menú de mosaic
 clic del widget. O sea que actualizar `kdock-tilemenu` es `install` + matarlo; no hace falta
 tocar el dock.
 
-El install escribe **seis** cosas: los tres binarios y sus tres `.desktop`. Después de
+El install escribe **ocho** cosas: los cuatro binarios y sus cuatro `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
-tarjetas caen a ícono). **`kdock-tilemenu` no necesita el refresco** —no pide ningún
-privilegio, y su `.desktop` es solo para el nombre y el ícono del gestor de tareas—, así que si
-lo único que tocaste fue el menú de mosaicos, saltealo y evitás el riesgo de abajo. Y ojo:
+tarjetas caen a ícono). **`kdock-tilemenu` y `kdock-calendar` no necesitan el refresco** —no
+piden ningún privilegio, y su `.desktop` es solo para el nombre y el ícono del gestor de
+tareas—, así que si lo único que tocaste fue uno de esos dos, saltealo y evitás el riesgo de
+abajo. Y ojo:
 **`kbuildsycoca6` a secas es peligroso en esta máquina** (ver abajo):
 
 ```bash

@@ -12,7 +12,7 @@
 
 kdock **no enlaza contra KDE Frameworks ni contra Plasma**. Los protocolos Wayland se
 generan directamente desde sus XML con `qtwaylandscanner`, y todo lo demás se resuelve por
-D-Bus o por CLI. El resultado son tres binarios sueltos, sin plugins que instalar y sin
+D-Bus o por CLI. El resultado son cuatro binarios sueltos, sin plugins que instalar y sin
 arrastrar medio Plasma como dependencia.
 
 Probado a diario en **KDE Plasma 6 / KWin**; la barra de tareas también funciona en
@@ -187,6 +187,24 @@ Se lanza en el primer clic del widget y queda residente, así que las aperturas 
 instantáneas. A diferencia de `kdock-previews`, **no necesita ningún permiso especial de
 KWin**.
 
+### `kdock-calendar` (binario accesorio)
+
+**Calendario de mes standalone**, pensado para abrirse desde el widget del reloj (el clic del
+reloj puede apuntar a este binario y el segundo clic lo cierra) o desde un Script Runner. El
+widget del reloj no se toca: es un toplevel normal aparte, sin configuración propia.
+
+- **Aspecto KDE con números grandes**: semana **lunes-primero**, fecha local, **día actual
+  resaltado** en una píldora con el color de acento, selección con anillo, y días de otros
+  meses / fines de semana atenuados. La grilla 7×6 toma todo el espacio y los números escalan
+  con la celda, así que crece bien en ventanas grandes.
+- **Pintado a mano en Qt Widgets** (nada de QML ni KDE Frameworks): usa la paleta del sistema,
+  por lo que sigue el tema claro/oscuro y el acento KDE automáticamente.
+- **Navegación**: flechas ‹ › en el encabezado, rueda del mouse, `PageUp`/`PageDown` y el botón
+  **Hoy** para volver al mes actual. El pie muestra la fecha larga del día seleccionado.
+- **`kdock-calendar --month AAAA-MM`** arranca en otro mes (por defecto, el actual).
+- Igual que `kdock-tilemenu`, **no necesita ningún permiso especial de KWin**: corre directo
+  desde `build/` y su `.desktop` solo da nombre e ícono en el gestor de tareas.
+
 
 ---
 
@@ -213,7 +231,7 @@ aparecen bajo KDE.
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # instala los tres binarios y sus .desktop
+sudo cmake --install build     # instala los cuatro binarios y sus .desktop
 ```
 
 > Si tu entorno exporta `CC="ccache gcc"` / `CXX="ccache g++"`, CMake AutoMoc falla:
@@ -242,7 +260,7 @@ kbuildsycoca6
 ```
 
 `kdock-tilemenu` no aparece acá porque no pide nada privilegiado: se puede correr desde donde
-sea, sin `.desktop` y sin refrescar el índice.
+sea, sin `.desktop` y sin refrescar el índice. Lo mismo vale para **`kdock-calendar`**.
 
 Si ejecutás uno de los otros dos desde otra ruta (`build/kdock` durante desarrollo), copiá el
 `.desktop` a `~/.local/share/applications/` con el `Exec=` apuntando a la ruta absoluta de
@@ -290,6 +308,7 @@ La configuración vive en el directorio de datos XDG:
 | `qml/` | La UI del dock y sus popups |
 | `previews/` | Binario accesorio de vistas previas (árbol propio, reusa 5 archivos de `src/`) |
 | `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
+| `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |

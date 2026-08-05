@@ -916,6 +916,10 @@ void DockConfig::setClock2Command(const QString &v)
         return;
     m_clock2Command = v;
     m_settings.setValue(QStringLiteral("clock2Command"), v);
+    // QSettings defers the disk write (batching edits), so a restart right
+    // after saving could read the old command back. The clock click is exactly
+    // the setting users change and immediately test, so flush it right away.
+    m_settings.sync();
     emit clock2CommandChanged();
 }
 

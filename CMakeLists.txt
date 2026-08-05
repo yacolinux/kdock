@@ -113,3 +113,4 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kdock.desktop
 # Previews. Deliberately a separate target so nothing here changes for kdock.
 add_subdirectory(previews)
 add_subdirectory(tilemenu)
+add_subdirectory(calendar)

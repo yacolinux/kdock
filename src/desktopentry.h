@@ -35,9 +35,15 @@ public:
     QList<DesktopEntry> all() const; // launchable entries, sorted by name
 
     static void launch(const DesktopEntry &entry);
+    // Parse a .desktop file on disk (a path chosen directly, not an installed
+    // id) and return the entry; invalid if it is not a launchable Application.
+    static DesktopEntry fromFile(const QString &path);
 
 private:
     void addFile(const QString &path);
+    // Shared .desktop parser: fills the entry from path; false when the file is
+    // not a launchable Application (used by both addFile and fromFile).
+    static bool parseFile(const QString &path, DesktopEntry *out);
     // Chromium web app (PWA) lookup by browser + 32-char extension id, used as
     // the last resort of forAppId(). See the comment on the definition.
     DesktopEntry pwaEntry(const QString &browser, const QString &extId) const;

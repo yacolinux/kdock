@@ -393,6 +393,9 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     // Per-dock clocks, bound to this monitor's format settings.
     auto *clock = new ClockWidget(this);
     auto *clock2 = new ClockWidget2(this);
+    // The click command may name a .desktop id; resolve it through the shared
+    // app index (see ClockWidget2::launch).
+    clock2->setApps(m_shared.apps);
     const auto bindClocks = [cfg, clock, clock2] {
         clock->setFormat24h(cfg->clockFormat24h());
         clock->setShowDate(cfg->clockShowDate());

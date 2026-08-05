@@ -1163,12 +1163,62 @@ QWidget *SettingsDialog::createWidgetsTab()
             [this, clockFont] { clockFont->setValue(m_config->clockFontSize()); });
     form->addRow(tr("Clock font size:"), clockFont);
 
+    // Clock 2's click action: a .desktop id ("kdock-calendar"), a command name
+    // on PATH, a full path to a binary, or a path to a .desktop file —
+    // ClockWidget2::launch() resolves all four. The "Apps…" button fills the
+    // box from the installed applications (same picker as the menu editor) with
+    // the chosen app's desktop-file id; "File…" browses the disk for a binary
+    // or a .desktop file and fills the box with its full path.
+    auto *clock2Row = new QHBoxLayout;
     auto *clock2Command = new QLineEdit(tab);
     clock2Command->setText(m_config->clock2Command());
     clock2Command->setPlaceholderText(QStringLiteral("orage"));
-    clock2Command->setToolTip(tr("Command run when left-clicking the Clock 2 widget."));
+    clock2Command->setToolTip(tr("Command run when left-clicking the Clock 2 widget. "
+                                 "Four forms are accepted: a desktop-file id "
+                                 "(\"kdock-calendar\"), a command name on PATH, a full "
+                                 "path to a binary, or a full path to a .desktop file."));
     connect(clock2Command, &QLineEdit::textEdited, m_config, &DockConfig::setClock2Command);
-    form->addRow(tr("Clock click app:"), clock2Command);
+    auto *clock2Browse = new QPushButton(tr("Apps…"), tab);
+    clock2Browse->setToolTip(tr("Choose an installed application; the box is filled "
+                                "with its desktop-file id."));
+    connect(clock2Browse, &QPushButton::clicked, this, [this, clock2Command] {
+        const QList<DesktopEntry> entries = m_apps->all();
+        QStringList names;
+        for (const DesktopEntry &e : entries)
+            names.append(e.name);
+        const DesktopEntry current = m_apps->byId(m_config->clock2Command());
+        const int currentIdx = qMax(0, names.indexOf(current.name));
+        bool ok = false;
+        const QString chosen = QInputDialog::getItem(this, tr("Clock click app"),
+                                                     tr("Application:"), names, currentIdx,
+                                                     false, &ok);
+        if (!ok)
+            return;
+        const int idx = names.indexOf(chosen);
+        if (idx < 0)
+            return;
+        clock2Command->setText(entries[idx].id);
+        m_config->setClock2Command(entries[idx].id);
+    });
+    auto *clock2File = new QPushButton(tr("File…"), tab);
+    clock2File->setToolTip(tr("Browse the disk for a binary or a .desktop file; the box "
+                              "is filled with its full path."));
+    connect(clock2File, &QPushButton::clicked, this, [this, clock2Command] {
+        const QString chosen = QFileDialog::getOpenFileName(
+            this, tr("Choose a binary or .desktop file"),
+            QFileInfo(m_config->clock2Command()).isAbsolute()
+                ? m_config->clock2Command()
+                : QStringLiteral("/usr/bin"),
+            tr("Desktop entries (*.desktop);;Executables (*)"));
+        if (chosen.isEmpty())
+            return;
+        clock2Command->setText(chosen);
+        m_config->setClock2Command(chosen);
+    });
+    clock2Row->addWidget(clock2Command, 1);
+    clock2Row->addWidget(clock2Browse);
+    clock2Row->addWidget(clock2File);
+    form->addRow(tr("Clock click app:"), clock2Row);
 
     auto *showAutohide = new QCheckBox(tr("Show autohide toggle button"), tab);
     showAutohide->setChecked(m_config->showAutohideToggle());
