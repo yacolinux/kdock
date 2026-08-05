@@ -70,6 +70,13 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Íconos y colores del sistema**: `QIcon::fromTheme` + esquema de color leído de
   `~/.config/kdeglobals` con recarga en vivo. El fondo de las apps corriendo se tiñe con el
   color dominante del propio ícono.
+- **Un solo selector de temas**, en el dock y en la configuración: en una instalación completa
+  hay ~180 iconsets y ~450 esquemas de color, así que en vez de un desplegable con esa tira de
+  nombres, cada selector abre una lista **con buscador y vista previa** — tres íconos de muestra
+  renderizados *en ese* iconset, o tres muestras de color del esquema. Cada fila tiene un
+  casillero de **favoritos** que la sube al tope; los favoritos son una sola lista compartida
+  por todos los docks y por el diálogo. Y un casillero **«Mantener abierta»** para probar temas
+  uno tras otro sin reabrir la ventana en cada cambio.
 - **Bandeja del sistema** (StatusNotifierItem + DBusMenu, implementados acá). Va en el dock
   que elijas —cualquiera, no solo el principal— aunque en uno solo a la vez.
 - **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
@@ -102,6 +109,8 @@ Frameworks:
 | Discos | Unidades extraíbles: montar, desmontar, expulsar, abrir | UDisks2 |
 | Red | Redes Wi-Fi cercanas (unirse con contraseña), conexiones guardadas, switch de Wi-Fi; clic derecho abre el editor de redes | NetworkManager |
 | Portapapeles | Historial de texto e imágenes con búsqueda, persistente, capturado en segundo plano | `ext-data-control-v1` |
+| Iconset de KDE | Cambia el iconset de todo el escritorio, dejando intacto el del propio dock | `plasma-changeicons` |
+| Esquema de color | Aplica un esquema de color de KDE a todo el escritorio | `plasma-apply-colorscheme` |
 | Reloj | 12/24 h, fecha, segundos (dos variantes) | — |
 | Overview | Abre el efecto Overview de KWin | kglobalaccel |
 | Mover ventana | Al siguiente escritorio virtual, o al siguiente monitor (clic derecho: al anterior) | kglobalaccel |
@@ -291,7 +300,8 @@ La configuración vive en el directorio de datos XDG:
 
 ```
 ~/.local/share/kdock/
-  kdock.conf                  # opciones compartidas (relanzadores, script runners, tema…)
+  kdock.conf                  # opciones compartidas (relanzadores, script runners, tema,
+                              #   favoritos de iconsets y esquemas de color…)
   kdock-<monitor>[-<n>].conf  # un archivo por dock
   previews.conf               # kdock-previews (compartido + uno por pantalla)
   tilemenu.conf               # kdock-tilemenu: opciones y disposición de los mosaicos
