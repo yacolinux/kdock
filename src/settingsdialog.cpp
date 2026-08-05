@@ -13,6 +13,7 @@
 #include "relanzadoresmanager.h"
 #include "configarchive.h"
 #include "iconpickerdialog.h"
+#include "themepicker.h"
 #include "previewslauncher.h"
 #include "tilemenulauncher.h"
 #include "scriptrunnerconfig.h"
@@ -723,59 +724,23 @@ QWidget *SettingsDialog::createColoresTab()
 
         // Direct apply, no dock widget needed: the same backend the pickers
         // use (AppearanceControl, which goes through the Plasma tools so the
-        // open apps reload). Each combo re-selects itself when kdeglobals
-        // changes (AppearanceControl::changed), so choosing from the dock
-        // widget's popup shows up here too.
+        // open apps reload). Both are ThemePickerButtons - the Qt Widgets twin
+        // of the dock widget's popup (search field, previews, favourites), not
+        // a plain combo: these two lists run to 183 and 456 entries.
         if (m_appearance) {
             m_appearance->refreshIfStale();
 
-            auto *iconCombo = new QComboBox(box);
-            const QVariantList icons = m_appearance->iconThemes();
-            for (const QVariant &v : icons) {
-                const QVariantMap m = v.toMap();
-                iconCombo->addItem(m.value(QStringLiteral("name")).toString(),
-                                   m.value(QStringLiteral("id")).toString());
-            }
-            iconCombo->setToolTip(tr("Applies the icon theme to the whole desktop right now "
-                                     "(plasma-changeicons). kdock's own icon theme is left "
-                                     "alone: while it is set, this dock keeps its icons and "
-                                     "only the rest of KDE follows."));
-            const auto syncIcon = [this, iconCombo] {
-                const int i = iconCombo->findData(m_appearance->currentIconTheme());
-                if (i >= 0 && i != iconCombo->currentIndex())
-                    iconCombo->setCurrentIndex(i);
-            };
-            syncIcon();
-            connect(iconCombo, &QComboBox::currentIndexChanged, this, [this, iconCombo] {
-                const QString id = iconCombo->currentData().toString();
-                if (id != m_appearance->currentIconTheme())
-                    m_appearance->applyIconTheme(id);
-            });
-            connect(m_appearance, &AppearanceControl::changed, box, syncIcon);
-            form->addRow(tr("· Apply icon theme:"), iconCombo);
+            auto *iconPicker = new ThemePickerButton(m_appearance, QStringLiteral("icons"), box);
+            iconPicker->setToolTip(tr("Applies the icon theme to the whole desktop right now "
+                                      "(plasma-changeicons). kdock's own icon theme is left "
+                                      "alone: while it is set, this dock keeps its icons and "
+                                      "only the rest of KDE follows."));
+            form->addRow(tr("· Apply icon theme:"), iconPicker);
 
-            auto *schemeCombo = new QComboBox(box);
-            const QVariantList schemes = m_appearance->colorSchemes();
-            for (const QVariant &v : schemes) {
-                const QVariantMap m = v.toMap();
-                schemeCombo->addItem(m.value(QStringLiteral("name")).toString(),
-                                     m.value(QStringLiteral("id")).toString());
-            }
-            schemeCombo->setToolTip(tr("Applies a KDE color scheme system-wide right now "
-                                       "(plasma-apply-colorscheme)."));
-            const auto syncScheme = [this, schemeCombo] {
-                const int i = schemeCombo->findData(m_appearance->currentColorScheme());
-                if (i >= 0 && i != schemeCombo->currentIndex())
-                    schemeCombo->setCurrentIndex(i);
-            };
-            syncScheme();
-            connect(schemeCombo, &QComboBox::currentIndexChanged, this, [this, schemeCombo] {
-                const QString id = schemeCombo->currentData().toString();
-                if (id != m_appearance->currentColorScheme())
-                    m_appearance->applyColorScheme(id);
-            });
-            connect(m_appearance, &AppearanceControl::changed, box, syncScheme);
-            form->addRow(tr("· Apply color scheme:"), schemeCombo);
+            auto *schemePicker = new ThemePickerButton(m_appearance, QStringLiteral("colors"), box);
+            schemePicker->setToolTip(tr("Applies a KDE color scheme system-wide right now "
+                                        "(plasma-apply-colorscheme)."));
+            form->addRow(tr("· Apply color scheme:"), schemePicker);
         }
 
         layout->addWidget(box);

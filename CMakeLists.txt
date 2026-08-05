@@ -51,6 +51,7 @@ qt_add_executable(kdock
     src/scriptrunnerconfig.cpp  src/scriptrunnerconfig.h
     src/scriptrunnersmanager.cpp src/scriptrunnersmanager.h
     src/iconpickerdialog.cpp    src/iconpickerdialog.h
+    src/themepicker.cpp         src/themepicker.h
     src/configarchive.cpp       src/configarchive.h
     src/powercontrol.cpp        src/powercontrol.h
     src/diskscontrol.cpp        src/diskscontrol.h

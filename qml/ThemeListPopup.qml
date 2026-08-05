@@ -33,6 +33,10 @@ Popup {
     property string query: ""
     // Bumped when the applied theme changes, so the check mark follows.
     property int refreshTick: 0
+    // Set around our own setFavorite() call: favoritesChanged is emitted
+    // synchronously, and re-sorting there would yank the row out from under the
+    // cursor that just ticked it.
+    property bool freezeOrder: false
 
     readonly property var allEntries: {
         refreshTick // dependency
@@ -51,6 +55,14 @@ Popup {
     Connections {
         target: appearance
         function onChanged() { popup.refreshTick++ }
+        // Another picker (the other dock's widget, or the Settings dialog)
+        // pinned something: reorder here too. Ticking a favourite *in this
+        // popup* deliberately does not reorder while it is open - see the row's
+        // CheckBox - so this only fires for the other pickers.
+        function onFavoritesChanged() {
+            if (!popup.freezeOrder)
+                popup.refreshTick++
+        }
     }
 
     onAboutToShow: dockWindow.setKeyboardInteractive(true)
@@ -128,9 +140,14 @@ Popup {
                 delegate: Rectangle {
                     id: row
                     required property var modelData
+                    required property int index
                     // Inner Repeaters shadow `modelData` with their own, so the
                     // row's entry is reached through this id.
                     readonly property var entry: modelData
+                    // First row after the favourites block: draws the divider.
+                    readonly property bool firstNonFavorite:
+                        index > 0 && entry.fav !== true
+                        && popup.listModel[index - 1].fav === true
                     width: list.width
                     height: 40
                     radius: 6
@@ -143,6 +160,12 @@ Popup {
                         anchors.leftMargin: 8
                         anchors.rightMargin: 8
                         spacing: 8
+                        // Above the row's MouseArea, which is declared last and
+                        // would otherwise swallow the favourites checkbox's
+                        // clicks. The labels and images do not accept mouse
+                        // events, so a click anywhere else still falls through
+                        // to the MouseArea and applies the theme.
+                        z: 1
 
                         // Preview: three sample icons rendered in that theme
                         // (image://icon resolves against any installed set), or
@@ -184,7 +207,10 @@ Popup {
 
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
-                            width: parent.width - 3 * 22 - 2 * 3 - 24 - 3 * parent.spacing
+                            // Preview strip, tick and favourites box all come
+                            // out of the name's width, or it elides too early.
+                            width: parent.width - 3 * 22 - 2 * 3 - 24 - favBox.width
+                                   - 4 * parent.spacing
                             text: modelData.name
                             color: theme.foreground
                             elide: Text.ElideRight
@@ -199,6 +225,49 @@ Popup {
                             sourceSize: Qt.size(16 * Screen.devicePixelRatio,
                                                 16 * Screen.devicePixelRatio)
                         }
+
+                        CheckBox {
+                            id: favBox
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 24
+                            checked: row.entry.fav === true
+                            ToolTip.text: qsTr("Favorito: lo pone al principio de la lista")
+                            ToolTip.visible: hovered
+                            ToolTip.delay: 600
+                            indicator: Rectangle {
+                                anchors.centerIn: parent
+                                width: 16; height: 16; radius: 3
+                                color: favBox.checked ? theme.highlight : "transparent"
+                                border.width: 1
+                                border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                                      theme.foreground.b,
+                                                      favBox.checked ? 0.0 : 0.45)
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: favBox.checked
+                                    text: "✓"
+                                    color: theme.background
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                }
+                            }
+                            onToggled: {
+                                popup.freezeOrder = true
+                                appearance.setFavorite(popup.mode, row.entry.id, checked)
+                                popup.freezeOrder = false
+                            }
+                        }
+                    }
+
+                    // Divider between the pinned block and the rest.
+                    Rectangle {
+                        visible: row.firstNonFavorite
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 1
+                        color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                       theme.foreground.b, 0.2)
                     }
 
                     MouseArea {

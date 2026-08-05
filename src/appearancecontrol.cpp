@@ -1,5 +1,6 @@
 #include "appearancecontrol.h"
 
+#include "dockconfig.h"
 #include "theme.h"
 
 #include <QColor>
@@ -46,11 +47,17 @@ QString kdeColorToHex(const QVariant &value, const QString &fallback)
         .name();
 }
 
+// Keys of the favourites in the shared kdock.conf (one list per kind for the
+// whole process, never per dock).
+const char *kFavIconsKey = "Appearance/favoriteIconThemes";
+const char *kFavColorsKey = "Appearance/favoriteColorSchemes";
+
 } // namespace
 
 AppearanceControl::AppearanceControl(Theme *theme, QObject *parent)
     : QObject(parent)
 {
+    loadFavorites();
     readCurrent();
     // Theme already watches kdeglobals, so its signal is the cheapest way to
     // notice that the icon theme or the color scheme changed - including when
@@ -74,6 +81,66 @@ void AppearanceControl::readCurrent()
     m_currentColorScheme = kde.value(QStringLiteral("General/ColorScheme")).toString();
 }
 
+void AppearanceControl::loadFavorites()
+{
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    const QStringList icons = s.value(QLatin1String(kFavIconsKey)).toStringList();
+    const QStringList colors = s.value(QLatin1String(kFavColorsKey)).toStringList();
+    m_favoriteIcons = QSet<QString>(icons.begin(), icons.end());
+    m_favoriteColors = QSet<QString>(colors.begin(), colors.end());
+}
+
+QSet<QString> &AppearanceControl::favoriteSet(const QString &kind)
+{
+    return kind == QLatin1String("colors") ? m_favoriteColors : m_favoriteIcons;
+}
+
+const QSet<QString> &AppearanceControl::favoriteSet(const QString &kind) const
+{
+    return kind == QLatin1String("colors") ? m_favoriteColors : m_favoriteIcons;
+}
+
+bool AppearanceControl::isFavorite(const QString &kind, const QString &id) const
+{
+    return favoriteSet(kind).contains(id);
+}
+
+void AppearanceControl::setFavorite(const QString &kind, const QString &id, bool on)
+{
+    if (id.isEmpty())
+        return;
+    QSet<QString> &set = favoriteSet(kind);
+    if (on ? set.contains(id) : !set.contains(id))
+        return;
+    if (on)
+        set.insert(id);
+    else
+        set.remove(id);
+
+    // Persist sorted: the file is hand-editable and a set has no order anyway.
+    QStringList ids(set.begin(), set.end());
+    ids.sort(Qt::CaseInsensitive);
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QLatin1String(kind == QLatin1String("colors") ? kFavColorsKey : kFavIconsKey), ids);
+    emit favoritesChanged();
+}
+
+QVariantList AppearanceControl::sortedByFavorite(QVariantList entries)
+{
+    std::stable_sort(entries.begin(), entries.end(), [](const QVariant &a, const QVariant &b) {
+        const QVariantMap ma = a.toMap();
+        const QVariantMap mb = b.toMap();
+        const bool fa = ma.value(QStringLiteral("fav")).toBool();
+        const bool fb = mb.value(QStringLiteral("fav")).toBool();
+        if (fa != fb)
+            return fa; // favourites first
+        return ma.value(QStringLiteral("name")).toString().compare(
+                   mb.value(QStringLiteral("name")).toString(), Qt::CaseInsensitive)
+               < 0;
+    });
+    return entries;
+}
+
 QVariantList AppearanceControl::iconThemes()
 {
     QVariantList out;
@@ -86,23 +153,29 @@ QVariantList AppearanceControl::iconThemes()
             (t.first.isEmpty() || t.first.contains(QLatin1Char('@'))) ? t.second : t.first;
         out.append(QVariantMap{{QStringLiteral("id"), t.second},
                                {QStringLiteral("name"), name},
-                               {QStringLiteral("current"), t.second == m_currentIconTheme}});
+                               {QStringLiteral("current"), t.second == m_currentIconTheme},
+                               {QStringLiteral("fav"), m_favoriteIcons.contains(t.second)}});
     }
-    return out;
+    return sortedByFavorite(std::move(out));
 }
 
 QVariantList AppearanceControl::colorSchemes()
 {
     if (!m_scanned)
         scanColorSchemes();
-    // The "current" flag is the only part that goes stale between scans.
-    for (QVariant &entry : m_colorSchemes) {
+    // "current" and "fav" are the parts that go stale between scans; patch them
+    // on a copy so the cache keeps its plain alphabetical order (re-sorting it
+    // in place would make the order depend on when the last call happened).
+    QVariantList out;
+    out.reserve(m_colorSchemes.size());
+    for (const QVariant &entry : std::as_const(m_colorSchemes)) {
         QVariantMap map = entry.toMap();
-        map[QStringLiteral("current")] =
-            map.value(QStringLiteral("id")).toString() == m_currentColorScheme;
-        entry = map;
+        const QString id = map.value(QStringLiteral("id")).toString();
+        map[QStringLiteral("current")] = id == m_currentColorScheme;
+        map[QStringLiteral("fav")] = m_favoriteColors.contains(id);
+        out.append(map);
     }
-    return m_colorSchemes;
+    return sortedByFavorite(std::move(out));
 }
 
 void AppearanceControl::scanColorSchemes()

@@ -248,6 +248,15 @@ timeout 30 xvfb-run -s "-screen 0 1000x400x24" env QT_QPA_PLATFORM=xcb /tmp/p/pr
 falta `moc` ni GUI, alcanza con `g++ main.cpp src/xdgmenutree.cpp $(pkg-config --cflags --libs Qt6Core)`
 y un `main` que imprima el resultado.)
 
+**El `kdeglobals` de esta sesión NO es `~/.config/kdeglobals`.** `XDG_CONFIG_HOME` apunta a
+`~/.kde-opt/config`, así que ese es el archivo que leen `Theme` y `AppearanceControl` (y el que
+escriben `plasma-changeicons`/`plasma-apply-colorscheme`). El de `~/.config` existe, tiene otro
+valor y **no lo usa nadie**: mirarlo para verificar un cambio de tema dice que "no pasó nada"
+cuando sí pasó, y al revés (me pasó 2026-08-05, y por un rato creí que no le había tocado el
+escritorio al usuario cuando sí). Confirmalo con
+`QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)` desde una sonda, no de
+memoria.
+
 **`kdeglobals` de esta máquina no tiene `General/ColorScheme`** (solo `ColorSchemeHash`), así
 que `AppearanceControl::currentColorScheme()` devuelve **vacío** y cualquier combo que se
 siembre con él cae en el primer ítem de la lista. Si lo que sigue es aplicar ese valor, le
@@ -381,7 +390,12 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   Nombrá distinto las del arnés (`hostTheme`, `hostConfig`) — es la misma razón por la que
   `Dock.qml` usa los alias `_theme`/`_config`.
 - **La ruta del repo tiene un `#`**, así que `import "/ruta/qml"` no es una URL válida para
-  QML. Copiá `qml/` a `/tmp` y usá un import relativo.
+  QML. Copiá `qml/` a `/tmp` y usá un import relativo. Y en el `CMakeLists.txt` descartable,
+  **`#` arranca un comentario**: un `add_executable(... /home/…/#Apps/kdock/src/x.cpp)` se come
+  el paréntesis de cierre y CMake dice *"Parse error. Function missing ending )"*, que no
+  sugiere para nada la causa. Copiá `src/` a `/tmp` también. Ese CMake descartable necesita el
+  mismo `env -u CC -u CXX` que el del proyecto: si no, falla en el AutoMoc (*"AutoMoc subprocess
+  error"*), que tampoco menciona a ccache.
 
 ## Convenciones
 
@@ -414,6 +428,14 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `AGENTS.md` → *App-icon labels*. Es la única realimentación QML→C++ del grosor y es segura
   porque el ancho natural de un texto no depende del grosor: **no le agregues un gancho de
   re-medición a `dockThicknessChanged`**, que es justo la señal que emite el setter.
+  **Toda opción que cambie el peso o el tamaño del texto va en las dos puntas de esa
+  medición**: la sonda (`appNameProbe`/`secNameProbe`, los `TextMetrics` del tope de
+  `Dock.qml`) tiene que copiar la property, y el bloque `Connections { target: config }` tiene
+  que traer su `on<X>Changed` para re-medir. Si te olvidás, el texto mide más que la caja
+  reservada y **se elide**, que parece un bug de layout. Es lo que costó `config.labelBold`
+  (2026-08-05): `appNameProbe` ya medía en negrita —mide siempre con el peso de la app
+  activa—, así que el que faltaba era `secNameProbe`. Se verifica bajo Xvfb midiendo el
+  grosor de un dock vertical antes y después de prender la opción (95 → 101 px).
 - **Leer una propiedad D-Bus que es un struct: dos trampas, la segunda te tira el proceso.**
   Las dos mordieron el 2026-08-01 leyendo `desktops` (a(iss)) de
   `org.kde.KWin /VirtualDesktopManager` para el widget `closewindow`:
@@ -466,6 +488,17 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   compila igual y anda igual… hasta que el usuario prende *"Compartir configuración del menú
   entre docks"*: ahí la opción que falta se resetea al default o no se propaga. `menuColumns`
   es el ejemplo a copiar.
+- **Los controles de las solapas Colores y Fuentes son copias, no atajos.** Desde 2026-08-05
+  varias opciones existen **dos veces** en el diálogo (General/Widgets/DarkMode + Colores,
+  Widgets + Fuentes). Cambiar de solapa **no** reconstruye el diálogo, así que cada copia
+  necesita las dos direcciones: `connect` del widget al setter de `DockConfig`, y `connect` de
+  la señal `*Changed` de vuelta al widget. Con una sola dirección el duplicado se ve viejo y
+  parece que la opción "no se guardó". Lo mismo vale para el **gating**: si cambiás cuándo un
+  control se deshabilita, cambialo en las dos solapas. Ejemplo a copiar: `labelBold` en
+  `createGeneralTab()` y `createFuentesTab()` (`src/settingsdialog.cpp`) — y ojo con que el
+  gating no siempre se hereda del vecino: el ancho y el tamaño de fuente del nombre se apagan
+  si no hay ninguna etiqueta encendida, pero el casillero de negritas **queda activo siempre**,
+  porque también pinta la fecha del reloj, que es texto fijo.
 - **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **tres** listas: la
   del `CMakeLists.txt` de arriba (para `qml/`), la de `previews/CMakeLists.txt` (para
   `previews/qml/`) y la de `tilemenu/CMakeLists.txt` (para `tilemenu/qml/`). Esta última tiene
@@ -588,6 +621,18 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `BrightnessControl` reaplica al arrancar el `Brightness/lastBrightness` de la config que le
   des (`brightnessctl set`), así que correr el arnés **te cambia el brillo de la pantalla** al
   valor que tenga ese `.conf`. Lo mismo vale para cualquier backend que escriba al sistema.
+  Y ojo con `XDG_DATA_HOME`: aísla la config de kdock, pero **no** `kdeglobals` (que sale de
+  `XDG_CONFIG_HOME`), así que `applyIconTheme()`/`applyColorScheme()` le cambian la apariencia
+  al escritorio de verdad aunque el arnés parezca aislado.
+- **Un clic por coordenadas contra una lista que se reordena apunta a otra fila.** Para probar
+  sin efectos, la regla era "hacé clic en la fila del tema que ya está aplicado". Pero entre
+  corrida y corrida el arnés había marcado un favorito, los favoritos van **arriba**, y esas
+  mismas coordenadas cayeron en otra fila: le cambié el iconset al escritorio del usuario
+  (2026-08-05). Si la lista se puede reordenar, no fijes el `xdotool mousemove`: leé el orden
+  del modelo primero y calculá la fila, o mejor ejercitá el widget desde código
+  (`->click()` sobre el hijo que buscaste), que no depende de la geometría. Y acordate de que
+  el estado que el arnés persiste **sobrevive a la corrida**: el `XDG_DATA_HOME` descartable
+  hay que borrarlo entre pruebas o la siguiente arranca con otra lista.
 - **Clave de fila en `DockModel`**: con `groupWindows=false` una ventana se indexa como
   `win:<puntero>`. Todo camino que convierta esa fila en lanzador anclado tiene que
   **re-indexarla por la app**, o queda un lanzador huérfano que relanza en cada clic.
