@@ -103,10 +103,13 @@ private:
     // One "when dark mode is on, also change…" row (system scheme, system icon
     // set, dock icon set), shared by the DarkMode and Colores tabs. Re-selects
     // itself from the config on darkModeChanged. "kind" picks the list
-    // ("icons"/"colors"); "special" is the leading do-nothing entry.
+    // ("icons"/"colors"); the two "special" texts are the leading empty-id entry
+    // of each selector, and they do NOT mean the same thing: on the dark side
+    // empty is "do not touch it", on the normal side it is "put back whatever
+    // was there" (DockConfig::darkAppearancePrevious).
     void addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *parent, int item,
                                     const QString &title, const QString &tip, const QString &kind,
-                                    const QString &special, const QString &liveValue);
+                                    const QString &specialDark, const QString &specialNormal);
     // The three rows above together (system scheme, system icon set, dock icon
     // set), built from AppearanceControl/Theme. Shared by the DarkMode and
     // Colores tabs.

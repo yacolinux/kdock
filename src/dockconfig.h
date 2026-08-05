@@ -280,6 +280,14 @@ public:
     // restored when it goes off.
     static QString darkAppearanceValue(int item, bool dark);
     static void setDarkAppearanceValue(int item, bool dark, const QString &value);
+    // What the system had right before dark mode went on, captured by
+    // DarkModeAppearance. An empty "normal" value means "put this back" — that
+    // is what the dialog's "(volver al anterior)" entry stands for. Persisted,
+    // for the same reason darkAppearanceApplied() is: the restore has to work
+    // even if the dock restarts while the mode is on. Not defined for
+    // DockIconTheme, where an empty id already means something else.
+    static QString darkAppearancePrevious(int item);
+    static void setDarkAppearancePrevious(int item, const QString &value);
     // Whether the side effects above are currently applied. Persisted, because
     // it is the state of the *system*, not of this process: without it a
     // restart would re-apply them and overwrite nothing, or skip the restore.

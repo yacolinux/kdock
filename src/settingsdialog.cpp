@@ -2065,59 +2065,56 @@ void SettingsDialog::addDarkAppearanceExtras(QFormLayout *form, QWidget *parent)
 {
     // Every row is a ThemePickerButton in PickValue mode, so the lists (and the
     // favourites) come from AppearanceControl instead of being rebuilt here.
-    // The two system-wide rows lead with a do-nothing entry (empty id); the
-    // dock's own row says it differently, because there an empty id already
-    // means something else ("no override, follow KDE").
+    //
+    // The empty id means different things on each side, hence two labels: going
+    // dark it is "leave the desktop alone", coming back it is "restore what was
+    // there before" (the snapshot DarkModeAppearance takes on the way in). The
+    // dock's own row is the exception — there an empty id is already a setting
+    // of its own ("no override, follow KDE"), on both sides.
     if (!m_appearance)
         return;
     const QString noChange = tr("(no cambiar)");
+    const QString restorePrevious = tr("(volver al anterior)");
 
     addDarkAppearanceExtrasRow(form, parent, DockConfig::SystemColorScheme,
                                tr("El esquema de color del sistema"),
                                tr("Aplica el esquema de color de KDE, igual que el widget "
                                   "«Esquema de color» (plasma-apply-colorscheme)."),
-                               QStringLiteral("colors"), noChange,
-                               m_appearance->currentColorScheme());
+                               QStringLiteral("colors"), noChange, restorePrevious);
 
     addDarkAppearanceExtrasRow(form, parent, DockConfig::SystemIconTheme,
                                tr("El iconset del sistema"),
                                tr("Aplica el iconset de KDE, igual que el widget «Iconset» "
                                   "(plasma-changeicons). Afecta a todo el escritorio."),
-                               QStringLiteral("icons"), noChange,
-                               m_appearance->currentIconTheme());
+                               QStringLiteral("icons"), noChange, restorePrevious);
 
     addDarkAppearanceExtrasRow(form, parent, DockConfig::DockIconTheme,
                                tr("El iconset del dock"),
                                tr("Solo el iconset que usa kdock, sin tocar el del escritorio "
                                   "(Configuración → General → «Iconset del dock»)."),
                                QStringLiteral("icons"), tr("(seguir el del sistema)"),
-                               m_theme ? m_theme->iconTheme() : QString());
+                               tr("(seguir el del sistema)"));
 }
 
 void SettingsDialog::addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *parent, int item,
                                                 const QString &title, const QString &tip,
-                                                const QString &kind, const QString &special,
-                                                const QString &liveValue)
+                                                const QString &kind, const QString &specialDark,
+                                                const QString &specialNormal)
 {
-    // With no match the picker would sit on whatever sorts first and quietly
-    // apply *that* — this desktop has no General/ColorScheme key, so the
-    // "normal" side started out pointing at "Arc". An explicit do-nothing
-    // entry is the safe landing spot; both apply*() calls no-op on "".
+    // Without an explicit empty-id entry the picker would sit on whatever sorts
+    // first and quietly apply *that* when the mode flips.
     auto *check = new QCheckBox(title, parent);
     check->setChecked(DockConfig::darkAppearanceEnabled(item));
     check->setToolTip(tip);
 
-    const auto makePicker = [this, parent, kind, special] {
+    const auto makePicker = [this, parent, kind](const QString &special) {
         auto *p = new ThemePickerButton(m_appearance, kind, ThemePickerPopup::PickValue, parent);
         p->setSpecialEntry(special);
         return p;
     };
-    auto *darkPick = makePicker();
-    auto *normalPick = makePicker();
+    auto *darkPick = makePicker(specialDark);
+    auto *normalPick = makePicker(specialNormal);
 
-    // Seed "normal" from what the system is using right now, but only while
-    // the mode is off — reading it with dark applied would save the dark
-    // value as the thing to restore.
     const auto reselect = [check, darkPick, normalPick, item] {
         // setCurrentId() is silent by contract, so no QSignalBlocker here; the
         // checkbox still needs one.
@@ -2129,14 +2126,14 @@ void SettingsDialog::addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *pare
         normalPick->setEnabled(check->isChecked());
     };
     darkPick->setCurrentId(DockConfig::darkAppearanceValue(item, true));
-    QString normal = DockConfig::darkAppearanceValue(item, false);
-    if (normal.isEmpty() && !DockConfig::darkAppearanceApplied())
-        normal = liveValue;
-    normalPick->setCurrentId(normal);
+    // No seeding from the live system: an empty "normal" is now a meaningful
+    // choice ("put back whatever was there"), captured on the way into dark
+    // mode by DarkModeAppearance instead of guessed here.
+    normalPick->setCurrentId(DockConfig::darkAppearanceValue(item, false));
 
     connect(check, &QCheckBox::toggled, this, [this, item, darkPick, normalPick](bool on) {
-        // Persist both pickers on enable: the seeded "normal" is only in the
-        // widget until something writes it, and it is what the restore uses.
+        // Persist both pickers on enable, so what the row shows is what the
+        // switch will use.
         if (on) {
             DockConfig::setDarkAppearanceValue(item, true, darkPick->currentId());
             DockConfig::setDarkAppearanceValue(item, false, normalPick->currentId());

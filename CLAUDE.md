@@ -346,6 +346,32 @@ popup que nunca se creó y parece un bug del código (2026-08-05). Desambiguá p
 propio widget (el tooltip, la página que lo contiene) e imprimí `isEnabled()` antes de
 concluir que el clic "no funcionó".
 
+### Probar los efectos sobre el escritorio sin tocarlo: herramientas falsas en el `PATH`
+
+`applyIconTheme()`/`applyColorScheme()` lanzan las herramientas de Plasma, que **le cambian la
+apariencia a la sesión de verdad** — y aislar `XDG_CONFIG_HOME` no alcanza para el esquema de
+color, porque `plasma-apply-colorscheme` además avisa por D-Bus. `AppearanceControl::findTool()`
+busca **primero en el `PATH`**, así que un directorio propio al frente con dos scripts de una
+línea que registren sus argumentos alcanza para probar el ciclo entero:
+
+```bash
+mkdir -p /tmp/fakebin
+for t in plasma-apply-colorscheme plasma-changeicons kwriteconfig6; do
+  printf '#!/bin/sh\necho "$(basename $0) <- $*" >> /tmp/fakebin/calls.log\n' > /tmp/fakebin/$t
+  chmod +x /tmp/fakebin/$t
+done
+env -i HOME=$HOME PATH=/tmp/fakebin:/usr/bin:/bin LANG=C.UTF-8 \
+    XDG_DATA_HOME=<copia-de-la-config> QT_QPA_PLATFORM=offscreen ./sonda
+```
+
+Prueba **la decisión** (qué id recibe cada herramienta en cada transición), que es justo lo que
+suele estar mal, y sirve para correr el arnés **sobre la config real del usuario copiada** sin
+riesgo. Con eso se cerró el bug de dark mode del 2026-08-05.
+
+Y si en cambio dejás que las herramientas corran de verdad: **son `startDetached`**, o sea
+asíncronas. Una sonda que lee `kdeglobals` inmediatamente después ve el valor **viejo** y parece
+que la aplicación no hizo nada; hay que esperar (~900 ms) antes de leer.
+
 ### Arnés del portapapeles en la sesión real (klipper como control)
 
 Bajo Xvfb **no hay data-control** (es X11), así que el backend nuevo del portapapeles solo se
