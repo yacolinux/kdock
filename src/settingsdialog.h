@@ -6,7 +6,10 @@
 #include <QColor>
 #include <QDialog>
 #include <QList>
+#include <QPair>
 #include <QString>
+
+#include <functional>
 
 class DockConfig;
 class DockManager;
@@ -22,8 +25,9 @@ class PreviewsLauncher;
 class TileMenuLauncher;
 class Theme;
 class QButtonGroup;
-class QComboBox;
 class QCheckBox;
+class QComboBox;
+class QFormLayout;
 class QGroupBox;
 class QLabel;
 class QLineEdit;
@@ -58,6 +62,13 @@ protected:
 
 private:
     QWidget *createGeneralTab();
+    // Look & feel hub: every icon-set / color option of the dock, copied
+    // (synced) from the tabs where they originally live. Nothing is removed
+    // from those tabs; each duplicated control re-reads the config on the
+    // corresponding *Changed signal, so both copies stay in step.
+    QWidget *createColoresTab();
+    // Every font size option of the dock, copied (synced) from the Widgets tab.
+    QWidget *createFuentesTab();
     QWidget *createWidgetsTab();
     QWidget *createMenuTab();
     QWidget *createTileMenuGroup(QWidget *parent);
@@ -74,6 +85,23 @@ private:
     // Dark mode: the per-dock switch, the app-wide one with its exception list,
     // and the two colors of the dark scheme (accent + background).
     QWidget *createDarkModeTab();
+    // Swatch button + "Breeze Dark" reset idiom shared by the DarkMode and
+    // Colores tabs. Returns the refresh lambda so the caller can re-run it on
+    // DockConfig::darkModeChanged (both colors are app-wide statics).
+    std::function<void()> makeColorButton(QPushButton *btn, QColor (*get)(),
+                                          void (*set)(const QColor &),
+                                          const QString &title);
+    // One "when dark mode is on, also change…" row (system scheme, system icon
+    // set, dock icon set), shared by the DarkMode and Colores tabs. Re-selects
+    // itself from the config on darkModeChanged.
+    void addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *parent, int item,
+                                    const QString &title, const QString &tip,
+                                    const QList<QPair<QString, QString>> &choices,
+                                    const QString &liveValue);
+    // The three rows above together (system scheme, system icon set, dock icon
+    // set), built from AppearanceControl/Theme. Shared by the DarkMode and
+    // Colores tabs.
+    void addDarkAppearanceExtras(QFormLayout *form, QWidget *parent);
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
     QWidget *createScriptRunnersTab();

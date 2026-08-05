@@ -60,6 +60,23 @@
 
 #include "theme.h"
 
+namespace {
+
+// Select <id> in <box>, appending an explicit "(not installed)" entry when a
+// configured set is missing — without it the combo would silently claim the
+// first theme, and the dock would keep using the missing one.
+void selectComboData(QComboBox *box, const QString &id)
+{
+    int idx = box->findData(id);
+    if (idx < 0 && !id.isEmpty()) {
+        box->addItem(SettingsDialog::tr("%1 (not installed)").arg(id), id);
+        idx = box->count() - 1;
+    }
+    box->setCurrentIndex(qMax(0, idx));
+}
+
+} // namespace
+
 SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray,
                                RelanzadoresManager *relanzadores, DockManager *manager,
                                Theme *theme, AudioControl *audio,
@@ -173,6 +190,10 @@ void SettingsDialog::buildTabs()
         m_tabWidget->addTab(scroll, title);
     };
     addTab(createGeneralTab(), tr("General"));
+    // Look & feel hubs: every icon/color option (Colores) and font option
+    // (Fuentes) of the dock, synced copies of the controls in the tabs below.
+    addTab(createColoresTab(), tr("Colores"));
+    addTab(createFuentesTab(), tr("Fuentes"));
     addTab(createWidgetsTab(), tr("Widgets"));
     addTab(createMenuTab(), tr("Menu"));
     addTab(createDarkModeTab(), tr("DarkMode"));
@@ -456,6 +477,11 @@ QWidget *SettingsDialog::createGeneralTab()
         connect(iconTheme, &QComboBox::currentIndexChanged, this, [this, iconTheme](int i) {
             m_theme->setIconTheme(iconTheme->itemData(i).toString());
         });
+        // The same combo lives in the Colores tab (and the override is global,
+        // so another dock's dialog can change it too): re-read it on Theme
+        // reloads instead of going stale.
+        connect(m_theme, &Theme::changed, iconTheme,
+                [this, iconTheme] { selectComboData(iconTheme, m_theme->iconTheme()); });
         form->addRow(tr("Icon theme:"), iconTheme);
     }
 
@@ -517,6 +543,18 @@ QWidget *SettingsDialog::createGeneralTab()
                     m_config->setWidgetIconThemeMode(widgetIcons->itemData(i).toInt());
                     syncEnabled();
                 });
+        // The whole group is mirrored in the Colores tab, so it re-reads from
+        // the config whenever any of the three values changes (the signal
+        // covers all three setters). Setters only emit on a real change, so
+        // the loop this creates terminates on its own.
+        const auto resync = [this, widgetIcons, lightBg, darkBg, selectTheme, syncEnabled] {
+            widgetIcons->setCurrentIndex(qMax(0, widgetIcons->findData(
+                                                m_config->widgetIconThemeMode())));
+            selectTheme(lightBg, m_config->widgetIconThemeLightBg());
+            selectTheme(darkBg, m_config->widgetIconThemeDarkBg());
+            syncEnabled();
+        };
+        connect(m_config, &DockConfig::widgetIconThemeChanged, tab, resync);
         syncEnabled();
     }
 
@@ -577,6 +615,9 @@ QWidget *SettingsDialog::createGeneralTab()
     colorRow->addWidget(colorBtn, 1);
     colorRow->addWidget(colorReset);
     form->addRow(tr("Panel color:"), colorRow);
+    // Mirrored in the Colores tab: follow the config (and changes made from
+    // another dock's dialog) instead of going stale.
+    connect(m_config, &DockConfig::panelColorChanged, colorBtn, refreshColorBtn);
 
     // Quick-color presets, offered in the right-click "background color"
     // submenu. Compact graphical form: a row of colored swatch buttons. The
@@ -644,6 +685,373 @@ QWidget *SettingsDialog::createGeneralTab()
     return tab;
 }
 
+QWidget *SettingsDialog::createColoresTab()
+{
+    // Look & feel hub: every icon-set / color setting of the dock lives here as
+    // a synced copy of the control in its original tab (General, Widgets,
+    // DarkMode). Nothing was removed from those tabs: each copy writes to the
+    // same DockConfig key (or static) and re-reads it on the key's *Changed
+    // signal, so whichever tab the user edits, the others show the same value.
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+
+    // --- Widgets del escritorio: los pickers de iconset / esquema de KDE ---
+    {
+        auto *box = new QGroupBox(tr("Escritorio (widgets de KDE)"), tab);
+        auto *form = new QFormLayout(box);
+
+        auto *showIconThemes = new QCheckBox(tr("Show icon-theme picker"), box);
+        showIconThemes->setChecked(m_config->showIconThemes());
+        showIconThemes->setToolTip(tr("Applies the icon theme to the whole desktop. kdock's own "
+                                      "icon theme (below) is left alone: while it is set, this "
+                                      "dock keeps its icons and only the rest of KDE follows."));
+        connect(showIconThemes, &QCheckBox::toggled, m_config, &DockConfig::setShowIconThemes);
+        connect(m_config, &DockConfig::showIconThemesChanged, showIconThemes,
+                [this, showIconThemes] { showIconThemes->setChecked(m_config->showIconThemes()); });
+        form->addRow(tr("Icon theme picker:"), showIconThemes);
+
+        auto *showColorSchemes = new QCheckBox(tr("Show color-scheme picker"), box);
+        showColorSchemes->setChecked(m_config->showColorSchemes());
+        showColorSchemes->setToolTip(tr("Applies a KDE color scheme system-wide "
+                                        "(plasma-apply-colorscheme)."));
+        connect(showColorSchemes, &QCheckBox::toggled, m_config, &DockConfig::setShowColorSchemes);
+        connect(m_config, &DockConfig::showColorSchemesChanged, showColorSchemes,
+                [this, showColorSchemes] {
+                    showColorSchemes->setChecked(m_config->showColorSchemes());
+                });
+        form->addRow(tr("Color scheme picker:"), showColorSchemes);
+
+        layout->addWidget(box);
+    }
+
+    // --- Iconset del dock: el override global de kdock (General → "Icon theme") ---
+    {
+        auto *box = new QGroupBox(tr("Iconset del dock"), tab);
+        auto *form = new QFormLayout(box);
+
+        if (m_theme) {
+            auto *iconTheme = new QComboBox(box);
+            iconTheme->addItem(tr("(System default)"), QString());
+            for (const auto &t : Theme::availableIconThemes())
+                iconTheme->addItem(t.first, t.second);
+            // Sync re-reads the override (empty = follow KDE) on Theme reloads.
+            const auto sync = [this, iconTheme] { selectComboData(iconTheme, m_theme->iconTheme()); };
+            sync();
+            connect(iconTheme, &QComboBox::currentIndexChanged, this, [this, iconTheme](int i) {
+                m_theme->setIconTheme(iconTheme->itemData(i).toString());
+            });
+            connect(m_theme, &Theme::changed, box, sync);
+            form->addRow(tr("Iconset del dock:"), iconTheme);
+        }
+
+        layout->addWidget(box);
+    }
+
+    // --- Íconos de widgets: sets adaptados al color del panel ---
+    {
+        auto *box = new QGroupBox(tr("Íconos de widgets"), tab);
+        auto *form = new QFormLayout(box);
+
+        auto *widgetIcons = new QComboBox(box);
+        widgetIcons->addItem(tr("Follow icon theme"), int(DockConfig::FollowIconTheme));
+        widgetIcons->addItem(tr("Match dock color"), int(DockConfig::MatchDockColor));
+        widgetIcons->addItem(tr("Always dark icons"), int(DockConfig::AlwaysLightBg));
+        widgetIcons->addItem(tr("Always light icons"), int(DockConfig::AlwaysDarkBg));
+        const int mIdx = widgetIcons->findData(m_config->widgetIconThemeMode());
+        widgetIcons->setCurrentIndex(mIdx < 0 ? 1 : mIdx);
+        widgetIcons->setToolTip(tr("Icon set used for the widget icons (volume, network, "
+                                   "session…). \"Match dock color\" picks the light- or "
+                                   "dark-background set from the panel's brightness."));
+        form->addRow(tr("Widget icons:"), widgetIcons);
+
+        auto *lightBg = new QComboBox(box);
+        auto *darkBg = new QComboBox(box);
+        for (const auto &t : Theme::availableIconThemes()) {
+            lightBg->addItem(t.first, t.second);
+            darkBg->addItem(t.first, t.second);
+        }
+        // A configured set that isn't installed still has to show up, or the
+        // combo would claim a set the dock is not actually using.
+        selectComboData(lightBg, m_config->widgetIconThemeLightBg());
+        selectComboData(darkBg, m_config->widgetIconThemeDarkBg());
+        lightBg->setToolTip(tr("Icon set for a light dock background (dark icons)."));
+        darkBg->setToolTip(tr("Icon set for a dark dock background (light icons)."));
+        connect(lightBg, &QComboBox::currentIndexChanged, this, [this, lightBg](int i) {
+            m_config->setWidgetIconThemeLightBg(lightBg->itemData(i).toString());
+        });
+        connect(darkBg, &QComboBox::currentIndexChanged, this, [this, darkBg](int i) {
+            m_config->setWidgetIconThemeDarkBg(darkBg->itemData(i).toString());
+        });
+        form->addRow(tr("· On light dock:"), lightBg);
+        form->addRow(tr("· On dark dock:"), darkBg);
+
+        // The two set pickers are only meaningful while an override is active.
+        auto syncEnabled = [this, lightBg, darkBg] {
+            const bool on = m_config->widgetIconThemeMode() != DockConfig::FollowIconTheme;
+            lightBg->setEnabled(on);
+            darkBg->setEnabled(on);
+        };
+        connect(widgetIcons, &QComboBox::currentIndexChanged, this,
+                [this, widgetIcons, syncEnabled](int i) {
+                    m_config->setWidgetIconThemeMode(widgetIcons->itemData(i).toInt());
+                    syncEnabled();
+                });
+        // The whole group is mirrored in the General tab: re-read all three on
+        // any change (the signal covers the three setters).
+        const auto resync = [this, widgetIcons, lightBg, darkBg, syncEnabled] {
+            widgetIcons->setCurrentIndex(qMax(0, widgetIcons->findData(
+                                                m_config->widgetIconThemeMode())));
+            selectComboData(lightBg, m_config->widgetIconThemeLightBg());
+            selectComboData(darkBg, m_config->widgetIconThemeDarkBg());
+            syncEnabled();
+        };
+        connect(m_config, &DockConfig::widgetIconThemeChanged, box, resync);
+        syncEnabled();
+
+        layout->addWidget(box);
+    }
+
+    // --- Color del panel + colores rápidos ---
+    {
+        auto *box = new QGroupBox(tr("Color del panel"), tab);
+        auto *form = new QFormLayout(box);
+
+        auto *colorRow = new QHBoxLayout;
+        auto *colorBtn = new QPushButton(box);
+        auto *colorReset = new QPushButton(tr("Reset to theme"), box);
+        const auto refreshColorBtn = [this, colorBtn] {
+            if (m_config->panelColorSet()) {
+                const QColor c = m_config->panelColor();
+                colorBtn->setText(c.name(QColor::HexRgb).toUpper());
+                colorBtn->setStyleSheet(QStringLiteral(
+                    "background-color:%1; color:%2; padding:4px 12px; border:1px solid gray;")
+                    .arg(c.name(), c.lightnessF() > 0.5 ? QStringLiteral("black")
+                                                        : QStringLiteral("white")));
+            } else {
+                colorBtn->setText(tr("Theme default"));
+                colorBtn->setStyleSheet(QString());
+            }
+        };
+        refreshColorBtn();
+        connect(colorBtn, &QPushButton::clicked, this, [this, refreshColorBtn] {
+            const QColor initial = m_config->panelColorSet() ? m_config->panelColor()
+                                                             : palette().window().color();
+            const QColor c = QColorDialog::getColor(initial, this, tr("Panel color"));
+            if (c.isValid()) {
+                m_config->setPanelColor(c);
+                refreshColorBtn();
+            }
+        });
+        connect(colorReset, &QPushButton::clicked, this, [this, refreshColorBtn] {
+            m_config->setPanelColor(QColor()); // invalid = inherit theme
+            refreshColorBtn();
+        });
+        // Mirrored in the General tab.
+        connect(m_config, &DockConfig::panelColorChanged, colorBtn, refreshColorBtn);
+        colorRow->addWidget(colorBtn, 1);
+        colorRow->addWidget(colorReset);
+        form->addRow(tr("Panel color:"), colorRow);
+
+        // Quick-color presets, shared by every dock (also offered in the
+        // right-click "background color" submenu).
+        auto *presetsRow = new QHBoxLayout;
+        presetsRow->setSpacing(4);
+        for (int i = 0; i < DockConfig::kPresetColorCount; ++i) {
+            auto *sw = new QPushButton(box);
+            sw->setFixedSize(28, 28);
+            const auto refreshSwatch = [this, sw, i] {
+                const QColor c(m_config->panelPresetColors().value(i));
+                sw->setToolTip(c.name(QColor::HexRgb).toUpper());
+                sw->setStyleSheet(QStringLiteral(
+                    "background-color:%1; border:1px solid gray; border-radius:4px;").arg(c.name()));
+            };
+            refreshSwatch();
+            connect(m_config, &DockConfig::panelPresetColorsChanged, sw, refreshSwatch);
+            connect(sw, &QPushButton::clicked, this, [this, i] {
+                QStringList presets = m_config->panelPresetColors();
+                const QColor c = QColorDialog::getColor(QColor(presets.value(i)), this,
+                                                        tr("Quick color %1").arg(i + 1));
+                if (c.isValid()) {
+                    presets[i] = c.name(QColor::HexRgb);
+                    m_config->setPanelPresetColors(presets);
+                }
+            });
+            presetsRow->addWidget(sw);
+        }
+        presetsRow->addStretch();
+        form->addRow(tr("Quick colors:"), presetsRow);
+
+        layout->addWidget(box);
+    }
+
+    // --- Apps en ejecución: los tres indicadores ---
+    {
+        auto *box = new QGroupBox(tr("Apps en ejecución"), tab);
+        auto *form = new QFormLayout(box);
+
+        auto *runningBg = new QCheckBox(tr("Colored background for running apps"), box);
+        runningBg->setChecked(m_config->iconRunningBackground());
+        connect(runningBg, &QCheckBox::toggled, m_config, &DockConfig::setIconRunningBackground);
+        connect(m_config, &DockConfig::iconRunningBackgroundChanged, runningBg,
+                [this, runningBg] { runningBg->setChecked(m_config->iconRunningBackground()); });
+        form->addRow(tr("Running highlight:"), runningBg);
+
+        auto *runningDots = new QCheckBox(tr("Window dots for running apps"), box);
+        runningDots->setChecked(m_config->iconRunningDots());
+        connect(runningDots, &QCheckBox::toggled, m_config, &DockConfig::setIconRunningDots);
+        connect(m_config, &DockConfig::iconRunningDotsChanged, runningDots,
+                [this, runningDots] { runningDots->setChecked(m_config->iconRunningDots()); });
+        form->addRow(tr("Running dots:"), runningDots);
+
+        auto *runningLine = new QCheckBox(tr("Edge line for running apps"), box);
+        runningLine->setChecked(m_config->iconRunningLine());
+        connect(runningLine, &QCheckBox::toggled, m_config, &DockConfig::setIconRunningLine);
+        connect(m_config, &DockConfig::iconRunningLineChanged, runningLine,
+                [this, runningLine] { runningLine->setChecked(m_config->iconRunningLine()); });
+        form->addRow(tr("Running edge line:"), runningLine);
+
+        layout->addWidget(box);
+    }
+
+    // --- Modo oscuro: los dos colores + los efectos opcionales del escritorio ---
+    {
+        auto *box = new QGroupBox(tr("Modo oscuro"), tab);
+        auto *boxLayout = new QVBoxLayout(box);
+        auto *form = new QFormLayout;
+
+        auto *accentBtn = new QPushButton(box);
+        const auto refreshAccent = makeColorButton(accentBtn, &DockConfig::darkAccentColor,
+                                                   &DockConfig::setDarkAccentColor,
+                                                   tr("Color de resaltado"));
+        accentBtn->setToolTip(tr("Color de los nombres de apps y widgets, y del resaltado de "
+                                 "las apps que están corriendo (que en modo oscuro deja de "
+                                 "usar el color de cada ícono y pasa a este único color)."));
+        auto *accentRow = new QHBoxLayout;
+        auto *accentReset = new QPushButton(tr("Breeze Dark"), box);
+        connect(accentReset, &QPushButton::clicked, this, [refreshAccent] {
+            DockConfig::setDarkAccentColor(QColor(QString::fromLatin1(DockConfig::kDarkAccentDefault)));
+            refreshAccent();
+        });
+        accentRow->addWidget(accentBtn, 1);
+        accentRow->addWidget(accentReset);
+        form->addRow(tr("Color de resaltado:"), accentRow);
+
+        auto *bgBtn = new QPushButton(box);
+        const auto refreshBg = makeColorButton(bgBtn, &DockConfig::darkBackgroundColor,
+                                               &DockConfig::setDarkBackgroundColor,
+                                               tr("Fondo del dock"));
+        bgBtn->setToolTip(tr("Fondo del dock en modo oscuro. La transparencia configurada en "
+                             "la solapa General se sigue aplicando igual."));
+        auto *bgRow = new QHBoxLayout;
+        auto *bgReset = new QPushButton(tr("Breeze Dark"), box);
+        connect(bgReset, &QPushButton::clicked, this, [refreshBg] {
+            DockConfig::setDarkBackgroundColor(
+                QColor(QString::fromLatin1(DockConfig::kDarkBackgroundDefault)));
+            refreshBg();
+        });
+        bgRow->addWidget(bgBtn, 1);
+        bgRow->addWidget(bgReset);
+        form->addRow(tr("Fondo del dock:"), bgRow);
+        // Both colors are mirrored in the DarkMode tab (app-wide statics).
+        connect(m_config, &DockConfig::darkModeChanged, box, refreshAccent);
+        connect(m_config, &DockConfig::darkModeChanged, box, refreshBg);
+
+        boxLayout->addLayout(form);
+
+        // The optional system-wide side effects, same as the DarkMode tab.
+        auto *extrasBox = new QGroupBox(tr("Al cambiar de modo, cambiar también:"), box);
+        auto *extrasForm = new QFormLayout(extrasBox);
+        extrasForm->addRow(new QLabel(tr("<i>Esto sí toca la configuración del escritorio, "
+                                         "no solo el dibujo del dock — por eso cada opción "
+                                         "lleva el valor de los dos modos.</i>"), extrasBox));
+        addDarkAppearanceExtras(extrasForm, extrasBox);
+        boxLayout->addWidget(extrasBox);
+        boxLayout->addStretch();
+
+        layout->addWidget(box);
+    }
+
+    layout->addStretch();
+    return tab;
+}
+
+QWidget *SettingsDialog::createFuentesTab()
+{
+    // Typography hub: every font size of the dock, as a synced copy of the
+    // controls in the Widgets tab (the label width/font/bold are shared by the
+    // app and widget names; the clock font by both clocks).
+    auto *tab = new QWidget;
+    auto *form = new QFormLayout(tab);
+
+    auto *clockFont = new QSpinBox(tab);
+    clockFont->setRange(0, 96);
+    clockFont->setSpecialValueText(tr("Automatic"));
+    clockFont->setSuffix(tr(" px"));
+    clockFont->setValue(m_config->clockFontSize());
+    clockFont->setToolTip(tr("Font size of the clock time text (both clocks). "
+                             "Automatic derives it from the widget icon size."));
+    connect(clockFont, &QSpinBox::valueChanged, m_config, &DockConfig::setClockFontSize);
+    connect(m_config, &DockConfig::clockFontSizeChanged, clockFont,
+            [this, clockFont] { clockFont->setValue(m_config->clockFontSize()); });
+    form->addRow(tr("Clock font size:"), clockFont);
+
+    // A separator before the name block, which only applies while some name is
+    // shown (see the enable logic below).
+    auto *nameHeader = new QLabel(tr("<b>Nombres de apps y widgets</b>"), tab);
+    form->addRow(nameHeader);
+
+    auto *labelWidth = new QSpinBox(tab);
+    labelWidth->setRange(60, 400);
+    labelWidth->setSingleStep(10);
+    labelWidth->setSuffix(tr(" px"));
+    labelWidth->setValue(m_config->iconLabelWidth());
+    labelWidth->setToolTip(tr("Width of the name: a maximum (the name is elided past "
+                              "it) on a horizontal dock, and the fixed column width on "
+                              "a vertical one. Shared by the app and widget names."));
+    connect(labelWidth, &QSpinBox::valueChanged, m_config, &DockConfig::setIconLabelWidth);
+    connect(m_config, &DockConfig::iconLabelWidthChanged, labelWidth,
+            [this, labelWidth] { labelWidth->setValue(m_config->iconLabelWidth()); });
+    form->addRow(tr("Name width:"), labelWidth);
+
+    auto *labelFont = new QSpinBox(tab);
+    labelFont->setRange(0, 48);
+    labelFont->setSpecialValueText(tr("Automatic"));
+    labelFont->setSuffix(tr(" px"));
+    labelFont->setValue(m_config->iconLabelFontSize());
+    labelFont->setToolTip(tr("Font size of the app and widget names. Automatic derives "
+                             "it from the icon size."));
+    connect(labelFont, &QSpinBox::valueChanged, m_config, &DockConfig::setIconLabelFontSize);
+    connect(m_config, &DockConfig::iconLabelFontSizeChanged, labelFont,
+            [this, labelFont] { labelFont->setValue(m_config->iconLabelFontSize()); });
+    form->addRow(tr("Name font size:"), labelFont);
+
+    auto *labelBold = new QCheckBox(tr("Negritas"), tab);
+    labelBold->setChecked(m_config->labelBold());
+    labelBold->setToolTip(tr("Draw every name the dock shows — applications and "
+                             "widgets — in bold."));
+    connect(labelBold, &QCheckBox::toggled, m_config, &DockConfig::setLabelBold);
+    connect(m_config, &DockConfig::labelBoldChanged, labelBold,
+            [this, labelBold] { labelBold->setChecked(m_config->labelBold()); });
+    form->addRow(tr("· Bold text:"), labelBold);
+
+    // The three name settings only mean something while some name is shown
+    // (mirrors the gating of the Widgets tab).
+    auto syncLabelEnabled = [this, labelWidth, labelFont, labelBold] {
+        const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
+                        || m_config->widgetLabelMode() != DockConfig::IconOnly;
+        labelWidth->setEnabled(on);
+        labelFont->setEnabled(on);
+        labelBold->setEnabled(on);
+    };
+    connect(m_config, &DockConfig::iconLabelModeChanged, tab, syncLabelEnabled);
+    connect(m_config, &DockConfig::widgetLabelModeChanged, tab, syncLabelEnabled);
+    syncLabelEnabled();
+
+    form->addRow(new QLabel(tr("<i>El modo de etiqueta (ícono solo / nombre abajo, etc.) "
+                               "se elige en la solapa Widgets.</i>"), tab));
+    return tab;
+}
+
 QWidget *SettingsDialog::createWidgetsTab()
 {
     auto *tab = new QWidget;
@@ -693,6 +1101,9 @@ QWidget *SettingsDialog::createWidgetsTab()
     clockFont->setToolTip(tr("Font size of the clock time text. Automatic derives it "
                              "from the widget icon size."));
     connect(clockFont, &QSpinBox::valueChanged, m_config, &DockConfig::setClockFontSize);
+    // Mirrored in the Fuentes tab.
+    connect(m_config, &DockConfig::clockFontSizeChanged, clockFont,
+            [this, clockFont] { clockFont->setValue(m_config->clockFontSize()); });
     form->addRow(tr("Clock font size:"), clockFont);
 
     auto *clock2Command = new QLineEdit(tab);
@@ -715,6 +1126,9 @@ QWidget *SettingsDialog::createWidgetsTab()
     auto *runningBg = new QCheckBox(tr("Colored background for running apps"), tab);
     runningBg->setChecked(m_config->iconRunningBackground());
     connect(runningBg, &QCheckBox::toggled, m_config, &DockConfig::setIconRunningBackground);
+    // Mirrored in the Colores tab.
+    connect(m_config, &DockConfig::iconRunningBackgroundChanged, runningBg,
+            [this, runningBg] { runningBg->setChecked(m_config->iconRunningBackground()); });
     form->addRow(tr("Running highlight:"), runningBg);
 
     auto *runningDots = new QCheckBox(tr("Window dots for running apps"), tab);
@@ -757,6 +1171,9 @@ QWidget *SettingsDialog::createWidgetsTab()
                                   "it) on a horizontal dock, and the fixed column width on "
                                   "a vertical one."));
         connect(labelWidth, &QSpinBox::valueChanged, m_config, &DockConfig::setIconLabelWidth);
+        // Width and font size are mirrored in the Fuentes tab.
+        connect(m_config, &DockConfig::iconLabelWidthChanged, labelWidth,
+                [this, labelWidth] { labelWidth->setValue(m_config->iconLabelWidth()); });
         form->addRow(tr("· Name width:"), labelWidth);
 
         auto *labelFont = new QSpinBox(tab);
@@ -767,6 +1184,8 @@ QWidget *SettingsDialog::createWidgetsTab()
         labelFont->setToolTip(tr("Font size of the application name. Automatic derives it "
                                  "from the icon size."));
         connect(labelFont, &QSpinBox::valueChanged, m_config, &DockConfig::setIconLabelFontSize);
+        connect(m_config, &DockConfig::iconLabelFontSizeChanged, labelFont,
+                [this, labelFont] { labelFont->setValue(m_config->iconLabelFontSize()); });
         form->addRow(tr("· Name font size:"), labelFont);
 
         auto *labelBold = new QCheckBox(tr("Negritas"), tab);
@@ -774,6 +1193,8 @@ QWidget *SettingsDialog::createWidgetsTab()
         labelBold->setToolTip(tr("Draw every name the dock shows — applications and "
                                  "widgets — in bold."));
         connect(labelBold, &QCheckBox::toggled, m_config, &DockConfig::setLabelBold);
+        connect(m_config, &DockConfig::labelBoldChanged, labelBold,
+                [this, labelBold] { labelBold->setChecked(m_config->labelBold()); });
         form->addRow(tr("· Bold text:"), labelBold);
 
         // Same for every other section (widgets and blocks): an independent
@@ -869,6 +1290,9 @@ QWidget *SettingsDialog::createWidgetsTab()
                                   "icon theme (above) is left alone: while it is set, this "
                                   "dock keeps its icons and only the rest of KDE follows."));
     connect(showIconThemes, &QCheckBox::toggled, m_config, &DockConfig::setShowIconThemes);
+    // Mirrored in the Colores tab.
+    connect(m_config, &DockConfig::showIconThemesChanged, showIconThemes,
+            [this, showIconThemes] { showIconThemes->setChecked(m_config->showIconThemes()); });
     form->addRow(tr("Icon theme picker:"), showIconThemes);
 
     auto *showColorSchemes = new QCheckBox(tr("Show color-scheme picker"), tab);
@@ -876,6 +1300,9 @@ QWidget *SettingsDialog::createWidgetsTab()
     showColorSchemes->setToolTip(tr("Applies a KDE color scheme system-wide "
                                     "(plasma-apply-colorscheme)."));
     connect(showColorSchemes, &QCheckBox::toggled, m_config, &DockConfig::setShowColorSchemes);
+    // Mirrored in the Colores tab.
+    connect(m_config, &DockConfig::showColorSchemesChanged, showColorSchemes,
+            [this, showColorSchemes] { showColorSchemes->setChecked(m_config->showColorSchemes()); });
     form->addRow(tr("Color scheme picker:"), showColorSchemes);
 
     auto *showSession = new QCheckBox(tr("Show session/power button (KDE)"), tab);
@@ -1559,6 +1986,154 @@ QString SettingsDialog::dockLabel(const QString &dockId)
     return name;
 }
 
+std::function<void()> SettingsDialog::makeColorButton(QPushButton *btn, QColor (*get)(),
+                                                      void (*set)(const QColor &),
+                                                      const QString &title)
+{
+    // Swatch button that opens QColorDialog and paints itself with the result.
+    // Returns the refresh lambda so the caller can re-run it on config signals
+    // (the dark colors are app-wide statics edited from several tabs).
+    const auto refresh = [btn, get] {
+        const QColor c = get();
+        btn->setText(c.name(QColor::HexRgb).toUpper());
+        btn->setStyleSheet(QStringLiteral(
+            "background-color:%1; color:%2; padding:4px 12px; border:1px solid gray;")
+            .arg(c.name(), c.lightnessF() > 0.5 ? QStringLiteral("black")
+                                                : QStringLiteral("white")));
+    };
+    refresh();
+    connect(btn, &QPushButton::clicked, this, [this, get, set, title, refresh] {
+        const QColor c = QColorDialog::getColor(get(), this, title);
+        if (c.isValid()) {
+            set(c);
+            refresh();
+        }
+    });
+    return refresh;
+}
+
+void SettingsDialog::addDarkAppearanceExtras(QFormLayout *form, QWidget *parent)
+{
+    // The two system-wide rows lead with a do-nothing entry (empty id); the
+    // dock's own row does not, because there an empty id already means
+    // something else ("no override, follow KDE").
+    const QPair<QString, QString> noChange{QString(), tr("(no cambiar)")};
+
+    if (m_appearance) {
+        QList<QPair<QString, QString>> schemes{noChange};
+        const QVariantList list = m_appearance->colorSchemes();
+        for (const QVariant &v : list) {
+            const QVariantMap m = v.toMap();
+            schemes.append({m.value(QStringLiteral("id")).toString(),
+                            m.value(QStringLiteral("name")).toString()});
+        }
+        addDarkAppearanceExtrasRow(form, parent, DockConfig::SystemColorScheme,
+                                   tr("El esquema de color del sistema"),
+                                   tr("Aplica el esquema de color de KDE, igual que el widget "
+                                      "«Esquema de color» (plasma-apply-colorscheme)."),
+                                   schemes, m_appearance->currentColorScheme());
+    }
+
+    QList<QPair<QString, QString>> icons;
+    for (const auto &[name, id] : Theme::availableIconThemes()) {
+        // Some shipped index.theme files keep the packaging placeholder
+        // ("@ThemeName@") in Name=; the directory name is the honest fallback.
+        // Same rule as AppearanceControl::iconThemes().
+        icons.append({id, (name.isEmpty() || name.contains(QLatin1Char('@'))) ? id : name});
+    }
+    if (m_appearance) {
+        QList<QPair<QString, QString>> systemIcons{noChange};
+        systemIcons.append(icons);
+        addDarkAppearanceExtrasRow(form, parent, DockConfig::SystemIconTheme,
+                                   tr("El iconset del sistema"),
+                                   tr("Aplica el iconset de KDE, igual que el widget «Iconset» "
+                                      "(plasma-changeicons). Afecta a todo el escritorio."),
+                                   systemIcons, m_appearance->currentIconTheme());
+    }
+    {
+        // The dock's own override, where "no override" is a real choice.
+        QList<QPair<QString, QString>> dockIcons = icons;
+        dockIcons.prepend({QString(), tr("(seguir el del sistema)")});
+        addDarkAppearanceExtrasRow(form, parent, DockConfig::DockIconTheme,
+                                   tr("El iconset del dock"),
+                                   tr("Solo el iconset que usa kdock, sin tocar el del escritorio "
+                                      "(Configuración → General → «Iconset del dock»)."),
+                                   dockIcons, m_theme ? m_theme->iconTheme() : QString());
+    }
+}
+
+void SettingsDialog::addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *parent, int item,
+                                                const QString &title, const QString &tip,
+                                                const QList<QPair<QString, QString>> &choices,
+                                                const QString &liveValue)
+{
+    // With no match the combo would sit on whatever sorts first and quietly
+    // apply *that* — this desktop has no General/ColorScheme key, so the
+    // "normal" side started out pointing at "Arc". An explicit do-nothing
+    // entry is the safe landing spot; both apply*() calls no-op on "".
+    auto *check = new QCheckBox(title, parent);
+    check->setChecked(DockConfig::darkAppearanceEnabled(item));
+    check->setToolTip(tip);
+
+    auto *darkCombo = new QComboBox(parent);
+    auto *normalCombo = new QComboBox(parent);
+    for (const auto &[id, name] : choices) {
+        darkCombo->addItem(name, id);
+        normalCombo->addItem(name, id);
+    }
+    const auto select = [](QComboBox *combo, const QString &id) {
+        const int i = combo->findData(id);
+        combo->setCurrentIndex(i < 0 ? 0 : i);
+    };
+    // Seed "normal" from what the system is using right now, but only while
+    // the mode is off — reading it with dark applied would save the dark
+    // value as the thing to restore.
+    const auto reselect = [check, darkCombo, normalCombo, item, select] {
+        const QSignalBlocker b1(check);
+        const QSignalBlocker b2(darkCombo);
+        const QSignalBlocker b3(normalCombo);
+        check->setChecked(DockConfig::darkAppearanceEnabled(item));
+        select(darkCombo, DockConfig::darkAppearanceValue(item, true));
+        select(normalCombo, DockConfig::darkAppearanceValue(item, false));
+        darkCombo->setEnabled(check->isChecked());
+        normalCombo->setEnabled(check->isChecked());
+    };
+    select(darkCombo, DockConfig::darkAppearanceValue(item, true));
+    QString normal = DockConfig::darkAppearanceValue(item, false);
+    if (normal.isEmpty() && !DockConfig::darkAppearanceApplied())
+        normal = liveValue;
+    select(normalCombo, normal);
+
+    connect(check, &QCheckBox::toggled, this, [this, item, darkCombo, normalCombo](bool on) {
+        // Persist both combos on enable: the seeded "normal" is only in the
+        // widget until something writes it, and it is what the restore uses.
+        if (on) {
+            DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
+            DockConfig::setDarkAppearanceValue(item, false,
+                                               normalCombo->currentData().toString());
+        }
+        DockConfig::setDarkAppearanceEnabled(item, on);
+        darkCombo->setEnabled(on);
+        normalCombo->setEnabled(on);
+    });
+    connect(darkCombo, &QComboBox::currentIndexChanged, this, [item, darkCombo] {
+        DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
+    });
+    connect(normalCombo, &QComboBox::currentIndexChanged, this, [item, normalCombo] {
+        DockConfig::setDarkAppearanceValue(item, false, normalCombo->currentData().toString());
+    });
+    // The values are app-wide statics reachable from the DarkMode and Colores
+    // tabs (and another dock's dialog); re-read them all whenever the dark-mode
+    // group changes anywhere.
+    connect(m_config, &DockConfig::darkModeChanged, check, reselect);
+    darkCombo->setEnabled(check->isChecked());
+    normalCombo->setEnabled(check->isChecked());
+
+    form->addRow(check);
+    form->addRow(tr("· En modo oscuro:"), darkCombo);
+    form->addRow(tr("· En modo normal:"), normalCombo);
+}
+
 QWidget *SettingsDialog::createDarkModeTab()
 {
     auto *tab = new QWidget;
@@ -1590,32 +2165,12 @@ QWidget *SettingsDialog::createDarkModeTab()
     form->addRow(tr("Alcance:"), allDocks);
 
     // --- The two colors of the dark scheme (app-wide, not per dock) ---
-    // Same button+swatch idiom as the panel color in the General tab.
-    const auto colorButton = [this](QPushButton *btn, QColor (*get)(), void (*set)(const QColor &),
-                                    const QString &title) {
-        const auto refresh = [btn, get] {
-            const QColor c = get();
-            btn->setText(c.name(QColor::HexRgb).toUpper());
-            btn->setStyleSheet(QStringLiteral(
-                "background-color:%1; color:%2; padding:4px 12px; border:1px solid gray;")
-                .arg(c.name(), c.lightnessF() > 0.5 ? QStringLiteral("black")
-                                                    : QStringLiteral("white")));
-        };
-        refresh();
-        connect(btn, &QPushButton::clicked, this, [this, get, set, title, refresh] {
-            const QColor c = QColorDialog::getColor(get(), this, title);
-            if (c.isValid()) {
-                set(c);
-                refresh();
-            }
-        });
-        return refresh;
-    };
-
+    // Same button+swatch idiom as the panel color in the General tab (and the
+    // copies in the Colores tab), via the shared makeColorButton helper.
     auto *accentBtn = new QPushButton(tab);
-    const auto refreshAccent = colorButton(accentBtn, &DockConfig::darkAccentColor,
-                                           &DockConfig::setDarkAccentColor,
-                                           tr("Color de resaltado"));
+    const auto refreshAccent = makeColorButton(accentBtn, &DockConfig::darkAccentColor,
+                                               &DockConfig::setDarkAccentColor,
+                                               tr("Color de resaltado"));
     accentBtn->setToolTip(tr("Color de los nombres de apps y widgets, y del resaltado de "
                              "las apps que están corriendo (que en modo oscuro deja de "
                              "usar el color de cada ícono y pasa a este único color)."));
@@ -1630,9 +2185,9 @@ QWidget *SettingsDialog::createDarkModeTab()
     form->addRow(tr("Color de resaltado:"), accentRow);
 
     auto *bgBtn = new QPushButton(tab);
-    const auto refreshBg = colorButton(bgBtn, &DockConfig::darkBackgroundColor,
-                                       &DockConfig::setDarkBackgroundColor,
-                                       tr("Fondo del dock"));
+    const auto refreshBg = makeColorButton(bgBtn, &DockConfig::darkBackgroundColor,
+                                           &DockConfig::setDarkBackgroundColor,
+                                           tr("Fondo del dock"));
     bgBtn->setToolTip(tr("Fondo del dock en modo oscuro. La transparencia configurada en "
                          "la solapa General se sigue aplicando igual."));
     auto *bgRow = new QHBoxLayout;
@@ -1645,6 +2200,10 @@ QWidget *SettingsDialog::createDarkModeTab()
     bgRow->addWidget(bgBtn, 1);
     bgRow->addWidget(bgReset);
     form->addRow(tr("Fondo del dock:"), bgRow);
+    // Both colors are mirrored in the Colores tab (and are app-wide statics),
+    // so re-read them whenever the dark-mode group changes anywhere.
+    connect(m_config, &DockConfig::darkModeChanged, tab, refreshAccent);
+    connect(m_config, &DockConfig::darkModeChanged, tab, refreshBg);
 
     layout->addLayout(form);
 
@@ -1658,107 +2217,7 @@ QWidget *SettingsDialog::createDarkModeTab()
     extrasForm->addRow(new QLabel(tr("<i>Esto sí toca la configuración del escritorio, "
                                      "no solo el dibujo del dock — por eso cada opción "
                                      "lleva el valor de los dos modos.</i>"), extrasBox));
-
-    const auto addExtraRow = [this, extrasBox, extrasForm](
-                                 int item, const QString &title, const QString &tip,
-                                 const QList<QPair<QString, QString>> &choices,
-                                 const QString &liveValue) {
-        // With no match the combo would sit on whatever sorts first and quietly
-        // apply *that* — this desktop has no General/ColorScheme key, so the
-        // "normal" side started out pointing at "Arc". An explicit do-nothing
-        // entry is the safe landing spot; both apply*() calls no-op on "".
-        auto *check = new QCheckBox(title, extrasBox);
-        check->setChecked(DockConfig::darkAppearanceEnabled(item));
-        check->setToolTip(tip);
-
-        auto *darkCombo = new QComboBox(extrasBox);
-        auto *normalCombo = new QComboBox(extrasBox);
-        for (const auto &[id, name] : choices) {
-            darkCombo->addItem(name, id);
-            normalCombo->addItem(name, id);
-        }
-        const auto select = [](QComboBox *combo, const QString &id) {
-            const int i = combo->findData(id);
-            combo->setCurrentIndex(i < 0 ? 0 : i);
-        };
-        select(darkCombo, DockConfig::darkAppearanceValue(item, true));
-        // Seed "normal" from what the system is using right now, but only while
-        // the mode is off — reading it with dark applied would save the dark
-        // value as the thing to restore.
-        QString normal = DockConfig::darkAppearanceValue(item, false);
-        if (normal.isEmpty() && !DockConfig::darkAppearanceApplied())
-            normal = liveValue;
-        select(normalCombo, normal);
-
-        connect(check, &QCheckBox::toggled, this, [this, item, darkCombo, normalCombo](bool on) {
-            // Persist both combos on enable: the seeded "normal" is only in the
-            // widget until something writes it, and it is what the restore uses.
-            if (on) {
-                DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
-                DockConfig::setDarkAppearanceValue(item, false,
-                                                   normalCombo->currentData().toString());
-            }
-            DockConfig::setDarkAppearanceEnabled(item, on);
-            darkCombo->setEnabled(on);
-            normalCombo->setEnabled(on);
-        });
-        connect(darkCombo, &QComboBox::currentIndexChanged, this, [item, darkCombo] {
-            DockConfig::setDarkAppearanceValue(item, true, darkCombo->currentData().toString());
-        });
-        connect(normalCombo, &QComboBox::currentIndexChanged, this, [item, normalCombo] {
-            DockConfig::setDarkAppearanceValue(item, false, normalCombo->currentData().toString());
-        });
-        darkCombo->setEnabled(check->isChecked());
-        normalCombo->setEnabled(check->isChecked());
-
-        extrasForm->addRow(check);
-        extrasForm->addRow(tr("· En modo oscuro:"), darkCombo);
-        extrasForm->addRow(tr("· En modo normal:"), normalCombo);
-    };
-
-    // The two system-wide rows lead with a do-nothing entry (empty id); the
-    // dock's own row does not, because there an empty id already means
-    // something else ("no override, follow KDE").
-    const QPair<QString, QString> noChange{QString(), tr("(no cambiar)")};
-
-    if (m_appearance) {
-        QList<QPair<QString, QString>> schemes{noChange};
-        const QVariantList list = m_appearance->colorSchemes();
-        for (const QVariant &v : list) {
-            const QVariantMap m = v.toMap();
-            schemes.append({m.value(QStringLiteral("id")).toString(),
-                            m.value(QStringLiteral("name")).toString()});
-        }
-        addExtraRow(DockConfig::SystemColorScheme, tr("El esquema de color del sistema"),
-                    tr("Aplica el esquema de color de KDE, igual que el widget "
-                       "«Esquema de color» (plasma-apply-colorscheme)."),
-                    schemes, m_appearance->currentColorScheme());
-    }
-
-    QList<QPair<QString, QString>> icons;
-    for (const auto &[name, id] : Theme::availableIconThemes()) {
-        // Some shipped index.theme files keep the packaging placeholder
-        // ("@ThemeName@") in Name=; the directory name is the honest fallback.
-        // Same rule as AppearanceControl::iconThemes().
-        icons.append({id, (name.isEmpty() || name.contains(QLatin1Char('@'))) ? id : name});
-    }
-    if (m_appearance) {
-        QList<QPair<QString, QString>> systemIcons{noChange};
-        systemIcons.append(icons);
-        addExtraRow(DockConfig::SystemIconTheme, tr("El iconset del sistema"),
-                    tr("Aplica el iconset de KDE, igual que el widget «Iconset» "
-                       "(plasma-changeicons). Afecta a todo el escritorio."),
-                    systemIcons, m_appearance->currentIconTheme());
-    }
-    {
-        // The dock's own override, where "no override" is a real choice.
-        QList<QPair<QString, QString>> dockIcons = icons;
-        dockIcons.prepend({QString(), tr("(seguir el del sistema)")});
-        addExtraRow(DockConfig::DockIconTheme, tr("El iconset del dock"),
-                    tr("Solo el iconset que usa kdock, sin tocar el del escritorio "
-                       "(Configuración → General → «Iconset del dock»)."),
-                    dockIcons, m_theme ? m_theme->iconTheme() : QString());
-    }
+    addDarkAppearanceExtras(extrasForm, extrasBox);
     layout->addWidget(extrasBox);
 
     // --- Exceptions ---
