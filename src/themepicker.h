@@ -1,8 +1,12 @@
-// Qt Widgets twin of qml/ThemeListPopup.qml: the picker for a global KDE
-// appearance setting, used twice in Settings → Colores (icon theme / color
-// scheme). Same layout as the dock widget's popup - search field on top, one
-// row per entry with a preview, the applied one ticked, and a favourites
-// checkbox - so the dialog and the dock feel like the same control.
+// Qt Widgets twin of qml/ThemeListPopup.qml: the one theme selector the whole
+// Settings dialog uses. Same layout as the dock widget's popup - search field
+// on top, one row per entry with a preview, the chosen one ticked, and a
+// favourites checkbox - so the dialog and the dock feel like the same control.
+//
+// It comes in two modes. ApplyToDesktop applies to KDE right away (Colores →
+// "· Apply icon theme" / "· Apply color scheme"); PickValue only reports the id
+// and lets the caller store it, which is what every other selector needs - the
+// dock's own icon-theme override, the widget icon sets, and DarkMode's six.
 //
 // Both lists are long (183 icon themes / 456 color schemes on a full install)
 // and one icon preview costs ~4 ms to resolve, so the rows are built lazily:
@@ -14,9 +18,10 @@
 #include <QFrame>
 #include <QPushButton>
 #include <QString>
-#include <QVariantList>
+#include <QVariantMap>
 
 class AppearanceControl;
+class QCheckBox;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -62,11 +67,27 @@ class ThemePickerPopup : public QFrame
 {
     Q_OBJECT
 public:
+    // What choosing a row does.
+    enum Mode {
+        ApplyToDesktop, // straight to KDE (plasma-changeicons / -colorscheme)
+        PickValue,      // only report it; the caller stores it
+    };
+
     // kind: "icons" | "colors", the same token AppearanceControl takes.
-    ThemePickerPopup(AppearanceControl *appearance, const QString &kind, QWidget *parent = nullptr);
+    ThemePickerPopup(AppearanceControl *appearance, const QString &kind, Mode mode = ApplyToDesktop,
+                     QWidget *parent = nullptr);
 
     // Show under (or above, if there is no room) the given widget.
     void showFor(QWidget *anchor);
+
+    // In PickValue mode: which id is ticked, and the label of the leading
+    // do-nothing row (empty id) - "(System default)", "(no cambiar)"…
+    void setSelectedId(const QString &id) { m_selectedId = id; }
+    void setSpecialEntry(const QString &label) { m_specialLabel = label; }
+
+signals:
+    // PickValue only. ApplyToDesktop applies and stays quiet.
+    void chosen(const QString &id);
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
@@ -84,9 +105,13 @@ private:
     AppearanceControl *m_appearance = nullptr;
     QString m_kind;
     bool m_iconsMode = true;
+    Mode m_mode = ApplyToDesktop;
+    QString m_selectedId;   // PickValue: what carries the tick
+    QString m_specialLabel; // PickValue: leading row with an empty id
 
     QLineEdit *m_search = nullptr;
     QLabel *m_count = nullptr;
+    QCheckBox *m_keepOpen = nullptr;
     QListWidget *m_list = nullptr;
     QTimer *m_debounce = nullptr;
 
@@ -104,10 +129,21 @@ class ThemePickerButton : public QPushButton
 {
     Q_OBJECT
 public:
+    using Mode = ThemePickerPopup::Mode;
+
     ThemePickerButton(AppearanceControl *appearance, const QString &kind,
-                      QWidget *parent = nullptr);
+                      Mode mode = ThemePickerPopup::ApplyToDesktop, QWidget *parent = nullptr);
+
+    // PickValue only. setCurrentId() is silent by contract: it is what the
+    // synced copy in the other tab calls, so emitting would ping-pong.
+    QString currentId() const { return m_currentId; }
+    void setCurrentId(const QString &id);
+    void setSpecialEntry(const QString &label);
 
     QSize sizeHint() const override;
+
+signals:
+    void picked(const QString &id);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -118,7 +154,11 @@ private:
     AppearanceControl *m_appearance = nullptr;
     QString m_kind;
     bool m_iconsMode = true;
+    Mode m_mode = ThemePickerPopup::ApplyToDesktop;
+    QString m_currentId; // PickValue: the whole state
+    QString m_specialLabel;
     QString m_currentName;
+    QVariantMap m_previewEntry; // resolved into m_preview on the first paint
     QPixmap m_preview;
     ThemePickerPopup *m_popup = nullptr;
 };

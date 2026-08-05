@@ -118,19 +118,65 @@ Popup {
                 onTextChanged: popup.query = text
             }
 
-            Text {
+            // Counter on the left, "keep open" on the right: trying themes one
+            // after another otherwise means reopening the popup every time. The
+            // setting is shared with every other picker (AppearanceControl).
+            Item {
+                id: headRow
                 width: parent.width
-                text: popup.iconsMode
-                      ? qsTr("%1 iconsets").arg(popup.listModel.length)
-                      : qsTr("%1 esquemas").arg(popup.listModel.length)
-                color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.6)
-                font.pixelSize: 11
+                height: Math.max(countText.height, keepOpenBox.height)
+
+                Text {
+                    id: countText
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: popup.iconsMode
+                          ? qsTr("%1 iconsets").arg(popup.listModel.length)
+                          : qsTr("%1 esquemas").arg(popup.listModel.length)
+                    color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.6)
+                    font.pixelSize: 11
+                }
+
+                CheckBox {
+                    id: keepOpenBox
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    checked: appearance ? appearance.keepPickerOpen : false
+                    padding: 0
+                    spacing: 4
+                    onToggled: appearance.keepPickerOpen = checked
+                    indicator: Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 14; height: 14; radius: 3
+                        color: keepOpenBox.checked ? theme.highlight : "transparent"
+                        border.width: 1
+                        border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                              theme.foreground.b,
+                                              keepOpenBox.checked ? 0.0 : 0.45)
+                        Text {
+                            anchors.centerIn: parent
+                            visible: keepOpenBox.checked
+                            text: "✓"
+                            color: theme.background
+                            font.pixelSize: 11
+                            font.bold: true
+                        }
+                    }
+                    contentItem: Text {
+                        leftPadding: keepOpenBox.indicator.width + keepOpenBox.spacing
+                        text: qsTr("Mantener abierta")
+                        color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                       theme.foreground.b, 0.6)
+                        font.pixelSize: 11
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
             }
 
             ListView {
                 id: list
                 width: parent.width
-                height: parent.height - searchField.height - 11 - 2 * parent.spacing
+                height: parent.height - searchField.height - headRow.height - 2 * parent.spacing
                 clip: true
                 model: popup.listModel
                 // Hundreds of rows, each with previews: only build what shows.
@@ -279,7 +325,11 @@ Popup {
                                 appearance.applyIconTheme(modelData.id)
                             else
                                 appearance.applyColorScheme(modelData.id)
-                            popup.close()
+                            // With "keep open" the popup stays for the next try;
+                            // the tick moves on its own once KDE reports back
+                            // (appearance.changed bumps refreshTick).
+                            if (!appearance.keepPickerOpen)
+                                popup.close()
                         }
                     }
                 }

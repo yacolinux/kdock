@@ -51,6 +51,7 @@ QString kdeColorToHex(const QVariant &value, const QString &fallback)
 // whole process, never per dock).
 const char *kFavIconsKey = "Appearance/favoriteIconThemes";
 const char *kFavColorsKey = "Appearance/favoriteColorSchemes";
+const char *kKeepOpenKey = "Appearance/keepPickerOpen";
 
 } // namespace
 
@@ -88,6 +89,17 @@ void AppearanceControl::loadFavorites()
     const QStringList colors = s.value(QLatin1String(kFavColorsKey)).toStringList();
     m_favoriteIcons = QSet<QString>(icons.begin(), icons.end());
     m_favoriteColors = QSet<QString>(colors.begin(), colors.end());
+    m_keepPickerOpen = s.value(QLatin1String(kKeepOpenKey), false).toBool();
+}
+
+void AppearanceControl::setKeepPickerOpen(bool on)
+{
+    if (on == m_keepPickerOpen)
+        return;
+    m_keepPickerOpen = on;
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QLatin1String(kKeepOpenKey), on);
+    emit keepPickerOpenChanged();
 }
 
 QSet<QString> &AppearanceControl::favoriteSet(const QString &kind)

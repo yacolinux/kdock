@@ -131,12 +131,13 @@ void ThemeRowWidget::paintEvent(QPaintEvent *)
 
 // ---------------------------------------------------------------- popup ----
 
-ThemePickerPopup::ThemePickerPopup(AppearanceControl *appearance, const QString &kind,
+ThemePickerPopup::ThemePickerPopup(AppearanceControl *appearance, const QString &kind, Mode mode,
                                    QWidget *parent)
     : QFrame(parent, Qt::Popup)
     , m_appearance(appearance)
     , m_kind(kind)
     , m_iconsMode(kind != QLatin1String("colors"))
+    , m_mode(mode)
 {
     setFrameShape(QFrame::StyledPanel);
     setFrameShadow(QFrame::Raised);
@@ -154,12 +155,33 @@ ThemePickerPopup::ThemePickerPopup(AppearanceControl *appearance, const QString 
     m_search->setClearButtonEnabled(true);
     layout->addWidget(m_search);
 
-    m_count = new QLabel(this);
-    QFont small = m_count->font();
-    small.setPointSizeF(small.pointSizeF() * 0.9);
-    m_count->setFont(small);
-    m_count->setEnabled(false); // reads as the dimmed caption the QML popup has
-    layout->addWidget(m_count);
+    // Counter on the left, "keep open" on the right: one line, and the checkbox
+    // sits where the eye already goes before picking.
+    {
+        auto *head = new QHBoxLayout;
+        head->setContentsMargins(0, 0, 0, 0);
+        m_count = new QLabel(this);
+        QFont small = m_count->font();
+        small.setPointSizeF(small.pointSizeF() * 0.9);
+        m_count->setFont(small);
+        m_count->setEnabled(false); // reads as the dimmed caption the QML popup has
+        head->addWidget(m_count);
+        head->addStretch(1);
+
+        m_keepOpen = new QCheckBox(tr("Mantener abierta"), this);
+        m_keepOpen->setFont(small);
+        m_keepOpen->setChecked(m_appearance && m_appearance->keepPickerOpen());
+        m_keepOpen->setToolTip(tr("No cerrar esta ventana al elegir, para probar varios temas "
+                                  "seguidos. Vale para todos los selectores."));
+        connect(m_keepOpen, &QCheckBox::toggled, this, [this](bool on) {
+            m_appearance->setKeepPickerOpen(on);
+        });
+        connect(m_appearance, &AppearanceControl::keepPickerOpenChanged, this, [this] {
+            m_keepOpen->setChecked(m_appearance->keepPickerOpen());
+        });
+        head->addWidget(m_keepOpen);
+        layout->addLayout(head);
+    }
 
     m_list = new QListWidget(this);
     m_list->setUniformItemSizes(true);
@@ -249,6 +271,10 @@ bool ThemePickerPopup::eventFilter(QObject *watched, QEvent *event)
 
 void ThemePickerPopup::populate()
 {
+    // Keeping the popup open after a choice means repopulating under the user:
+    // without restoring the scroll the list jumps to the top, which reads as if
+    // the popup had reset itself.
+    const int scroll = m_list->verticalScrollBar()->value();
     m_list->clear();
     if (!m_appearance) {
         m_entries.clear();
@@ -259,6 +285,14 @@ void ThemePickerPopup::populate()
         m_iconsMode ? m_appearance->iconThemes() : m_appearance->colorSchemes();
     const QString needle = m_search->text().trimmed();
     m_entries.clear();
+    // The do-nothing row ("(System default)", "(no cambiar)") leads the list and
+    // is never filtered out by the search: it is how the user gets back to it.
+    if (m_mode == PickValue && !m_specialLabel.isEmpty() && needle.isEmpty()) {
+        m_entries.append(QVariantMap{{QStringLiteral("id"), QString()},
+                                     {QStringLiteral("name"), m_specialLabel},
+                                     {QStringLiteral("special"), true},
+                                     {QStringLiteral("fav"), false}});
+    }
     for (const QVariant &v : all) {
         const QVariantMap e = v.toMap();
         if (!needle.isEmpty()
@@ -283,6 +317,7 @@ void ThemePickerPopup::populate()
         item->setData(Qt::UserRole + 1, previousWasFavorite && !fav);
         previousWasFavorite = fav;
     }
+    m_list->verticalScrollBar()->setValue(scroll);
     buildVisibleRows();
 }
 
@@ -309,7 +344,10 @@ void ThemePickerPopup::buildVisibleRows()
 QWidget *ThemePickerPopup::makeRow(const QVariantMap &entry, bool firstNonFavorite)
 {
     const QString id = entry.value(QStringLiteral("id")).toString();
-    const bool current = entry.value(QStringLiteral("current")).toBool();
+    // In PickValue the tick follows the value being edited, not what KDE has on.
+    const bool special = entry.value(QStringLiteral("special")).toBool();
+    const bool current = m_mode == PickValue ? id == m_selectedId
+                                             : entry.value(QStringLiteral("current")).toBool();
 
     auto *row = new ThemeRowWidget;
     row->setCursor(Qt::PointingHandCursor);
@@ -325,7 +363,10 @@ QWidget *ThemePickerPopup::makeRow(const QVariantMap &entry, bool firstNonFavori
     auto *preview = new QLabel(row);
     preview->setAttribute(Qt::WA_TransparentForMouseEvents, true);
     preview->setFixedSize(previewWidth(), kPreviewSize);
-    preview->setPixmap(themePreviewPixmap(m_iconsMode, entry, devicePixelRatioF()));
+    // The special row has nothing to preview, but still reserves the strip so
+    // its label lines up with the rest.
+    if (!special)
+        preview->setPixmap(themePreviewPixmap(m_iconsMode, entry, devicePixelRatioF()));
     layout->addWidget(preview);
 
     auto *name = new QLabel(entry.value(QStringLiteral("name")).toString(), row);
@@ -345,16 +386,25 @@ QWidget *ThemePickerPopup::makeRow(const QVariantMap &entry, bool firstNonFavori
         layout->addWidget(tick);
     }
 
-    auto *fav = new QCheckBox(row);
-    fav->setChecked(entry.value(QStringLiteral("fav")).toBool());
-    fav->setToolTip(tr("Favorito: lo pone al principio de la lista"));
-    connect(fav, &QCheckBox::toggled, this, [this, id](bool on) {
-        // Deliberately does not repopulate: the row would jump out from under
-        // the cursor. The new order shows on the next open (and right away in
-        // any other picker, which listens to favoritesChanged).
-        m_appearance->setFavorite(m_kind, id, on);
-    });
-    layout->addWidget(fav);
+    if (special) {
+        // No favourite for "(no cambiar)": it is not a theme. An empty
+        // placeholder keeps the label column the same width as the other rows.
+        auto *spacer = new QWidget(row);
+        spacer->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        spacer->setFixedWidth(QCheckBox().sizeHint().width());
+        layout->addWidget(spacer);
+    } else {
+        auto *fav = new QCheckBox(row);
+        fav->setChecked(entry.value(QStringLiteral("fav")).toBool());
+        fav->setToolTip(tr("Favorito: lo pone al principio de la lista"));
+        connect(fav, &QCheckBox::toggled, this, [this, id](bool on) {
+            // Deliberately does not repopulate: the row would jump out from
+            // under the cursor. The new order shows on the next open (and right
+            // away in any other picker, which listens to favoritesChanged).
+            m_appearance->setFavorite(m_kind, id, on);
+        });
+        layout->addWidget(fav);
+    }
 
     return row;
 }
@@ -362,33 +412,83 @@ QWidget *ThemePickerPopup::makeRow(const QVariantMap &entry, bool firstNonFavori
 void ThemePickerPopup::applyEntry(const QVariantMap &entry)
 {
     const QString id = entry.value(QStringLiteral("id")).toString();
-    if (id.isEmpty())
+    if (m_mode == PickValue) {
+        // An empty id is a real choice here (the special row), so no early out.
+        m_selectedId = id;
+        emit chosen(id);
+    } else {
+        if (id.isEmpty())
+            return;
+        if (m_iconsMode)
+            m_appearance->applyIconTheme(id);
+        else
+            m_appearance->applyColorScheme(id);
+    }
+
+    if (m_appearance->keepPickerOpen()) {
+        // Stay open to try the next one; repopulate so the tick moves (in
+        // ApplyToDesktop the AppearanceControl::changed hook does it too, but
+        // only once KDE reports back, and PickValue has no such hook).
+        populate();
         return;
-    if (m_iconsMode)
-        m_appearance->applyIconTheme(id);
-    else
-        m_appearance->applyColorScheme(id);
+    }
     m_open = false;
     close();
 }
 
 // --------------------------------------------------------------- button ----
 
-ThemePickerButton::ThemePickerButton(AppearanceControl *appearance, const QString &kind,
+ThemePickerButton::ThemePickerButton(AppearanceControl *appearance, const QString &kind, Mode mode,
                                      QWidget *parent)
     : QPushButton(parent)
     , m_appearance(appearance)
     , m_kind(kind)
     , m_iconsMode(kind != QLatin1String("colors"))
+    , m_mode(mode)
 {
     refresh();
-    connect(m_appearance, &AppearanceControl::changed, this, &ThemePickerButton::refresh);
+    // In PickValue the button's own value is the state; KDE changing its theme
+    // is none of its business.
+    if (m_mode == ThemePickerPopup::ApplyToDesktop)
+        connect(m_appearance, &AppearanceControl::changed, this, &ThemePickerButton::refresh);
+    // A favourite marked elsewhere reorders the list, and the display name of
+    // an entry can only come from the list.
+    connect(m_appearance, &AppearanceControl::favoritesChanged, this,
+            &ThemePickerButton::refresh);
     connect(this, &QPushButton::clicked, this, [this] {
-        if (!m_popup)
-            m_popup = new ThemePickerPopup(m_appearance, m_kind, this);
+        if (!m_popup) {
+            m_popup = new ThemePickerPopup(m_appearance, m_kind, m_mode, this);
+            m_popup->setSpecialEntry(m_specialLabel);
+            connect(m_popup, &ThemePickerPopup::chosen, this, [this](const QString &id) {
+                if (id == m_currentId)
+                    return;
+                m_currentId = id;
+                refresh();
+                emit picked(id);
+            });
+        }
+        m_popup->setSelectedId(m_currentId);
         m_popup->resize(qMax(width(), 320), m_popup->height());
         m_popup->showFor(this);
     });
+}
+
+void ThemePickerButton::setCurrentId(const QString &id)
+{
+    if (id == m_currentId)
+        return;
+    m_currentId = id;
+    if (m_popup)
+        m_popup->setSelectedId(id);
+    refresh();
+}
+
+void ThemePickerButton::setSpecialEntry(const QString &label)
+{
+    m_specialLabel = label;
+    if (m_popup)
+        m_popup->setSpecialEntry(label);
+    refresh();
 }
 
 QSize ThemePickerButton::sizeHint() const
@@ -403,26 +503,37 @@ void ThemePickerButton::refresh()
 {
     if (!m_appearance)
         return;
-    const QString currentId = m_iconsMode ? m_appearance->currentIconTheme()
-                                          : m_appearance->currentColorScheme();
+    // ApplyToDesktop reads what KDE has on; PickValue carries its own value.
+    if (m_mode == ThemePickerPopup::ApplyToDesktop) {
+        m_currentId = m_iconsMode ? m_appearance->currentIconTheme()
+                                  : m_appearance->currentColorScheme();
+    }
     m_currentName.clear();
     m_preview = QPixmap();
+    m_previewEntry.clear();
 
-    if (!currentId.isEmpty()) {
+    if (!m_currentId.isEmpty()) {
         // Look the entry up so the button shows the display name (and, for a
         // scheme, the colors it needs to preview).
         const QVariantList all =
             m_iconsMode ? m_appearance->iconThemes() : m_appearance->colorSchemes();
         for (const QVariant &v : all) {
             const QVariantMap e = v.toMap();
-            if (e.value(QStringLiteral("id")).toString() != currentId)
+            if (e.value(QStringLiteral("id")).toString() != m_currentId)
                 continue;
             m_currentName = e.value(QStringLiteral("name")).toString();
-            m_preview = themePreviewPixmap(m_iconsMode, e, devicePixelRatioF());
+            // The pixmap itself waits for the first paint: resolving three
+            // icons costs ~12 ms, and the dialog builds 20 of these - most of
+            // them on tabs the user may never open.
+            m_previewEntry = e;
             break;
         }
+        // A configured set that is not installed still has to show up, or the
+        // button would claim a theme the dock is not actually using.
         if (m_currentName.isEmpty())
-            m_currentName = currentId; // installed set gone, or an unknown id
+            m_currentName = tr("%1 (no instalado)").arg(m_currentId);
+    } else if (!m_specialLabel.isEmpty()) {
+        m_currentName = m_specialLabel; // "(System default)", "(no cambiar)"…
     } else {
         // kdeglobals without General/ColorScheme (a look-and-feel package
         // applied the scheme): nothing is ticked and nothing is named.
@@ -451,9 +562,18 @@ void ThemePickerButton::paintEvent(QPaintEvent *)
     p.drawPrimitive(QStyle::PE_IndicatorArrowDown, arrowOpt);
     content.setRight(arrowOpt.rect.left() - 6);
 
+    // Resolved on the first paint, not in refresh(): see m_previewEntry.
+    if (m_preview.isNull() && !m_previewEntry.isEmpty())
+        m_preview = themePreviewPixmap(m_iconsMode, m_previewEntry, devicePixelRatioF());
     if (!m_preview.isNull()) {
         const int y = content.center().y() - kPreviewSize / 2 + 1;
+        // Fade it while disabled (DarkMode's rows with their checkbox off): the
+        // style greys out the text, but a full-colour preview beside it reads as
+        // an enabled control.
+        if (!isEnabled())
+            p.setOpacity(0.4);
         p.drawPixmap(QPoint(content.left(), y), m_preview);
+        p.setOpacity(1.0);
         content.setLeft(content.left() + previewWidth() + 8);
     }
 

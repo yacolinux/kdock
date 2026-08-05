@@ -328,9 +328,14 @@ llama `->click()` / `setCurrentRow()` en el orden que haría el usuario e imprim
 en el `DockConfig` después de cada paso. Es un test funcional de la solapa completa que corre
 en dos segundos bajo Xvfb, y encontró en la primera corrida un bug que la captura no muestra:
 una lista que se reconstruye con cada edición **pierde la selección**, así que el segundo clic
-en *Bajar* no hacía nada (2026-08-02). Dos apuntes: `findChildren` devuelve en orden de
-creación, así que dos botones con el mismo texto se distinguen por índice sin tocar el código
-de producción; y no hace falta `app.exec()` si no vas a capturar.
+en *Bajar* no hacía nada (2026-08-02). Dos apuntes: no hace falta `app.exec()` si no vas a
+capturar; y **no elijas el widget por índice**. `findChildren` recorre el *árbol* de padres,
+no el orden en que los creaste: en el diálogo, `findChildren<ThemePickerButton*>()[0]` no es
+el primero que se construyó (el de General) sino uno de DarkMode, que además está
+**deshabilitado**, y `->click()` sobre un botón deshabilitado no hace nada — la sonda ve un
+popup que nunca se creó y parece un bug del código (2026-08-05). Desambiguá por algo del
+propio widget (el tooltip, la página que lo contiene) e imprimí `isEnabled()` antes de
+concluir que el clic "no funcionó".
 
 ### Arnés del portapapeles en la sesión real (klipper como control)
 
@@ -608,6 +613,15 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   `xdotool` sobre la lista de redes: un clic en una red **abierta** se conecta sin preguntar y
   te deja una conexión guardada nueva (me pasó, 2026-08-04). Para probar la fila de
   contraseña, seteá `pendingSsid` desde el QML del arnés en vez de tirar clics a ciegas.
+- **`Qt::WA_TransparentForMouseEvents` deja sin eventos de mouse también a los hijos.** Se lo
+  puse al widget de una fila (puesta con `setItemWidget()`) para que el clic llegara a
+  `QListWidget::itemClicked`, dando por hecho que el `QCheckBox` hijo, sin el atributo, seguiría
+  recibiendo los suyos. No: el checkbox quedó **muerto**, compilando, dibujándose bien y sin
+  avisar nada (2026-08-05). Si una fila con widget propio tiene que ser clickeable *y* contener
+  un control, hacé que la fila reporte su propio clic (`mouseReleaseEvent` → señal) y dejá el
+  control como hijo normal, que lo recibe primero y lo acepta. De paso: el widget de la fila
+  tapa al item, así que **el hover del `QListWidget` no se ve nunca** y el popup parece inerte;
+  el hover hay que pintarlo en el `paintEvent` de la fila.
 - **`QWidget` que aún no tiene padre no lo ve `findChildren()`.** Las páginas del editor de
   conexiones se crean sueltas y solo entran al árbol cuando `addTab()` las adopta, así que el
   barrido del constructor que conecta "cualquier edición arma el botón Aplicar" **no las

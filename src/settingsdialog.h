@@ -24,6 +24,7 @@ class IconColorProvider;
 class PreviewsLauncher;
 class TileMenuLauncher;
 class Theme;
+class ThemePickerButton;
 class QButtonGroup;
 class QCheckBox;
 class QComboBox;
@@ -91,13 +92,21 @@ private:
     std::function<void()> makeColorButton(QPushButton *btn, QColor (*get)(),
                                           void (*set)(const QColor &),
                                           const QString &title);
+    // The dock's own icon-theme override (Theme::setIconTheme), which lives in
+    // both General ("Icon theme") and Colores ("Iconset del dock") as synced
+    // copies: the picker re-reads itself on Theme::changed, so editing either
+    // one shows in the other.
+    ThemePickerButton *makeDockIconThemePicker(QWidget *parent);
+    // One of the two widget icon sets (light / dark dock background), likewise
+    // duplicated in General and Colores.
+    ThemePickerButton *makeWidgetIconSetPicker(QWidget *parent, bool darkBg);
     // One "when dark mode is on, also change…" row (system scheme, system icon
     // set, dock icon set), shared by the DarkMode and Colores tabs. Re-selects
-    // itself from the config on darkModeChanged.
+    // itself from the config on darkModeChanged. "kind" picks the list
+    // ("icons"/"colors"); "special" is the leading do-nothing entry.
     void addDarkAppearanceExtrasRow(QFormLayout *form, QWidget *parent, int item,
-                                    const QString &title, const QString &tip,
-                                    const QList<QPair<QString, QString>> &choices,
-                                    const QString &liveValue);
+                                    const QString &title, const QString &tip, const QString &kind,
+                                    const QString &special, const QString &liveValue);
     // The three rows above together (system scheme, system icon set, dock icon
     // set), built from AppearanceControl/Theme. Shared by the DarkMode and
     // Colores tabs.

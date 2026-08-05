@@ -30,6 +30,8 @@ class AppearanceControl : public QObject
     Q_OBJECT
     Q_PROPERTY(QString currentIconTheme READ currentIconTheme NOTIFY changed)
     Q_PROPERTY(QString currentColorScheme READ currentColorScheme NOTIFY changed)
+    Q_PROPERTY(bool keepPickerOpen READ keepPickerOpen WRITE setKeepPickerOpen
+                   NOTIFY keepPickerOpenChanged)
 
 public:
     explicit AppearanceControl(Theme *theme = nullptr, QObject *parent = nullptr);
@@ -52,6 +54,13 @@ public:
     Q_INVOKABLE bool isFavorite(const QString &kind, const QString &id) const;
     Q_INVOKABLE void setFavorite(const QString &kind, const QString &id, bool on);
 
+    // "Keep the picker open after choosing": trying themes one after another
+    // otherwise means reopening the dropdown every time. One shared setting for
+    // every picker (both dock widgets and every selector in the dialog), stored
+    // next to the favourites.
+    bool keepPickerOpen() const { return m_keepPickerOpen; }
+    Q_INVOKABLE void setKeepPickerOpen(bool on);
+
     // Rescan if any of the color-scheme directories changed since the last one.
     // Cheap enough to call every time the popup opens (a few stat() calls);
     // the scan itself parses ~450 INI files on a full KDE install.
@@ -69,11 +78,12 @@ signals:
     void changed();
     // A favourite was added or removed: the lists reordered, nothing applied.
     void favoritesChanged();
+    void keepPickerOpenChanged();
 
 private:
     void readCurrent();
     void scanColorSchemes();
-    void loadFavorites();
+    void loadFavorites(); // also reads keepPickerOpen
     QSet<QString> &favoriteSet(const QString &kind);
     const QSet<QString> &favoriteSet(const QString &kind) const;
     // Favourites first, then by name, both case-insensitive. Takes the list by
@@ -94,4 +104,5 @@ private:
     // in the list until it is back.
     QSet<QString> m_favoriteIcons;
     QSet<QString> m_favoriteColors;
+    bool m_keepPickerOpen = false;
 };
