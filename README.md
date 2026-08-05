@@ -1,8 +1,8 @@
 # kdock
 
-![kdock en el borde inferior, de borde a borde, con el panel de configuración abierto](screenshots/nueva-portada.jpg)
+![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
-*kdock en el borde inferior, de borde a borde, con su panel de configuración abierto*
+*Ejemplo de configuración de Kdock*
 
 **Dock y panel para escritorios Wayland**, escrito 100 % en Qt 6.
 
