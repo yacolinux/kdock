@@ -1503,6 +1503,7 @@ Item {
                     visible: config.clockShowDate
                     text: clock.dateString
                     font.pixelSize: Math.round(clockTime.font.pixelSize * 0.57)
+                    font.bold: config.labelBold
                     color: root.dockTextColor
                     opacity: 0.75
                 }
@@ -2698,6 +2699,7 @@ Item {
                     visible: config.clockShowDate
                     text: clock2.dateString
                     font.pixelSize: Math.round(clock2Time.font.pixelSize * 0.57)
+                    font.bold: config.labelBold
                     color: root.dockTextColor
                     opacity: 0.75
                 }

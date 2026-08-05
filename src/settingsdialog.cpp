@@ -1084,21 +1084,22 @@ QWidget *SettingsDialog::createFuentesTab()
 
     auto *labelBold = new QCheckBox(tr("Negritas"), tab);
     labelBold->setChecked(m_config->labelBold());
-    labelBold->setToolTip(tr("Draw every name the dock shows — applications and "
-                             "widgets — in bold."));
+    labelBold->setToolTip(tr("Draw every name the dock shows — applications, widgets and "
+                             "the clock date — in bold."));
     connect(labelBold, &QCheckBox::toggled, m_config, &DockConfig::setLabelBold);
     connect(m_config, &DockConfig::labelBoldChanged, labelBold,
             [this, labelBold] { labelBold->setChecked(m_config->labelBold()); });
     form->addRow(tr("· Bold text:"), labelBold);
 
-    // The three name settings only mean something while some name is shown
-    // (mirrors the gating of the Widgets tab).
-    auto syncLabelEnabled = [this, labelWidth, labelFont, labelBold] {
+    // The width and font size only mean something while some name is shown
+    // (mirrors the gating of the Widgets tab). The bold toggle stays enabled
+    // even with apps/widgets names off: it also drives the clock date, which
+    // is always text.
+    auto syncLabelEnabled = [this, labelWidth, labelFont] {
         const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
                         || m_config->widgetLabelMode() != DockConfig::IconOnly;
         labelWidth->setEnabled(on);
         labelFont->setEnabled(on);
-        labelBold->setEnabled(on);
     };
     connect(m_config, &DockConfig::iconLabelModeChanged, tab, syncLabelEnabled);
     connect(m_config, &DockConfig::widgetLabelModeChanged, tab, syncLabelEnabled);
@@ -1297,8 +1298,8 @@ QWidget *SettingsDialog::createWidgetsTab()
 
         auto *labelBold = new QCheckBox(tr("Negritas"), tab);
         labelBold->setChecked(m_config->labelBold());
-        labelBold->setToolTip(tr("Draw every name the dock shows — applications and "
-                                 "widgets — in bold."));
+        labelBold->setToolTip(tr("Draw every name the dock shows — applications, widgets "
+                                 "and the clock date — in bold."));
         connect(labelBold, &QCheckBox::toggled, m_config, &DockConfig::setLabelBold);
         connect(m_config, &DockConfig::labelBoldChanged, labelBold,
                 [this, labelBold] { labelBold->setChecked(m_config->labelBold()); });
@@ -1324,13 +1325,14 @@ QWidget *SettingsDialog::createWidgetsTab()
                                        "shared with the application names."));
         form->addRow(tr("Widget name:"), widgetLabelMode);
 
-        // The two metrics only mean something while some name is shown.
-        auto syncLabelEnabled = [this, labelWidth, labelFont, labelBold] {
+        // The width and font size only mean something while some name is shown;
+        // the bold toggle stays enabled because it also drives the clock date,
+        // which is always text.
+        auto syncLabelEnabled = [this, labelWidth, labelFont] {
             const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
                             || m_config->widgetLabelMode() != DockConfig::IconOnly;
             labelWidth->setEnabled(on);
             labelFont->setEnabled(on);
-            labelBold->setEnabled(on);
         };
         connect(labelMode, &QComboBox::currentIndexChanged, this, [this, labelMode](int i) {
             m_config->setIconLabelMode(labelMode->itemData(i).toInt());
