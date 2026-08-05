@@ -257,11 +257,20 @@ escritorio al usuario cuando sí). Confirmalo con
 `QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)` desde una sonda, no de
 memoria.
 
-**`kdeglobals` de esta máquina no tiene `General/ColorScheme`** (solo `ColorSchemeHash`), así
-que `AppearanceControl::currentColorScheme()` devuelve **vacío** y cualquier combo que se
-siembre con él cae en el primer ítem de la lista. Si lo que sigue es aplicar ese valor, le
-cambiás el esquema al usuario sin que lo pida: poné una entrada "(no cambiar)" con id vacío
-al frente. El iconset sí se lee bien (`Icons/Theme`).
+**`QSettings` mapea la sección `[General]` de un INI al nivel raíz**, así que
+`value("General/ColorScheme")` **no lee nada** —sin error, sin advertencia— aunque el archivo
+tenga la clave ahí. Es `value("ColorScheme")` a secas; las demás secciones sí se direccionan
+normal (`Icons/Theme` anda). Costó caro: durante meses pareció que *"este `kdeglobals` no tiene
+`General/ColorScheme`"* y hasta quedó documentado así, cuando el archivo la tenía y el picker
+mostraba "(sin definir)" para siempre (2026-08-05). El mismo error estaba en el `Name=` de los
+`.colors`, enmascarado por un fallback al nombre de archivo: la lista mostraba "BreezeDark" en
+vez de "Breeze Dark" y parecía que los esquemas se llamaban así.
+Igual **poné siempre una entrada "(no cambiar)" con id vacío al frente** de un combo de esquema:
+un `kdeglobals` puede no tener la clave de verdad (escritorios cuyo esquema vino de un
+look-and-feel), y ahí el combo cae en el primer ítem por orden alfabético y aplicarlo le cambia
+el esquema al usuario sin que lo pida.
+Para verificarlo, dos líneas de sonda que impriman `value()` por los dos caminos valen más que
+leer el `.conf`: el archivo se ve perfecto en ambos casos.
 
 El `main.cpp` de prueba instancia el widget, y con un `QTimer::singleShot` hace
 `w.grab().save("/tmp/p/out.png")` y sale; el PNG se lee directo. Vale la pena correrlo dos

@@ -535,7 +535,7 @@ void ThemePickerButton::refresh()
     } else if (!m_specialLabel.isEmpty()) {
         m_currentName = m_specialLabel; // "(System default)", "(no cambiar)"…
     } else {
-        // kdeglobals without General/ColorScheme (a look-and-feel package
+        // kdeglobals with no ColorScheme key at all (a look-and-feel package
         // applied the scheme): nothing is ticked and nothing is named.
         m_currentName = tr("(sin definir)");
     }

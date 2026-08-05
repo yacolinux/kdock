@@ -77,9 +77,13 @@ void AppearanceControl::readCurrent()
 {
     QSettings kde(kdeglobalsPath(), QSettings::IniFormat);
     m_currentIconTheme = kde.value(QStringLiteral("Icons/Theme")).toString();
-    // Absent on setups whose scheme was applied through a look-and-feel
-    // package; then no row is marked as the current one.
-    m_currentColorScheme = kde.value(QStringLiteral("General/ColorScheme")).toString();
+    // NOT "General/ColorScheme": QSettings maps an INI file's [General] section
+    // onto the top level, so that path silently reads nothing at all. It looked
+    // for years like "this desktop has no ColorScheme key" (the value is only
+    // written once a scheme is applied by name), and the picker showed
+    // "(sin definir)" forever - fixed 2026-08-05. Other sections are addressed
+    // normally, hence "Icons/Theme" above.
+    m_currentColorScheme = kde.value(QStringLiteral("ColorScheme")).toString();
 }
 
 void AppearanceControl::loadFavorites()
@@ -211,7 +215,10 @@ void AppearanceControl::scanColorSchemes()
             seen.insert(id);
 
             QSettings ini(file.absoluteFilePath(), QSettings::IniFormat);
-            const QString name = ini.value(QStringLiteral("General/Name"), id).toString();
+            // Top level, not "General/Name" — see readCurrent(). With the wrong
+            // path this fell back to the id for every scheme, so the list read
+            // as file names ("BreezeDark") instead of names ("Breeze Dark").
+            const QString name = ini.value(QStringLiteral("Name"), id).toString();
             // Enough of the scheme to preview it in one row: the window
             // background, the text over it, and the selection color.
             const QString bg =
