@@ -93,6 +93,42 @@ QPixmap themePreviewPixmap(bool iconsMode, const QVariantMap &entry, qreal dpr)
     return pm;
 }
 
+void ThemeRowWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton && rect().contains(event->position().toPoint()))
+        emit activated();
+    QWidget::mouseReleaseEvent(event);
+}
+
+void ThemeRowWidget::enterEvent(QEnterEvent *event)
+{
+    m_hovered = true;
+    update();
+    QWidget::enterEvent(event);
+}
+
+void ThemeRowWidget::leaveEvent(QEvent *event)
+{
+    m_hovered = false;
+    update();
+    QWidget::leaveEvent(event);
+}
+
+void ThemeRowWidget::paintEvent(QPaintEvent *)
+{
+    QPainter p(this);
+    if (m_hovered) {
+        QColor hl = palette().color(QPalette::Highlight);
+        hl.setAlpha(45);
+        p.fillRect(rect(), hl);
+    }
+    if (m_separator) {
+        QColor line = palette().color(QPalette::WindowText);
+        line.setAlpha(70);
+        p.fillRect(QRect(0, 0, width(), 1), line);
+    }
+}
+
 // ---------------------------------------------------------------- popup ----
 
 ThemePickerPopup::ThemePickerPopup(AppearanceControl *appearance, const QString &kind,
@@ -146,8 +182,11 @@ ThemePickerPopup::ThemePickerPopup(AppearanceControl *appearance, const QString 
             applyEntry(m_entries.first().toMap());
     });
 
+    // Backstop for a row whose widget has not been built yet (scrolled past
+    // fast): those items are still plain, so the click reaches the list.
     connect(m_list, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
-        applyEntry(item->data(Qt::UserRole).toMap());
+        if (!m_list->itemWidget(item))
+            applyEntry(item->data(Qt::UserRole).toMap());
     });
     // Rows are built as they scroll into view.
     connect(m_list->verticalScrollBar(), &QScrollBar::valueChanged, this,
@@ -272,23 +311,16 @@ QWidget *ThemePickerPopup::makeRow(const QVariantMap &entry, bool firstNonFavori
     const QString id = entry.value(QStringLiteral("id")).toString();
     const bool current = entry.value(QStringLiteral("current")).toBool();
 
-    auto *row = new QWidget;
-    // The row must not eat the click: the list applies the entry through
-    // itemClicked. Only the checkbox stays opaque to the mouse, so ticking a
-    // favourite does not also change the desktop's theme.
-    row->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    auto *row = new ThemeRowWidget;
+    row->setCursor(Qt::PointingHandCursor);
+    connect(row, &ThemeRowWidget::activated, this, [this, entry] { applyEntry(entry); });
     auto *layout = new QHBoxLayout(row);
     layout->setContentsMargins(6, 0, 6, 0);
     layout->setSpacing(8);
 
-    if (firstNonFavorite) {
-        // A top border on the first non-favourite row is the separator between
-        // the pinned block and the rest. Scoped by object name: a bare "QWidget"
-        // selector would give every child label a border of its own.
-        row->setObjectName(QStringLiteral("themeRowSeparated"));
-        row->setStyleSheet(
-            QStringLiteral("#themeRowSeparated { border-top: 1px solid palette(mid); }"));
-    }
+    // Divider between the pinned block and the rest, drawn in paintEvent (a
+    // stylesheet border would be skipped now that the row paints itself).
+    row->setSeparator(firstNonFavorite);
 
     auto *preview = new QLabel(row);
     preview->setAttribute(Qt::WA_TransparentForMouseEvents, true);

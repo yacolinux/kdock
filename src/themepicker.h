@@ -23,6 +23,38 @@ class QListWidget;
 class QListWidgetItem;
 class QTimer;
 
+// One row of the popup. It reports its own clicks instead of letting them fall
+// through to QListWidget::itemClicked: a row put in with setItemWidget() covers
+// the item, and Qt::WA_TransparentForMouseEvents is not a way around it -
+// that attribute drops mouse events for the widget *and its children*, so the
+// favourites checkbox stopped responding (2026-08-05). The checkbox is a plain
+// child here: it gets the click first and accepts it, and everything else
+// (QLabel, images) ignores mouse events, so those clicks reach this widget.
+class ThemeRowWidget : public QWidget
+{
+    Q_OBJECT
+public:
+    using QWidget::QWidget;
+
+    // Draws the divider that closes the favourites block above this row.
+    void setSeparator(bool on) { m_separator = on; }
+
+signals:
+    void activated();
+
+protected:
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void enterEvent(QEnterEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    // Hover highlight and separator. The row widget covers the item, so the
+    // list's own hover never shows - without this the popup looks inert.
+    void paintEvent(QPaintEvent *event) override;
+
+private:
+    bool m_hovered = false;
+    bool m_separator = false;
+};
+
 // The popup itself. Qt::Popup (not a QMenu, which cannot host a usable
 // QLineEdit): it grabs the mouse, closes on a click outside, and forwards keys
 // to the focused child.
