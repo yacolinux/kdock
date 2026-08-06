@@ -50,7 +50,7 @@ src/
   activewindowcontrol.{h,cpp} — Closes the active window (left click) or pushes it to the next virtual desktop without following it (right click); token closewindow
   kwinshortcut.{h,cpp}    — Shared helper for the KDE-only widgets: sessionIsKde() + invoke(<KWin global shortcut name>)
   wallpapercontrol.{h,cpp} — Advances the KDE slideshow wallpaper to the next image on a specific monitor (token nextwallpaper)
-  desktopwallpapers.{h,cpp} — A different wallpaper per virtual desktop: snapshots KDE's own config for desktop 1 and puts a static image per monitor on desktops 2..3 (no widget; Settings -> Wallpapers)
+  desktopwallpapers.{h,cpp} — A different wallpaper per virtual desktop: snapshots KDE's own config for desktop 1 and, on desktops 2..kMaxDesktops, applies per monitor either a static image or KDE's own slideshow rooted at a configurable folder (no widget; Settings -> Wallpapers)
   plasmascript.h          — Header-only helpers over org.kde.PlasmaShell.evaluateScript (escapeJs / evaluate / run / evaluateBlocking), shared by the two above
   powercontrol.{h,cpp}     — Session/power actions via KDE D-Bus (logout/reboot/shutdown/lock/suspend); tokens session + app-menu footer
   relanzadorconfig.{h,cpp}    — Config for one Relanzador (nested mini-dock); see relanzador.md
@@ -269,7 +269,7 @@ protocols/
 
 ### Docks por escritorio virtual (`VirtualDesktops` + `DockManager::wantedDocks`, 2026-08-05)
 - **La regla vive en un solo lugar**: `DockManager::wantedDocks(desktop)`. Cada dock lleva `DockConfig::dockDesktops()` — una lista de posiciones **1-based** persistida como `desktops=` en su `.conf`, **vacía/ausente = dock base**. Para el escritorio actual, y **monitor por monitor**: si ese monitor tiene docks propios de ese escritorio se muestran **esos y solo esos**; si no tiene ninguno, se muestran sus docks base. O sea que configurar un escritorio en un monitor **no pela los demás monitores**, y una config sin ninguna clave `desktops=` se comporta exactamente como antes (no hay migración). Cambiarla a un override global es tocar el bucle final de esa función y nada más.
-- **Tope fijo**: `DockConfig::kMaxDesktops = 3` (decisión de producto, no técnica). Y `kMaxDocksPerScreen` subió de 3 a **6**, porque un monitor ahora puede tener sus docks base más uno por escritorio.
+- **Tope fijo**: `DockConfig::kMaxDesktops = 5` (decisión de producto, no técnica). Y `kMaxDocksPerScreen` subió de 3 a **6**, porque un monitor ahora puede tener sus docks base más uno por escritorio.
 - **Diferido y persistente**: un dock que el escritorio actual no quiere **no se destruye, se oculta** (`Instance::onScreen` + `DockWindow::setDeskVisible`), y **no se construye hasta la primera vez que se entra a su escritorio**. Medido en la sesión real con dos docks en eDP-1: arranque 240 MB con solo el base construido; primer salto al Escritorio 2 → +57 MB y se crea el segundo; a partir de ahí ir y venir no mueve el RSS ni un MB, y nunca se destruye una instancia. Al reiniciar el proceso se vuelve a arrancar solo con el juego del escritorio actual.
 - **`DockWindow::setDeskVisible(false)` es `hide()`**, que en QtWayland destruye la superficie de layer-shell (no el `QQmlEngine` ni el modelo). Volver hace `applyScreen()` **antes** de `show()` —mientras estuvo oculta, `applyScreen()` se saltea la recreación por su chequeo de `wasVisible`, así que el `wl_output` puede haber cambiado— y después re-aplica la máscara de autohide con `applyHiddenMask()`, porque la máscara vive en la ventana de plataforma, que es nueva. `setHidden()` corta temprano cuando el flag no cambió, de ahí que la máscara esté factorizada aparte; también se re-aplica en `widthChanged`/`heightChanged`, que de paso arregla la máscara vieja tras un cambio de tamaño.
 - **`src/virtualdesktops.{h,cpp}`**: singleton del proceso (viaja en `Shared`) que lee `org.kde.KWin /VirtualDesktopManager` y emite `currentChanged(int)` / `countChanged()`; `DockManager` los conecta a `sync()`, igual que el hotplug de monitores. Expone posiciones **1-based** y `0` cuando KWin no contesta (X11, wlroots, el arnés de Xvfb) — con `0` la regla devuelve el juego base. `ActiveWindowControl` dejó de tener su propia copia del demarshalling y le pide a este objeto los uuids.
@@ -277,6 +277,7 @@ protocols/
 - **UI**: la solapa **Monitores** (mismo nombre) ganó abajo una tercera lista, *Escritorios virtuales*, colgada de la misma selección `m_selectedTabDockId`, más el botón **Duplicar para el escritorio…** (`duplicateDockForDesktop`: `firstFreeSlot` en el **mismo** monitor → `copySettingsTo` → `setDockDesktops({n})` → habilitar **sin sembrar borde**, para que la copia caiga exactamente donde está el original). Las tres listas tienen `setMaximumHeight`: sin eso las dos primeras se comían el alto y la nueva quedaba abajo del pliegue, invisible.
 - **El área de maximizado de KWin NO es por escritorio** (`kwin/src/workspace.cpp`, `rearrange()`: `m_screenAreas` está indexado solo por output). O sea que si el dock entrante y el saliente reservan distinto espacio, KWin re-acomoda las ventanas maximizadas de **todos** los escritorios. Es a propósito que kdock no haga nada al respecto: el gestor de ventanas se encarga. No hace falta volver a investigarlo.
 - **Widget paginador (`pager`)**: los números de los escritorios de KWin, clic para cambiar. Diseño mínimo a propósito — cajas cuadradas con el número, la actual rellena con `theme.highlight`; nada de miniaturas de ventanas. Es un **bloque** (`isBlock()`), porque cada número es su propio blanco de clic: eso lo excluye del `Binding` de `hovered` (no declara la property) y del arrastre por sección, igual que la bandeja. El color del número sobre el relleno sale del mismo test de luminancia que `root.dockBaseIsLight`. Se corta en `kMaxDesktops`, y `VirtualDesktops::switchTo()` escribe la propiedad `current` por D-Bus sin asumir nada: el estado se actualiza cuando KWin contesta con `currentChanged`.
+- **Submenú *Escritorio* de los íconos de apps**: cinco ítems fijos (uno por `kMaxDesktops`), cada uno se oculta solo cuando ese escritorio no existe; el tope fijo es lo que permite escribirlos a mano en vez de un `Repeater` (un `Menu` con hijos dinámicos es la parte delicada de QtQuick.Controls).
 - **Submenú *Escritorio* en el clic derecho de un ícono de app**: *Ventana aquí* (trae las ventanas al escritorio actual) más *Enviar a <nombre>* por cada escritorio. Mueve **todas** las ventanas del ícono, como *Cerrar todas*, y **nunca cambia de escritorio**: se queda donde está el usuario. Va por `DockModel::sendToDesktop(row, position)` → `AbstractWindow::moveToOnlyDesktop(uuid)`, que entra al destino y **deja todos los demás** — el protocolo informa la pertenencia de a un escritorio por vez, así que `PlasmaWindow` ahora escucha `virtual_desktop_entered`/`left` y mantiene `AbstractWindow::desktops`. Ojo con la convención: **lista vacía significa "en todos los escritorios"**, no "en ninguno", y por eso una ventana pineada a todos solo recibe el *enter* (KWin la reduce al destino). Los tres ítems *Enviar a* están escritos a mano en vez de un `Repeater`: el tope es fijo en tres y un `Menu` con hijos insertados dinámicamente es la parte delicada de QtQuick.Controls.
 - **Estado**: instalado y en uso desde el 2026-08-05 (el paginador y el submenú *Escritorio*, desde el 2026-08-06), probado en la sesión real sin bugs conocidos. Lo único que quedó sin ejercitar es el cruce **entre monitores** (que atar un dock a un escritorio en un monitor no toque a los otros): la lógica está separada por pantalla y las sondas cubren el agrupamiento, pero al momento de escribir esto había un solo output conectado y Xvfb no da una segunda pantalla.
 
@@ -378,9 +379,15 @@ protocols/
     por monitor) se *fotografía* antes de tocar nada y se restaura cada vez que vuelve, al
     salir del proceso, y al arrancar si una corrida anterior murió con nuestro fondo puesto.
     Desde kdock **no se edita**: la solapa lo muestra en modo lectura.
-  - **Los escritorios 2..`DockConfig::kMaxDesktops`** llevan una imagen estática por monitor,
-    con clave el nombre del conector (`eDP-1`, `DP-1`…), tope `kMaxScreens = 5`. Un monitor
-    **sin imagen configurada no se toca**, así que se queda con lo que tenga.
+  - **Los escritorios 2..`DockConfig::kMaxDesktops`** tienen un **modo** cada uno, elegido en
+    la solapa con dos checkboxes excluyentes (Slideshow / Estático):
+    - **Estático** (el comportamiento original): una imagen por monitor, con clave el nombre
+      del conector (`eDP-1`, `DP-1`…), aplicada como `org.kde.image` con el `FillMode`
+      global. Un monitor **sin imagen configurada no se toca**.
+    - **Slideshow**: cada monitor con carpeta configurada corre el plugin `org.kde.slideshow`
+      de KDE enraizado en esa carpeta (clave `slideshow_<conector>`), avanzando cada
+      `slideshowInterval` segundos (clave `slideshowInterval`, por escritorio, default 300 =
+      5 min). Un monitor **sin carpeta no se toca**. El `FillMode` global no aplica acá.
   - Escritorios más allá del tope tampoco se tocan: el usuario nunca dijo qué poner ahí.
 - **Apagado por defecto** (`enabled` arranca en false). No es cosmético: `VirtualDesktops` sale
   de D-Bus, así que **un proceso bajo Xvfb ve los escritorios reales** y reaccionaría a los
@@ -397,7 +404,9 @@ protocols/
 - **Dos rejas para no fotografiar nuestro propio fondo** (que sería perder la config del
   usuario para siempre): solo se captura con `applied == false`, y se descarta la captura de un
   monitor cuyo plugin sea `org.kde.image` **y** cuya `Image` coincida con alguna de las
-  imágenes configuradas en `[Wallpapers2]`/`[Wallpapers3]`.
+  imágenes configuradas en `[Wallpapers2]`..`[Wallpapers<kMaxDesktops>]`, o cuyo plugin sea
+  `org.kde.slideshow` **y** cuyo `SlidePaths` coincida con alguna de las carpetas de slideshow
+  de los escritorios 2..`kMaxDesktops` (el guard del slideshow se agregó junto con el modo).
 - **Repintar exige DOS `evaluateScript` separados**, uno que escribe y otro que hace
   `reloadConfig()` — la misma regla del hallazgo de `next-wall.sh` de más arriba. **Verificado
   en vivo el 2026-08-06 incluyendo el caso que faltaba**: de escritorio 2 a 3 el plugin
@@ -410,20 +419,30 @@ protocols/
   importa; un slideshow avanza solo de todos modos.
 - **Config** (`kdock.conf` compartido, estáticos al estilo `DockConfig::favoritesShared()`):
   `[Wallpapers] enabled/fillMode/snapshot/applied` y **una sección por escritorio**,
-  `[Wallpapers2]`, `[Wallpapers3]`, con el conector como clave. Una sección por escritorio y no
-  `desktop2/eDP-1` porque `QSettings` solo mapea el **primer** `/` a la sección.
+  `[Wallpapers2]`..`[Wallpapers5]`, con el conector como clave y las tres claves del modo
+  slideshow (`slideshowMode`, `slideshowInterval`, `slideshow_<conector>`). Una sección por
+  escritorio y no `desktop2/eDP-1` porque `QSettings` solo mapea el **primer** `/` a la sección.
 - **`SIGTERM` no dispara `aboutToQuit`** — ver la trampa en `CLAUDE.md`. `main.cpp` instala un
   handler (socketpair + `QSocketNotifier`) que restaura y sale con `::_exit(0)` **sin
   desenrollar**: un `quit()` limpio destruye los `QQmlEngine` con los bindings vivos y escupe
   ~1800 *"property of null"* al journal en cada cierre de sesión.
 - **Solapa *Wallpapers*** (`SettingsDialog::createWallpapersTab()`): no es por dock (como Redes
-  y Audio). Interruptor + combo de `FillMode`, el grupo de solo lectura del Escritorio 1 con
-  *Volver a capturar ahora* (habilitado **solo desde el Escritorio 1**) y *Restaurar ahora*, un
-  `QGroupBox` por escritorio con una fila por monitor (miniatura + ruta + *Elegir…* + *Quitar*),
-  y *Aplicar ahora*. El *Elegir…* usa `QFileDialog::getOpenFileName()` **nativo**: en una sesión
-  Plasma el `QPlatformTheme` de *plasma-integration* sirve el diálogo de KDE, que **previsualiza
-  imágenes**, sin que kdock dependa de KDE Frameworks. La miniatura se decodifica con
-  `QImageReader::setScaledSize()`, no cargando el archivo entero.
+  y Audio). Interruptor + combo de `FillMode` (nota: "(imágenes estáticas)" — el slideshow
+  tiene su propio render), el grupo de solo lectura del Escritorio 1 con *Volver a capturar
+  ahora* (habilitado **solo desde el Escritorio 1**) y *Restaurar ahora*, y un `QGroupBox` por
+  escritorio (2..`kMaxDesktops`) con **dos checkboxes excluyentes**: *Slideshow* (con un
+  `QSpinBox` de intervalo en segundos y una fila por monitor para elegir carpeta — el picker
+  es `getExistingDirectory()`, la miniatura un ícono `folder-pictures`) y *Estático* (las
+  filas de imagen de siempre). **Exactamente un modo está activo por escritorio**: tildar uno
+  destilda el otro (`refreshModes()`), y el cuerpo del modo inactivo se oculta para no alargar
+  el scroll — los dos checkboxes quedan siempre visibles para poder cambiar de modo. El
+  `intervalSpin` solo se ve en modo slideshow. Fila de monitor compacta a propósito (con el
+  tope de 5 escritorios × 5 monitores el scroll se vuelve profundo): miniatura 64×36 en vez
+  de 96×54 y `QToolButton`s con solo ícono (`document-open`/`edit-clear`) en vez de botones
+  con texto. Y *Aplicar ahora*. El *Elegir…* de Estático usa `QFileDialog::getOpenFileName()`
+  **nativo**: en una sesión Plasma el `QPlatformTheme` de *plasma-integration* sirve el
+  diálogo de KDE, que **previsualiza imágenes**, sin que kdock dependa de KDE Frameworks. La
+  miniatura se decodifica con `QImageReader::setScaledSize()`, no cargando el archivo entero.
 
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.

@@ -3428,7 +3428,7 @@ QWidget *SettingsDialog::createWallpapersTab()
     layout->addWidget(enable);
 
     auto *fillRow = new QHBoxLayout;
-    fillRow->addWidget(new QLabel(tr("Modo de ajuste:"), tab));
+    fillRow->addWidget(new QLabel(tr("Modo de ajuste (imágenes estáticas):"), tab));
     auto *fillMode = new QComboBox(tab);
     // Plasma's org.kde.image FillMode, in its own order.
     fillMode->addItem(tr("Estirada"), 0);
@@ -3474,7 +3474,7 @@ QWidget *SettingsDialog::createWallpapersTab()
 
     reloadWallpaperSnapshot();
 
-    // ---- Desktops 2..kMaxDesktops: one static image per monitor -------------
+    // ---- Desktops 2..kMaxDesktops: slideshow or static, per desktop ---------
     const QStringList screens = DesktopWallpapers::configuredScreens();
     const QStringList desktopNames = m_manager ? m_manager->desktopNamesForUi() : QStringList();
 
@@ -3487,58 +3487,75 @@ QWidget *SettingsDialog::createWallpapersTab()
         reader.setAutoTransform(true);
         QSize size = reader.size();
         if (size.isValid()) {
-            size.scale(96, 54, Qt::KeepAspectRatio);
+            size.scale(64, 36, Qt::KeepAspectRatio);
             reader.setScaledSize(size);
         }
         const QImage image = reader.read();
         return image.isNull() ? QPixmap() : QPixmap::fromImage(image);
     };
 
-    for (int desktop = 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
-        const QString name = desktop <= desktopNames.size()
-                                 ? desktopNames.at(desktop - 1)
-                                 : tr("Escritorio %1").arg(desktop);
-        auto *group = new QGroupBox(name, tab);
-        auto *form = new QFormLayout(group);
+    // A compact monitor row: tiny thumbnail + read-only path + icon-only
+    // choose/clear buttons. `folder` picks the slideshow flavour (folder icon,
+    // directory picker) over the static one (image thumbnail, file picker).
+    const auto makeMonitorRow = [this, &thumbnailOf](QWidget *parent, int desktop,
+                                                     const QString &screen, bool folder) -> QWidget * {
+        auto *row = new QWidget(parent);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setSpacing(4);
 
-        if (screens.isEmpty()) {
-            form->addRow(new QLabel(tr("No hay monitores detectados."), group));
-            layout->addWidget(group);
-            continue;
-        }
+        auto *thumb = new QLabel(row);
+        thumb->setFixedSize(64, 36);
+        thumb->setAlignment(Qt::AlignCenter);
+        thumb->setFrameShape(QFrame::StyledPanel);
+        auto *path = new QLineEdit(row);
+        path->setReadOnly(true);
+        path->setPlaceholderText(folder ? tr("(sin carpeta — este monitor no se toca)")
+                                        : tr("(sin imagen — este monitor no se toca)"));
+        auto *choose = new QToolButton(row);
+        choose->setAutoRaise(true);
+        choose->setIcon(QIcon::fromTheme(QStringLiteral("document-open")));
+        choose->setToolTip(folder ? tr("Elegir carpeta de imágenes…")
+                                  : tr("Elegir imagen de fondo…"));
+        auto *clear = new QToolButton(row);
+        clear->setAutoRaise(true);
+        clear->setIcon(QIcon::fromTheme(QStringLiteral("edit-clear")));
+        clear->setToolTip(folder ? tr("Quitar carpeta") : tr("Quitar imagen"));
 
-        for (const QString &screen : screens) {
-            auto *row = new QWidget(group);
-            auto *rowLayout = new QHBoxLayout(row);
-            rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(thumb);
+        rowLayout->addWidget(path, 1);
+        rowLayout->addWidget(choose);
+        rowLayout->addWidget(clear);
 
-            auto *thumb = new QLabel(row);
-            thumb->setFixedSize(96, 54);
-            thumb->setAlignment(Qt::AlignCenter);
-            thumb->setFrameShape(QFrame::StyledPanel);
-            auto *path = new QLineEdit(row);
-            path->setReadOnly(true);
-            path->setPlaceholderText(tr("(sin definir — este monitor no se toca)"));
-            auto *choose = new QPushButton(QIcon::fromTheme(QStringLiteral("document-open")),
-                                           tr("Elegir…"), row);
-            auto *clear = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")),
-                                          tr("Quitar"), row);
-            rowLayout->addWidget(thumb);
-            rowLayout->addWidget(path, 1);
-            rowLayout->addWidget(choose);
-            rowLayout->addWidget(clear);
-
-            const auto refreshRow = [thumb, path, clear, thumbnailOf, desktop, screen] {
-                const QString file = DesktopWallpapers::imageFor(desktop, screen);
-                path->setText(file);
-                const QPixmap pixmap = thumbnailOf(file);
+        const auto refresh = [thumb, path, clear, desktop, screen, folder, &thumbnailOf] {
+            const QString value = folder
+                ? DesktopWallpapers::slideshowFolder(desktop, screen)
+                : DesktopWallpapers::imageFor(desktop, screen);
+            path->setText(value);
+            if (folder) {
+                thumb->setPixmap(QIcon::fromTheme(QStringLiteral("folder-pictures")).pixmap(32));
+            } else {
+                const QPixmap pixmap = thumbnailOf(value);
                 thumb->setPixmap(pixmap);
-                thumb->setText(pixmap.isNull() && !file.isEmpty() ? tr("?") : QString());
-                clear->setEnabled(!file.isEmpty());
-            };
-            refreshRow();
+                thumb->setText(pixmap.isNull() && !value.isEmpty() ? tr("?") : QString());
+            }
+            clear->setEnabled(!value.isEmpty());
+        };
+        refresh();
 
-            connect(choose, &QPushButton::clicked, this, [this, refreshRow, desktop, screen] {
+        connect(choose, &QToolButton::clicked, this, [this, refresh, desktop, screen, folder] {
+            if (folder) {
+                const QString current = DesktopWallpapers::slideshowFolder(desktop, screen);
+                const QString start =
+                    current.isEmpty()
+                        ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+                        : current;
+                const QString chosen = QFileDialog::getExistingDirectory(
+                    this, tr("Elegir carpeta de imágenes del slideshow"), start);
+                if (chosen.isEmpty())
+                    return;
+                DesktopWallpapers::setSlideshowFolder(desktop, screen, chosen);
+            } else {
                 const QString current = DesktopWallpapers::imageFor(desktop, screen);
                 const QString start =
                     current.isEmpty()
@@ -3553,15 +3570,104 @@ QWidget *SettingsDialog::createWallpapersTab()
                 if (chosen.isEmpty())
                     return;
                 DesktopWallpapers::setImageFor(desktop, screen, chosen);
-                refreshRow();
-            });
-            connect(clear, &QPushButton::clicked, this, [refreshRow, desktop, screen] {
+            }
+            refresh();
+        });
+        connect(clear, &QToolButton::clicked, this, [refresh, desktop, screen, folder] {
+            if (folder)
+                DesktopWallpapers::setSlideshowFolder(desktop, screen, QString());
+            else
                 DesktopWallpapers::setImageFor(desktop, screen, QString());
-                refreshRow();
-            });
+            refresh();
+        });
 
-            form->addRow(screen, row);
+        return row;
+    };
+
+    for (int desktop = 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
+        const QString name = desktop <= desktopNames.size()
+                                 ? desktopNames.at(desktop - 1)
+                                 : tr("Escritorio %1").arg(desktop);
+        auto *group = new QGroupBox(name, tab);
+        auto *v = new QVBoxLayout(group);
+
+        if (screens.isEmpty()) {
+            v->addWidget(new QLabel(tr("No hay monitores detectados."), group));
+            layout->addWidget(group);
+            continue;
         }
+
+        // ---- Mode toggles: Slideshow and Estático, mutually exclusive. ------
+        auto *slideshowCheck = new QCheckBox(tr("Slideshow"), group);
+        slideshowCheck->setChecked(DesktopWallpapers::slideshowEnabled(desktop));
+        auto *intervalLabel = new QLabel(tr("Intervalo:"), group);
+        auto *intervalSpin = new QSpinBox(group);
+        intervalSpin->setRange(30, 86400);
+        intervalSpin->setSingleStep(30);
+        intervalSpin->setSuffix(tr(" s"));
+        intervalSpin->setValue(DesktopWallpapers::slideshowInterval(desktop));
+        intervalSpin->setToolTip(tr("Cada cuántos segundos cambia la imagen del slideshow."));
+
+        auto *toggleRow = new QHBoxLayout;
+        toggleRow->addWidget(slideshowCheck);
+        toggleRow->addWidget(intervalLabel);
+        toggleRow->addWidget(intervalSpin);
+        toggleRow->addStretch();
+        v->addLayout(toggleRow);
+
+        // Slideshow body: one folder per monitor.
+        auto *slideshowBody = new QWidget(group);
+        auto *slideshowForm = new QFormLayout(slideshowBody);
+        slideshowForm->setContentsMargins(0, 0, 0, 0);
+        slideshowForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        for (const QString &screen : screens)
+            slideshowForm->addRow(screen, makeMonitorRow(slideshowBody, desktop, screen, true));
+        v->addWidget(slideshowBody);
+
+        // Estático toggle and body: one image per monitor (the original look).
+        auto *staticCheck = new QCheckBox(tr("Estático"), group);
+        v->addWidget(staticCheck);
+
+        auto *staticBody = new QWidget(group);
+        auto *staticForm = new QFormLayout(staticBody);
+        staticForm->setContentsMargins(0, 0, 0, 0);
+        staticForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        for (const QString &screen : screens)
+            staticForm->addRow(screen, makeMonitorRow(staticBody, desktop, screen, false));
+        v->addWidget(staticBody);
+
+        // Exactly one mode is always active: checking a mode turns the other
+        // off, and the active mode's body is the only one laid out (space).
+        const auto refreshModes = [slideshowCheck, staticCheck, slideshowBody, staticBody,
+                                   intervalLabel, intervalSpin] {
+            const bool slideshow = slideshowCheck->isChecked();
+            staticCheck->setChecked(!slideshow);
+            slideshowBody->setVisible(slideshow);
+            staticBody->setVisible(!slideshow);
+            intervalLabel->setVisible(slideshow);
+            intervalSpin->setVisible(slideshow);
+        };
+        refreshModes();
+
+        connect(slideshowCheck, &QCheckBox::toggled, this,
+                [desktop, refreshModes](bool on) {
+                    DesktopWallpapers::setSlideshowEnabled(desktop, on);
+                    refreshModes();
+                });
+        connect(staticCheck, &QCheckBox::toggled, this,
+                [slideshowCheck, refreshModes](bool on) {
+                    // Static is the *absence* of slideshow: nothing to persist,
+                    // the slideshow slot already removed the key. Checking it
+                    // just turns the slideshow mode off.
+                    if (on)
+                        slideshowCheck->setChecked(false);
+                    refreshModes();
+                });
+        connect(intervalSpin, QOverload<int>::of(&QSpinBox::valueChanged), this,
+                [desktop](int seconds) {
+                    DesktopWallpapers::setSlideshowInterval(desktop, seconds);
+                });
+
         layout->addWidget(group);
     }
 

@@ -11,9 +11,17 @@
 //     (typically a slideshow per monitor) is snapshotted before we touch
 //     anything and restored every time they come back to it — and on quit. Its
 //     config is never edited from kdock.
-//   - **Desktops 2..kMaxDesktops** get a static image per monitor, keyed by
-//     connector name (eDP-1, DP-5, …). A monitor with no image configured is
-//     left alone, so it simply keeps whatever is on it.
+//   - **Desktops 2..kMaxDesktops** have a *mode* each, picked in the Wallpapers
+//     tab:
+//       - **Static** (the original behaviour): an image per monitor, keyed by
+//         connector name (eDP-1, DP-5, …), applied as org.kde.image. A monitor
+//         with no image configured is left alone.
+//       - **Slideshow**: each monitor with a folder configured runs KDE's own
+//         org.kde.slideshow plugin rooted at that folder, advancing every
+//         `slideshowInterval(desktop)` seconds. Monitors with no folder are
+//         left alone.
+//     A desktop is in exactly one mode (`slideshowEnabled()`); the other
+//     desktop's per-monitor keys are simply ignored.
 //
 // Everything is off by default (`enabled()` is false until the Wallpapers tab
 // turns it on): a test harness with a throwaway XDG_DATA_HOME therefore cannot
@@ -50,6 +58,10 @@ public:
     // Plasma's org.kde.image FillMode, in the order the tab lists them.
     static constexpr int kFillModeDefault = 2; // scaled and cropped
 
+    // The default slideshow interval, in seconds (5 minutes). KDE's slideshow
+    // takes its interval in seconds, so the persisted key keeps seconds too.
+    static constexpr int kSlideshowIntervalDefault = 300;
+
     explicit DesktopWallpapers(VirtualDesktops *desktops, QObject *parent = nullptr);
 
     // ---- persisted settings (shared kdock.conf, group [Wallpapers]) --------
@@ -61,6 +73,21 @@ public:
     static QString imageFor(int desktop, const QString &screen);
     // An empty path removes the key.
     static void setImageFor(int desktop, const QString &screen, const QString &path);
+
+    // ---- slideshow mode (same group [Wallpapers<desktop>]) -----------------
+    // Whether `desktop` uses KDE's slideshow instead of static images. When
+    // true, the static images above are ignored and each monitor runs
+    // org.kde.slideshow rooted at its slideshow folder.
+    static bool slideshowEnabled(int desktop);
+    static void setSlideshowEnabled(int desktop, bool on);
+    // Folder a monitor's slideshow is rooted at. Empty = not configured.
+    static QString slideshowFolder(int desktop, const QString &screen);
+    // An empty path removes the key.
+    static void setSlideshowFolder(int desktop, const QString &screen, const QString &path);
+    // Seconds between slideshow steps, shared by every monitor of the desktop.
+    static int slideshowInterval(int desktop);
+    static void setSlideshowInterval(int desktop, int seconds);
+
     // Monitors offered by the UI: the connected ones first, then the ones the
     // config has seen before, capped at kMaxScreens.
     static QStringList configuredScreens();
@@ -81,8 +108,8 @@ public:
     // while the user is actually on desktop 1 (the Wallpapers tab gates the
     // button on that); `force` skips the "did we write this ourselves?" guard.
     void capture(bool force = false);
-    // Put the given desktop's static images up. Monitors without one are not
-    // touched.
+    // Put the given desktop's wallpapers up — slideshow or static, whichever
+    // the desktop is in. Monitors without a folder/image are not touched.
     void apply(int desktop);
     // Put the snapshot back on every connected monitor it covers.
     void restore();

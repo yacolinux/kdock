@@ -34,6 +34,25 @@ QString imageKey(int desktop, const QString &screen)
     return QStringLiteral("Wallpapers%1/%2").arg(desktop).arg(screen);
 }
 
+// A monitor's slideshow folder lives next to its static image, under the same
+// section, with a "slideshow_" prefix so a connector name can never collide
+// with it.
+QString slideshowFolderKey(int desktop, const QString &screen)
+{
+    return QStringLiteral("Wallpapers%1/slideshow_%2").arg(desktop).arg(screen);
+}
+
+// Desktop-level slideshow keys (same section, no connector in the name).
+QString slideshowModeKey(int desktop)
+{
+    return QStringLiteral("Wallpapers%1/slideshowMode").arg(desktop);
+}
+
+QString slideshowIntervalKey(int desktop)
+{
+    return QStringLiteral("Wallpapers%1/slideshowInterval").arg(desktop);
+}
+
 // JS that resolves each containment's screen into the "x,y" key the maps below
 // are indexed by. Shared prologue of the three write scripts.
 QString containmentLoopJs()
@@ -121,6 +140,54 @@ void DesktopWallpapers::setImageFor(int desktop, const QString &screen, const QS
         s.remove(imageKey(desktop, screen));
     else
         s.setValue(imageKey(desktop, screen), path);
+}
+
+bool DesktopWallpapers::slideshowEnabled(int desktop)
+{
+    return shared().value(slideshowModeKey(desktop), false).toBool();
+}
+
+void DesktopWallpapers::setSlideshowEnabled(int desktop, bool on)
+{
+    QSettings s = shared();
+    if (on)
+        s.setValue(slideshowModeKey(desktop), true);
+    else
+        s.remove(slideshowModeKey(desktop));
+}
+
+QString DesktopWallpapers::slideshowFolder(int desktop, const QString &screen)
+{
+    if (screen.isEmpty())
+        return {};
+    return shared().value(slideshowFolderKey(desktop, screen)).toString();
+}
+
+void DesktopWallpapers::setSlideshowFolder(int desktop, const QString &screen, const QString &path)
+{
+    if (screen.isEmpty())
+        return;
+    QSettings s = shared();
+    if (path.isEmpty())
+        s.remove(slideshowFolderKey(desktop, screen));
+    else
+        s.setValue(slideshowFolderKey(desktop, screen), path);
+}
+
+int DesktopWallpapers::slideshowInterval(int desktop)
+{
+    return shared().value(slideshowIntervalKey(desktop), kSlideshowIntervalDefault).toInt();
+}
+
+void DesktopWallpapers::setSlideshowInterval(int desktop, int seconds)
+{
+    if (seconds <= 0)
+        seconds = kSlideshowIntervalDefault;
+    QSettings s = shared();
+    if (seconds == kSlideshowIntervalDefault)
+        s.remove(slideshowIntervalKey(desktop));
+    else
+        s.setValue(slideshowIntervalKey(desktop), seconds);
 }
 
 QStringList DesktopWallpapers::configuredScreens()
@@ -294,9 +361,11 @@ QHash<QString, WallpaperSnapshot> DesktopWallpapers::parseCapture(const QString 
     for (auto it = keys.constBegin(); it != keys.constEnd(); ++it)
         byGeometry.insert(it.value(), it.key());
 
-    // Every static image we could have written ourselves, so a capture that
-    // slipped through the `applied` guard still cannot store our own work as if
-    // it were the user's.
+    // Every static image and slideshow folder we could have written ourselves,
+    // so a capture that slipped through the `applied` guard still cannot store
+    // our own work as if it were the user's. Static images appear under
+    // org.kde.image (as the Image path); slideshow folders appear under
+    // org.kde.slideshow (as SlidePaths).
     QStringList ours;
     const QStringList screens = configuredScreens();
     for (int desktop = 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
@@ -304,6 +373,9 @@ QHash<QString, WallpaperSnapshot> DesktopWallpapers::parseCapture(const QString 
             const QString path = imageFor(desktop, screen);
             if (!path.isEmpty())
                 ours << path;
+            const QString folder = slideshowFolder(desktop, screen);
+            if (!folder.isEmpty())
+                ours << folder;
         }
     }
 
@@ -320,8 +392,11 @@ QHash<QString, WallpaperSnapshot> DesktopWallpapers::parseCapture(const QString 
         for (int i = 2; i + 1 < fields.size(); i += 2)
             snap.keys.insert(fields.at(i), fields.at(i + 1));
         const QString image = QUrl(snap.keys.value(QStringLiteral("Image"))).toLocalFile();
+        const QString slidePaths = snap.keys.value(QStringLiteral("SlidePaths"));
         if (snap.plugin == QLatin1String("org.kde.image") && ours.contains(image))
             continue; // this is ours, not KDE's
+        if (snap.plugin == QLatin1String("org.kde.slideshow") && ours.contains(slidePaths))
+            continue; // same, for a slideshow desktop of ours
         fresh.insert(screen, snap);
     }
     return fresh;
@@ -359,6 +434,33 @@ QHash<QString, QString> DesktopWallpapers::geometryKeys()
 QString DesktopWallpapers::applyScript(int desktop) const
 {
     const auto keys = geometryKeys();
+
+    // Slideshow desktop: every monitor with a folder configured runs KDE's own
+    // slideshow plugin rooted at that folder. The interval is shared by all of
+    // them; SlideOrder stays at KDE's default (sequential).
+    if (slideshowEnabled(desktop)) {
+        QStringList entries;
+        for (auto it = keys.constBegin(); it != keys.constEnd(); ++it) {
+            const QString folder = slideshowFolder(desktop, it.key());
+            if (folder.isEmpty())
+                continue; // monitor not configured for this desktop: leave it alone
+            entries << jsString(it.value()) + QLatin1Char(':') + jsString(folder);
+        }
+        if (entries.isEmpty())
+            return {};
+
+        return QStringLiteral("var m={%1};var iv=%2;")
+                   .arg(entries.join(QLatin1Char(',')))
+                   .arg(slideshowInterval(desktop))
+               + containmentLoopJs()
+               + QStringLiteral(
+                   "if(!m.hasOwnProperty(key))continue;"
+                   "d.wallpaperPlugin='org.kde.slideshow';"
+                   "d.currentConfigGroup=['Wallpaper','org.kde.slideshow','General'];"
+                   "d.writeConfig('SlidePaths',m[key]);d.writeConfig('SlideInterval',iv);}");
+    }
+
+    // Static desktop: one org.kde.image per configured monitor.
     QStringList entries;
     for (auto it = keys.constBegin(); it != keys.constEnd(); ++it) {
         const QString path = imageFor(desktop, it.key());

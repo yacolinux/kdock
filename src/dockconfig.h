@@ -201,7 +201,7 @@ public:
 
     // How many virtual desktops the dock offers to bind docks to. Fixed on
     // purpose: the UI lists at most this many, whatever KWin reports.
-    static constexpr int kMaxDesktops = 3;
+    static constexpr int kMaxDesktops = 5;
 
     // A dock is identified by a "dockId": the first dock on a screen uses the
     // bare screen name (slot 0, backward compatible); extra docks append

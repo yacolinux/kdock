@@ -60,10 +60,13 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   de la pantalla, no del escritorio. kdock lo consigue reescribiéndolo en el momento del
   cambio. El **Escritorio 1 sigue siendo de KDE**: su configuración —el slideshow con sus
   carpetas e intervalos, o lo que tengas— se guarda sola y vuelve cada vez que regresás a él,
-  y también cuando kdock se cierra. Los escritorios 2 y 3 llevan **una imagen fija por
-  monitor**, elegida en la solapa *Wallpapers* con el diálogo de archivos de KDE (el que
-  previsualiza imágenes). Un monitor al que no le asignes nada no se toca. Viene **apagado**:
-  mientras no lo prendas, kdock no le escribe una sola clave a tu escritorio.
+  y también cuando kdock se cierra. Los escritorios 2 a 5 llevan, cada uno, **un modo propio**:
+  *Estático* (una imagen fija por monitor, el diálogo de archivos de KDE, el que previsualiza
+  imágenes) o *Slideshow* (el plugin de KDE enraizado en una **carpeta por monitor**, con el
+  intervalo configurable en segundos, 5 minutos por defecto). Los modos son **excluyentes por
+  escritorio**: uno puede correr un slideshow mientras otro muestra una imagen fija. Un monitor
+  al que no le asignes nada no se toca. Viene **apagado**: mientras no lo prendas, kdock no le
+  escribe una sola clave a tu escritorio.
 - **Modos de presentación**: flotante o panel de borde a borde, modo compacto, alineación
   inicio/centro/fin, opacidad, color de fondo, largo fijo o automático.
 - **Colores rápidos**: ocho colores de fondo configurables, aplicables al vuelo desde el
@@ -361,8 +364,8 @@ La configuración vive en el directorio de datos XDG:
   espacio (otro borde, otro grosor), al cambiar de escritorio las ventanas maximizadas se
   re-acomodan en todos. Es el gestor de ventanas haciendo su trabajo; kdock no interviene. Si
   te molesta, que compartan borde y grosor —o que se auto-oculten, que no reservan nada.
-- **Fondos por escritorio**: se configuran los escritorios 2 y 3 (el 1 es el de KDE); a partir
-  del 4 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
+- **Fondos por escritorio**: se configuran los escritorios 2 a 5 (el 1 es el de KDE); a partir
+  del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y
   un slideshow avanza solo de todas formas.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que

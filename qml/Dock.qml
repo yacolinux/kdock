@@ -1378,8 +1378,8 @@ Item {
                                                      virtualDesktops ? virtualDesktops.current : 0)
                                 }
                                 MenuSeparator {}
-                                // Three fixed items rather than a Repeater: the
-                                // supported number of desktops is fixed at three
+                                // Five fixed items rather than a Repeater: the
+                                // supported number of desktops is fixed at five
                                 // (DockConfig::kMaxDesktops), and a Menu with
                                 // dynamically inserted children is the fiddly
                                 // part of QtQuick.Controls. Each one hides
@@ -1406,6 +1406,26 @@ Item {
                                 }
                                 IconMenuItem {
                                     readonly property int position: 3
+                                    visible: virtualDesktops && virtualDesktops.count >= position
+                                    height: visible ? implicitHeight : 0
+                                    enabled: virtualDesktops && virtualDesktops.current !== position
+                                    text: qsTr("Enviar a %1").arg(
+                                              virtualDesktops ? virtualDesktops.nameOf(position) : "")
+                                    iconName: "go-next"
+                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                }
+                                IconMenuItem {
+                                    readonly property int position: 4
+                                    visible: virtualDesktops && virtualDesktops.count >= position
+                                    height: visible ? implicitHeight : 0
+                                    enabled: virtualDesktops && virtualDesktops.current !== position
+                                    text: qsTr("Enviar a %1").arg(
+                                              virtualDesktops ? virtualDesktops.nameOf(position) : "")
+                                    iconName: "go-next"
+                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                }
+                                IconMenuItem {
+                                    readonly property int position: 5
                                     visible: virtualDesktops && virtualDesktops.count >= position
                                     height: visible ? implicitHeight : 0
                                     enabled: virtualDesktops && virtualDesktops.current !== position
@@ -2239,8 +2259,9 @@ Item {
             }
             Repeater {
                 id: pagerRepeater
-                // Capped at the same three desktops the rest of kdock supports.
-                model: virtualDesktops ? Math.min(virtualDesktops.count, 3) : 0
+                // Capped at the same number of desktops the rest of kdock
+                // supports (DockConfig::kMaxDesktops).
+                model: virtualDesktops ? Math.min(virtualDesktops.count, 5) : 0
                 Item {
                     id: pagerCell
                     required property int index
