@@ -45,7 +45,17 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   ventanas por aplicación (incluidas las **web apps de Chromium/Edge**, que reportan un
   `app_id` deformado y necesitan heurísticas propias).
 - **Un dock por monitor**, opt-in: cada uno con su configuración independiente (borde,
-  tamaño, widgets, anclados) y manejo de hotplug. Hasta 3 docks por pantalla.
+  tamaño, widgets, anclados) y manejo de hotplug. Hasta 6 docks por pantalla.
+- **Y docks distintos por escritorio virtual** (KDE/KWin): además de variar de monitor a
+  monitor, un dock puede atarse a uno o varios escritorios. La regla es por monitor: en un
+  escritorio que tiene docks propios se ven **esos y solo esos**, y un monitor sin docks
+  propios sigue mostrando los de siempre. O sea que mientras no ates ninguno, nada cambia:
+  los docks actuales se ven en todos los escritorios, como hasta ahora. Se configura en
+  *Monitores*, marcando escritorios o con **Duplicar para el escritorio…**, que clona el dock
+  en el mismo monitor para empezar a diferenciarlo. Los docks de un escritorio **no se
+  construyen hasta la primera vez que entrás ahí** —así no se paga la memoria de un dock que
+  nunca vas a ver— y a partir de entonces cambiar de escritorio solo los muestra y los
+  esconde.
 - **Modos de presentación**: flotante o panel de borde a borde, modo compacto, alineación
   inicio/centro/fin, opacidad, color de fondo, largo fijo o automático.
 - **Colores rápidos**: ocho colores de fondo configurables, aplicables al vuelo desde el
@@ -78,7 +88,9 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   por todos los docks y por el diálogo. Y un casillero **«Mantener abierta»** para probar temas
   uno tras otro sin reabrir la ventana en cada cambio.
 - **Bandeja del sistema** (StatusNotifierItem + DBusMenu, implementados acá). Va en el dock
-  que elijas —cualquiera, no solo el principal— aunque en uno solo a la vez.
+  que elijas —cualquiera, no solo el principal— aunque en uno solo por vez: dos bandejas a la
+  vista duplicarían cada ícono. Docks que nunca se ven juntos, en cambio, pueden tener cada
+  uno la suya, así un escritorio virtual con docks propios no se queda sin bandeja.
 - **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
   un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
   de lo que le queda.
@@ -331,6 +343,11 @@ La configuración vive en el directorio de datos XDG:
 - **Wi-Fi Enterprise (802.1X/EAP)**: el editor de redes cubre WPA/WPA2/WPA3-Personal, redes
   abiertas y WEP. Una conexión con 802.1X se muestra pero no se puede guardar desde acá.
 - **Portapapeles**: guarda texto e imágenes. Otros formatos (archivos, HTML enriquecido) no.
+- **El espacio reservado no es por escritorio virtual.** KWin calcula el área de maximizado
+  por monitor, no por escritorio, así que si los docks de dos escritorios reservan distinto
+  espacio (otro borde, otro grosor), al cambiar de escritorio las ventanas maximizadas se
+  re-acomodan en todos. Es el gestor de ventanas haciendo su trabajo; kdock no interviene. Si
+  te molesta, que compartan borde y grosor —o que se auto-oculten, que no reservan nada.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que
   layer-shell-qt): una versión mayor nueva de Qt puede pedir ajustes.
 
