@@ -391,6 +391,48 @@ texto, la captura en segundo plano funciona (que es justo lo que no andaba). Con
 disco. Para el caso de las contraseñas, una segunda sonda con `QMimeData` que traiga
 `x-kde-passwordManagerHint` confirma que **no** se guarda.
 
+### Arnés de los escritorios virtuales
+
+**El arnés de Xvfb no ejercita nada de esto**: sin KWin, `VirtualDesktops::currentPosition()`
+es 0 y `DockManager::wantedDocks()` devuelve el juego base, o sea el comportamiento de antes
+de la feature. Silencio ahí prueba que **no rompiste lo viejo**, nada más.
+
+Pero ojo con la otra mitad: un proceso bajo Xvfb **sí llega al bus de sesión del usuario**
+(los escritorios virtuales salen de D-Bus, no de Wayland). O sea que una sonda del diálogo
+corriendo en Xvfb ve los tres escritorios reales con sus nombres, y la lista de *Escritorios
+virtuales* de la solapa Monitores se puede manejar desde código con `setCheckState()` y
+verificar releyendo el `.conf`. Eso cubre la UI entera sin tocar la sesión.
+
+Lo que **solo** se puede probar en la sesión real es el ciclo de vida (crear diferido,
+ocultar, volver a mostrar con la superficie de layer-shell bien anclada). Segunda instancia
+aislada, **en el bus real** (`dbus-run-session` acá **no sirve**: perdés la señal
+`currentChanged` de KWin, que es todo el disparador), y el brillo tapado con el `PATH` falso
+de más arriba porque `BrightnessControl` reaplica al arrancar:
+
+```bash
+setsid env PATH=/tmp/fakebin:$PATH XDG_DATA_HOME=/tmp/kdvd ./build/kdock > /tmp/kdvd/err.log 2>&1 &
+busctl --user get-property org.kde.KWin /VirtualDesktopManager \
+       org.kde.KWin.VirtualDesktopManager desktops     # los uuid, y anotá el actual
+busctl --user set-property org.kde.KWin /VirtualDesktopManager \
+       org.kde.KWin.VirtualDesktopManager current s "<uuid>"
+grep VmRSS /proc/<pid>/status                          # sube una vez y se queda
+```
+
+Tres cosas de este arnés:
+
+- **Poné `autohide=true` en los `.conf` de prueba** y no le movés ninguna ventana al usuario
+  (zona exclusiva 0). El precio es que no se ve nada en una captura: el QML desliza el dock
+  fuera de pantalla, así que para *ver* que la superficie vuelve bien hay que correr una
+  segunda vuelta con `autohide=false` (ahí sí KWin re-acomoda las maximizadas, y vuelve solo
+  al matar la instancia).
+- **Distinguí los dos docks por `alignment`** (0 = principio del borde, 2 = final) o por
+  `iconSize`: dos capturas del mismo borde en dos escritorios se leen de un vistazo, y una
+  tercera de vuelta al primero prueba que el re-mapeo quedó igual que al arranque.
+- **Volvé al escritorio original al terminar**, y matá la instancia por PID sacado de
+  `pgrep -x kdock` **excluyendo el `/usr/local/bin/kdock` del usuario**. `pgrep -f
+  './build/kdock'` también matchea el propio shell del comando y te mata la corrida a la
+  mitad (exit 144, mismo problema que el `pkill -f` de más abajo).
+
 ### Manejar el diálogo desde código encuentra lo que la captura no muestra
 
 Vale para cualquier solapa, y para la de Redes fue decisivo: una sonda que linkea los `.o`,
@@ -493,6 +535,12 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   Las dos se destaparon **antes de instalar** con una sonda de 30 líneas
   (`g++ main.cpp $(pkg-config --cflags --libs Qt6DBus Qt6Core)`) que imprime lo que contesta el
   servicio: para cualquier D-Bus con tipos compuestos, vale la pena escribirla primero.
+  Y una tercera, más barata todavía: **`busctl` imprime structs y `qdbus6` no**. `qdbus6`
+  muestra `{D-Bus type "a(iss)"}` y se queda ahí; `busctl --user get-property org.kde.KWin
+  /VirtualDesktopManager org.kde.KWin.VirtualDesktopManager desktops` escupe el contenido y de
+  paso **la firma de verdad**, que en este caso es `a(uss)` (no `a(iss)`, como decía el
+  comentario del código) y con las posiciones **0-based** (`0` = "Escritorio 1"). Dos segundos
+  de `busctl` antes de escribir el demarshalling.
 - **Un widget nuevo del dock se toca en SIETE archivos**, y el que se olvida no da error:
   el backend (`src/<x>control.{h,cpp}`) + su línea en `CMakeLists.txt`; `DockConfig`
   (`Q_PROPERTY`/getter/setter/señal/miembro en el `.h`, y `load()` + setter +
@@ -558,6 +606,16 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   primario la dibujaba— y sin eso ves la bandeja duplicada; y la exclusividad se prueba con la
   sonda que maneja el diálogo desde código (dos docks *known* sobre una pantalla que no existe
   → `DockManager` no crea ninguna ventana y la sonda no necesita ningún backend real).
+  Desde los docks por escritorio virtual la exclusividad es **por grupo**: dos docks chocan
+  solo si sus conjuntos de escritorios se intersecan (`DockManager::canCoexist()`), y el
+  diálogo pregunta con `systrayDockIdFor(dockId)`, no con `systrayDockId()`.
+- **`m_instances` NO es "los docks visibles".** Un dock que el escritorio virtual actual no
+  quiere sigue instanciado —con su `DockModel`, sus relojes y su `QQmlEngine` vivos— y solo
+  tiene la superficie desmapeada (`Instance::onScreen`). Lo que decide qué se ve es
+  `DockManager::wantedDocks(currentDesktop())`, y **cualquier opción nueva que cambie qué docks
+  existen tiene que pasar por ahí**, que es el único lugar donde vive esa regla. Corolarios:
+  un modelo de un dock oculto se sigue actualizando (barato, pero no es cero), y contar
+  `m_instances` para saber cuántos docks hay en pantalla da de más.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de

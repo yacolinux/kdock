@@ -9,8 +9,17 @@
 // are singletons passed to every dock's QML context. The relanzadores manager
 // is attached only to the primary dock: the lowest-slot enabled dock on the
 // primary monitor (see primaryDockId()). The systray host goes to every dock —
-// which one draws the tray is its own "showSystray" flag, kept exclusive by
-// systrayDockId()/normalizeSystrayOwner().
+// which one draws the tray is its own "showSystray" flag, kept exclusive among
+// docks that can be on screen together by systrayDockIdFor()/
+// normalizeSystrayOwner().
+//
+// Docks are also filtered by KWin's current **virtual desktop**: each dock
+// carries a (possibly empty) list of desktops in DockConfig::dockDesktops(),
+// and wantedDocks() turns that into the set to show. Unlike a monitor going
+// away, a dock the current desktop does not want is only **hidden**, never
+// destroyed, and it is not built at all until the first time a desktop asks
+// for it — that laziness is the point (a DockWindow carries a whole QML
+// engine).
 
 #pragma once
 
@@ -46,6 +55,7 @@ class ClipboardHistory;
 class DisksControl;
 class NetworkControl;
 class AppearanceControl;
+class VirtualDesktops;
 
 class DockManager : public QObject
 {
@@ -73,6 +83,7 @@ public:
         DisksControl *disks = nullptr;
         NetworkControl *network = nullptr;
         AppearanceControl *appearance = nullptr;
+        VirtualDesktops *desktops = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -122,15 +133,49 @@ public:
     // file on disk so it can be recreated later.
     void removeDock(const QString &dockId);
 
+    // --- Virtual desktops ---------------------------------------------------
+
+    // Which enabled docks belong on a given 1-based virtual desktop. The rule,
+    // and the only place it lives: **per monitor**, a desktop that has docks of
+    // its own gets exactly those; a monitor with none falls back to its "base"
+    // docks (the ones with an empty DockConfig::dockDesktops()). Desktop 0
+    // ("KWin didn't answer" — X11, wlroots, the Xvfb harness) means every
+    // desktop-bound dock is ignored and only the base set is wanted, i.e. what
+    // kdock did before this existed. Disconnected monitors are excluded.
+    // Not const: it reads each dock's desktops through configFor().
+    QStringList wantedDocks(int desktop);
+
+    // The virtual desktops the settings UI should offer, as display names
+    // indexed by position-1. Empty when KWin is unreachable.
+    QStringList desktopNamesForUi() const;
+    // Current desktop (1-based), 0 when unknown.
+    int currentDesktop() const;
+
+    // Whether two docks can be on screen at the same time, i.e. whether their
+    // desktop sets overlap (an empty set means "every desktop"). Used to scope
+    // the systray's exclusivity: two docks that are never visible together may
+    // both host a tray.
+    bool canCoexist(const QString &dockIdA, const QString &dockIdB);
+
+    // Clone srcDockId into a free slot on its own monitor, bound to the given
+    // 1-based desktop, and enable it. Returns the new dockId, or an empty
+    // string (with *error set) when the monitor is out of slots.
+    QString duplicateDockForDesktop(const QString &srcDockId, int desktop,
+                                    QString *error = nullptr);
+
     // The dockId that defaults relanzadores to shown: the lowest-slot enabled
     // dock on the primary monitor.
     QString primaryDockId() const;
 
     // The dock that currently claims the system tray, or empty when no dock
-    // does. Any dock can host it, but only one at a time (the settings dialog
-    // disables the checkbox elsewhere), so this is the single owner. Not const:
-    // it reads the other docks' configs through configFor().
+    // does. Any dock can host it, but only one at a time *among docks that can
+    // be on screen together* (the settings dialog disables the checkbox on the
+    // others). Not const: it reads the other docks' configs through configFor().
     QString systrayDockId();
+    // Same, restricted to the docks that would collide with `dockId` — i.e. the
+    // owner the settings dialog has to point at when it greys out the checkbox.
+    // Empty when `dockId` may claim the tray itself.
+    QString systrayDockIdFor(const QString &dockId);
 
     // The item model of a shown dock, or nullptr when that dock isn't running.
     // The settings dialog reads the app icon names out of it to tint its tabs.
@@ -156,6 +201,10 @@ private:
         ClockWidget2 *clock2 = nullptr;
         DockWindow *window = nullptr;
         bool primary = false;
+        // False while the current virtual desktop doesn't want this dock: the
+        // instance stays built (and keeps its QML engine) but its surface is
+        // unmapped. See sync().
+        bool onScreen = true;
     };
 
     void migrateFirstRun();
@@ -163,6 +212,8 @@ private:
     // the tray was primary-only may flag several docks.
     void normalizeSystrayOwner();
     void sync();
+    // Map/unmap an existing dock's surface without destroying the instance.
+    void setInstanceOnScreen(const QString &dockId, bool onScreen);
     Instance buildInstance(const QString &dockId, bool primary);
     void teardownInstance(Instance &inst);
     void createInstance(const QString &dockId, bool primary);

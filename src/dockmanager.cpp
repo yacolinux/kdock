@@ -6,6 +6,7 @@
 #include "dockmodel.h"
 #include "dockwindow.h"
 #include "systraymodel.h"
+#include "virtualdesktops.h"
 
 #include <QFile>
 #include <QFileInfo>
@@ -13,6 +14,7 @@
 #include <QScreen>
 
 #include <algorithm>
+#include <utility>
 
 DockManager::DockManager(const Shared &shared, QObject *parent)
     : QObject(parent)
@@ -24,6 +26,15 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, [this] { sync(); });
+
+    if (m_shared.desktops) {
+        // Switching desktops is the same kind of event as plugging a monitor:
+        // recompute what is wanted and let sync() sort out the difference.
+        connect(m_shared.desktops, &VirtualDesktops::currentChanged, this, [this] { sync(); });
+        // Adding or removing a desktop renumbers the rest, so a dock bound to
+        // position 3 may suddenly be (or stop being) the current one.
+        connect(m_shared.desktops, &VirtualDesktops::countChanged, this, [this] { sync(); });
+    }
 
     sync();
 }
@@ -53,6 +64,20 @@ QString DockManager::systrayDockId()
     return QString();
 }
 
+QString DockManager::systrayDockIdFor(const QString &dockId)
+{
+    // Docks that are never on screen together (different virtual desktops) may
+    // each host a tray: without this, a desktop with its own docks would have
+    // no way to show one.
+    for (const QString &id : configuredDocks()) {
+        if (id == dockId || !configFor(id)->showSystray())
+            continue;
+        if (canCoexist(id, dockId))
+            return id;
+    }
+    return QString();
+}
+
 void DockManager::normalizeSystrayOwner()
 {
     // The tray used to be drawn by the primary dock only, so "showSystray" could
@@ -60,19 +85,122 @@ void DockManager::normalizeSystrayOwner()
     // every dock honours its own flag, which would show the same items twice, so
     // the extra claims are dropped once at startup. The primary dock keeps the
     // tray when it has it, to preserve the pre-change appearance.
+    //
+    // "Extra" is scoped to docks that can be on screen together: two docks on
+    // different virtual desktops never duplicate anything, so both keep their
+    // claim.
+    QStringList owners;
     const QString preferred = primaryDockId();
-    QString owner = (!preferred.isEmpty() && configFor(preferred)->showSystray())
-                        ? preferred
-                        : QString();
+    if (!preferred.isEmpty() && configFor(preferred)->showSystray())
+        owners << preferred;
     for (const QString &id : configuredDocks()) {
         DockConfig *cfg = configFor(id);
-        if (!cfg->showSystray())
+        if (!cfg->showSystray() || owners.contains(id))
             continue;
-        if (owner.isEmpty())
-            owner = id;
-        else if (id != owner)
+        bool collides = false;
+        for (const QString &owner : std::as_const(owners))
+            collides = collides || canCoexist(owner, id);
+        if (collides)
             cfg->setShowSystray(false);
+        else
+            owners << id;
     }
+}
+
+int DockManager::currentDesktop() const
+{
+    return m_shared.desktops ? m_shared.desktops->currentPosition() : 0;
+}
+
+QStringList DockManager::desktopNamesForUi() const
+{
+    if (!m_shared.desktops)
+        return {};
+    QStringList names = m_shared.desktops->names();
+    // The dock offers a fixed number of desktops on purpose (kMaxDesktops); a
+    // session with more of them simply cannot bind docks to the extra ones.
+    while (names.size() > DockConfig::kMaxDesktops)
+        names.removeLast();
+    return names;
+}
+
+QStringList DockManager::wantedDocks(int desktop)
+{
+    const QStringList connected = connectedScreens();
+
+    // Group the enabled docks of each connected monitor into "belongs to this
+    // desktop" and "base" (no desktop of its own).
+    QHash<QString, QStringList> ownPerScreen;
+    QHash<QString, QStringList> basePerScreen;
+    for (const QString &id : DockConfig::enabledDocks()) {
+        const QString screen = DockConfig::screenOfDockId(id);
+        if (!connected.contains(screen))
+            continue;
+        const QList<int> desktops = configFor(id)->dockDesktops();
+        if (desktops.isEmpty())
+            basePerScreen[screen] << id;
+        else if (desktop > 0 && desktops.contains(desktop))
+            ownPerScreen[screen] << id;
+    }
+
+    // Per monitor: its own docks win, and only when it has none does the base
+    // set show. A monitor nobody claimed keeps its base docks, so configuring
+    // one screen never blanks another.
+    QStringList wanted;
+    const QStringList screens = connected;
+    for (const QString &screen : screens) {
+        const QStringList own = ownPerScreen.value(screen);
+        wanted += own.isEmpty() ? basePerScreen.value(screen) : own;
+    }
+    return wanted;
+}
+
+bool DockManager::canCoexist(const QString &dockIdA, const QString &dockIdB)
+{
+    const QList<int> a = configFor(dockIdA)->dockDesktops();
+    const QList<int> b = configFor(dockIdB)->dockDesktops();
+    if (a.isEmpty() || b.isEmpty())
+        return true; // a base dock shares every desktop
+    for (int position : a)
+        if (b.contains(position))
+            return true;
+    return false;
+}
+
+QString DockManager::duplicateDockForDesktop(const QString &srcDockId, int desktop,
+                                             QString *error)
+{
+    const QString screen = DockConfig::screenOfDockId(srcDockId);
+    const int slot = firstFreeSlot(screen);
+    if (slot < 0) {
+        if (error)
+            *error = tr("El monitor %1 ya tiene el máximo de docks (%2).")
+                         .arg(screen)
+                         .arg(DockConfig::kMaxDocksPerScreen);
+        return {};
+    }
+    const QString dstDockId = DockConfig::makeDockId(screen, slot);
+
+    // Same reasoning as previewDockOnScreen(): the slot is free, so anything at
+    // its file path is a leftover from a removed dock and must not be reused.
+    if (DockConfig *cfg = m_configs.take(dstDockId))
+        delete cfg;
+    if (!configFor(srcDockId)->copySettingsTo(dstDockId)) {
+        if (error)
+            *error = tr("No se pudo crear la copia de \"%1\".").arg(srcDockId);
+        return {};
+    }
+    // The copy is what makes this desktop special; the source keeps whatever it
+    // had (typically nothing, i.e. it stays the base dock of the other
+    // desktops).
+    configFor(dstDockId)->setDockDesktops({desktop});
+
+    // Persist without edge-seeding, so the copy sits exactly where the source
+    // does — the point is to replace it on that desktop, not to sit next to it.
+    DockConfig::addKnownDock(dstDockId);
+    DockConfig::setDockEnabled(dstDockId, true);
+    sync();
+    return dstDockId;
 }
 
 QStringList DockManager::connectedScreens() const
@@ -317,6 +445,11 @@ DockConfig *DockManager::configFor(const QString &dockId)
     if (it != m_configs.end())
         return it.value();
     auto *cfg = new DockConfig(dockId, this);
+    // Binding a dock to another virtual desktop changes what should be on
+    // screen right now, so it re-syncs like a monitor being plugged in. Wired
+    // here rather than in the settings dialog so a config edited before the
+    // dock exists is covered too.
+    connect(cfg, &DockConfig::dockDesktopsChanged, this, [this] { sync(); });
     m_configs.insert(dockId, cfg);
     return cfg;
 }
@@ -351,26 +484,48 @@ void DockManager::sync()
     for (const QString &screen : connected)
         DockConfig::addKnownScreen(screen);
 
-    // A dock is wanted where it is enabled and its monitor is connected.
-    QStringList wanted;
+    // A dock may exist where it is enabled and its monitor is connected; of
+    // those, the current virtual desktop decides which are actually on screen.
+    QStringList alive;
     for (const QString &id : DockConfig::enabledDocks())
         if (connected.contains(DockConfig::screenOfDockId(id)))
-            wanted << id;
+            alive << id;
+    const QStringList wanted = wantedDocks(currentDesktop());
 
-    // Tear down docks no longer wanted, or whose primary role changed (the
-    // primary dock is the only one that hosts the systray/relanzadores, so a
-    // change of primary monitor means recreating the affected instances).
+    // Tear down docks that lost their monitor or were disabled, or whose
+    // primary role changed (the primary dock is the only one that hosts
+    // relanzadores by default, so a change of primary monitor means recreating
+    // the affected instances). A dock the *desktop* doesn't want is not in this
+    // group: it survives, just hidden.
     const QStringList shown = m_instances.keys();
     for (const QString &id : shown) {
         const bool wantPrimary = (id == primaryDock);
-        if (!wanted.contains(id) || m_instances[id].primary != wantPrimary)
+        if (!alive.contains(id) || m_instances[id].primary != wantPrimary)
             destroyInstance(id);
     }
 
-    // Bring up any wanted dock that is not shown yet.
-    for (const QString &id : wanted)
+    // Incoming first, outgoing second: on a desktop switch that swaps one dock
+    // for another this avoids a frame with no dock at all. (KWin re-lays out
+    // maximized windows on its own if the two reserve different amounts of
+    // space — its work areas are per output, not per desktop.)
+    for (const QString &id : wanted) {
         if (!m_instances.contains(id))
-            createInstance(id, id == primaryDock);
+            createInstance(id, id == primaryDock); // built on first use, not at startup
+        setInstanceOnScreen(id, true);
+    }
+    for (const QString &id : alive)
+        if (!wanted.contains(id))
+            setInstanceOnScreen(id, false);
+}
+
+void DockManager::setInstanceOnScreen(const QString &dockId, bool onScreen)
+{
+    auto it = m_instances.find(dockId);
+    if (it == m_instances.end() || it->onScreen == onScreen)
+        return;
+    it->onScreen = onScreen;
+    if (it->window)
+        it->window->setDeskVisible(onScreen);
 }
 
 void DockManager::createInstance(const QString &dockId, bool primary)

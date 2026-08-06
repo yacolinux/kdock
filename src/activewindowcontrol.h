@@ -12,10 +12,10 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
-#include <QVariant>
 
 class WindowMonitor;
 class AbstractWindow;
+class VirtualDesktops;
 
 class ActiveWindowControl : public QObject
 {
@@ -25,7 +25,9 @@ class ActiveWindowControl : public QObject
     Q_PROPERTY(bool available READ available NOTIFY availableChanged)
 
 public:
-    explicit ActiveWindowControl(WindowMonitor *monitor, QObject *parent = nullptr);
+    // `desktops` may be null; the right-click action is then a no-op.
+    explicit ActiveWindowControl(WindowMonitor *monitor, VirtualDesktops *desktops,
+                                 QObject *parent = nullptr);
 
     bool available() const { return m_monitor != nullptr; }
 
@@ -39,13 +41,10 @@ signals:
 
 private:
     AbstractWindow *activeWindow() const;
-    // One property off org.kde.KWin /VirtualDesktopManager, read the long way
-    // round (see the .cpp for why QDBusInterface::property is not enough).
-    static QVariant desktopProperty(const char *name);
-    // Ordered uuids of KWin's virtual desktops, from
-    // org.kde.KWin /VirtualDesktopManager. Empty when KWin is not reachable.
-    static QStringList desktopIds();
-    static QString currentDesktopId();
 
     WindowMonitor *m_monitor = nullptr;
+    // Ordered uuids of KWin's virtual desktops and which one is current; the
+    // shared VirtualDesktops object owns that (and the D-Bus quirks around
+    // reading it).
+    VirtualDesktops *m_desktops = nullptr;
 };

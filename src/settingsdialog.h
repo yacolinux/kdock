@@ -158,6 +158,7 @@ private:
     void reloadScriptRunnerEditor();
     void reloadDocksList();
     void reloadMonitorsForSelectedDock();
+    void reloadDesktopsForSelectedDock();
 
     DockConfig *m_config;
     DesktopEntryIndex *m_apps;
@@ -216,6 +217,11 @@ private:
     QString m_selectedScriptRunnerId;
     QListWidget *m_docksList = nullptr;
     QListWidget *m_monitorsList = nullptr;
+    // Virtual desktops the selected dock is bound to (no box checked = base
+    // dock, shown wherever its monitor has no desktop-specific dock).
+    QListWidget *m_desktopsList = nullptr;
+    QPushButton *m_duplicateForDesktopButton = nullptr;
+    QLabel *m_desktopsNote = nullptr;
     QPushButton *m_applyPreviewButton = nullptr;
     QPushButton *m_deleteDockButton = nullptr;
     QString m_selectedTabDockId;

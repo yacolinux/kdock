@@ -58,6 +58,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <utility>
 
 #include "theme.h"
 
@@ -1379,7 +1380,9 @@ QWidget *SettingsDialog::createWidgetsTab()
     // buildTabs() whenever the edited dock changes).
     auto *showSystray = new QCheckBox(tr("Mostrar la bandeja del sistema"), tab);
     showSystray->setChecked(m_config->showSystray());
-    const QString systrayOwner = m_manager ? m_manager->systrayDockId() : QString();
+    // Only docks that can be on screen at the same time collide: a dock bound
+    // to another virtual desktop may host its own tray.
+    const QString systrayOwner = m_manager ? m_manager->systrayDockIdFor(m_dockId) : QString();
     const bool takenElsewhere = !systrayOwner.isEmpty() && systrayOwner != m_dockId;
     showSystray->setEnabled(!takenElsewhere);
     connect(showSystray, &QCheckBox::toggled, m_config, &DockConfig::setShowSystray);
@@ -3370,6 +3373,10 @@ QWidget *SettingsDialog::createMonitorsTab()
     // Top: every configured dock, plus a "remove from list" button.
     layout->addWidget(new QLabel(tr("Docks (Doble-click renombra):"), tab));
     m_docksList = new QListWidget(tab);
+    // The tab stacks three lists (docks, monitors, desktops). Left to expand,
+    // the first two fill the dialog and push the third below the fold, where
+    // the user never finds it — so each gets a ceiling and scrolls internally.
+    m_docksList->setMaximumHeight(150);
     layout->addWidget(m_docksList);
 
     auto *dockButtons = new QHBoxLayout;
@@ -3392,6 +3399,7 @@ QWidget *SettingsDialog::createMonitorsTab()
         tab));
     m_monitorsList = new QListWidget(tab);
     m_monitorsList->setEnabled(false);
+    m_monitorsList->setMaximumHeight(120);
     layout->addWidget(m_monitorsList);
 
     auto *monButtons = new QHBoxLayout;
@@ -3400,6 +3408,85 @@ QWidget *SettingsDialog::createMonitorsTab()
                                            tr("Aplicar"), tab);
     monButtons->addWidget(m_applyPreviewButton);
     layout->addLayout(monButtons);
+
+    // Separator
+    auto *sep2 = new QLabel(tab);
+    sep2->setFrameStyle(QFrame::HLine | QFrame::Sunken);
+    layout->addWidget(sep2);
+
+    // Virtual desktops. Unlike the monitors list above there is no preview:
+    // another desktop is by definition not on screen, so the change is applied
+    // straight away and seen on the next switch.
+    auto *desktopsLabel = new QLabel(
+        tr("Escritorios virtuales (sin marcar nada, el dock se ve en todos los "
+           "escritorios donde su monitor no tenga docks propios):"),
+        tab);
+    desktopsLabel->setWordWrap(true); // or it widens the tab and forces a scrollbar
+    layout->addWidget(desktopsLabel);
+    m_desktopsList = new QListWidget(tab);
+    m_desktopsList->setEnabled(false);
+    m_desktopsList->setMaximumHeight(120); // kMaxDesktops rows and no more
+    layout->addWidget(m_desktopsList);
+
+    m_desktopsNote = new QLabel(tab);
+    m_desktopsNote->setWordWrap(true);
+    layout->addWidget(m_desktopsNote);
+
+    auto *deskButtons = new QHBoxLayout;
+    deskButtons->addStretch();
+    m_duplicateForDesktopButton =
+        new QPushButton(QIcon::fromTheme(QStringLiteral("edit-copy")),
+                        tr("Duplicar para el escritorio…"), tab);
+    deskButtons->addWidget(m_duplicateForDesktopButton);
+    layout->addLayout(deskButtons);
+    // Soak up the leftover height, or the layout spreads it as gaps between the
+    // three capped lists and the sections drift apart.
+    layout->addStretch();
+
+    connect(m_desktopsList, &QListWidget::itemChanged, this, [this](QListWidgetItem *) {
+        if (m_selectedTabDockId.isEmpty() || !m_manager)
+            return;
+        QList<int> desktops;
+        for (int row = 0; row < m_desktopsList->count(); ++row) {
+            QListWidgetItem *item = m_desktopsList->item(row);
+            if (item->checkState() == Qt::Checked)
+                desktops << item->data(Qt::UserRole).toInt();
+        }
+        // The manager re-syncs on dockDesktopsChanged, so the docks appear and
+        // disappear live without a restart.
+        m_manager->configFor(m_selectedTabDockId)->setDockDesktops(desktops);
+        reloadDocksList();
+    });
+
+    connect(m_duplicateForDesktopButton, &QPushButton::clicked, this, [this]() {
+        if (m_selectedTabDockId.isEmpty() || !m_manager)
+            return;
+        const QStringList names = m_manager->desktopNamesForUi();
+        if (names.isEmpty()) {
+            QMessageBox::information(
+                this, tr("Escritorios virtuales"),
+                tr("KWin no informó ningún escritorio virtual (¿sesión X11 o "
+                   "compositor sin escritorios?)."));
+            return;
+        }
+        bool ok = false;
+        const QString choice = QInputDialog::getItem(
+            this, tr("Duplicar para un escritorio"),
+            tr("Copiar \"%1\" a un dock propio del escritorio:")
+                .arg(dockLabel(m_selectedTabDockId)),
+            names, 0, false, &ok);
+        if (!ok)
+            return;
+        QString err;
+        const QString created = m_manager->duplicateDockForDesktop(
+            m_selectedTabDockId, names.indexOf(choice) + 1, &err);
+        if (created.isEmpty()) {
+            QMessageBox::warning(this, tr("Duplicar para un escritorio"), err);
+            return;
+        }
+        m_selectedTabDockId = created; // land on the copy, which is what to edit now
+        reloadDocksList();
+    });
 
     connect(m_docksList, &QListWidget::currentRowChanged, this, [this](int row) {
         // Switching the selected dock discards any pending (unapplied) previews.
@@ -3515,6 +3602,16 @@ void SettingsDialog::reloadDocksList()
         default:                 label += tr(" [Abajo]"); break;
         }
 
+        // Which virtual desktops it belongs to; nothing shown for a base dock,
+        // which is the common case (and what every dock was before this).
+        const QList<int> desktops = m_manager->configFor(id)->dockDesktops();
+        if (!desktops.isEmpty()) {
+            QStringList numbers;
+            for (int position : desktops)
+                numbers << QString::number(position);
+            label += tr(" [Escritorio %1]").arg(numbers.join(QStringLiteral("/")));
+        }
+
         // Mark the docks living on the monitor the dialog was opened from, so
         // the row the user was on is easy to find again.
         if (DockConfig::screenOfDockId(id) == thisScreen)
@@ -3542,6 +3639,7 @@ void SettingsDialog::reloadMonitorsForSelectedDock()
     m_monitorsList->clear();
     if (m_selectedTabDockId.isEmpty()) {
         m_monitorsList->setEnabled(false);
+        reloadDesktopsForSelectedDock();
         updateMonitorsTabButtons();
         return;
     }
@@ -3567,13 +3665,75 @@ void SettingsDialog::reloadMonitorsForSelectedDock()
             : m_manager->hasPreview(m_selectedTabDockId, screen);
         item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
     }
+    reloadDesktopsForSelectedDock();
     updateMonitorsTabButtons();
+}
+
+void SettingsDialog::reloadDesktopsForSelectedDock()
+{
+    if (!m_desktopsList || !m_manager)
+        return;
+    const QSignalBlocker block(m_desktopsList);
+    m_desktopsList->clear();
+    if (m_selectedTabDockId.isEmpty()) {
+        m_desktopsList->setEnabled(false);
+        if (m_desktopsNote)
+            m_desktopsNote->clear();
+        return;
+    }
+
+    const QStringList names = m_manager->desktopNamesForUi();
+    const QList<int> bound = m_manager->configFor(m_selectedTabDockId)->dockDesktops();
+    const int current = m_manager->currentDesktop();
+
+    // Positions the dock is bound to that KWin no longer has: the rows still
+    // show (so the user can uncheck them) but are marked, the same way the
+    // monitors list marks an unplugged output.
+    QList<int> positions;
+    for (int i = 1; i <= names.size(); ++i)
+        positions << i;
+    for (int position : bound)
+        if (!positions.contains(position))
+            positions << position;
+    std::sort(positions.begin(), positions.end());
+
+    m_desktopsList->setEnabled(!positions.isEmpty());
+    for (int position : std::as_const(positions)) {
+        QString label = position <= names.size()
+                            ? names.at(position - 1)
+                            : tr("Escritorio %1").arg(position);
+        if (position > names.size())
+            label += tr("  (no existe)");
+        else if (position == current)
+            label += tr("  — actual");
+        auto *item = new QListWidgetItem(label, m_desktopsList);
+        item->setData(Qt::UserRole, position);
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(bound.contains(position) ? Qt::Checked : Qt::Unchecked);
+    }
+
+    if (m_desktopsNote) {
+        if (names.isEmpty())
+            m_desktopsNote->setText(
+                tr("KWin no informó escritorios virtuales; el dock se ve siempre."));
+        else if (bound.isEmpty())
+            m_desktopsNote->setText(tr("Dock base: se ve en todos los escritorios."));
+        else
+            m_desktopsNote->setText(
+                tr("Mientras este dock esté asignado a un escritorio, reemplaza en él "
+                   "a los docks base de %1.")
+                    .arg(DockConfig::screenOfDockId(m_selectedTabDockId)));
+    }
+    if (m_duplicateForDesktopButton)
+        m_duplicateForDesktopButton->setEnabled(!m_selectedTabDockId.isEmpty());
 }
 
 void SettingsDialog::updateMonitorsTabButtons()
 {
     if (m_deleteDockButton)
         m_deleteDockButton->setEnabled(!m_selectedTabDockId.isEmpty());
+    if (m_duplicateForDesktopButton)
+        m_duplicateForDesktopButton->setEnabled(!m_selectedTabDockId.isEmpty());
     if (m_applyPreviewButton)
         m_applyPreviewButton->setEnabled(
             m_manager && !m_selectedTabDockId.isEmpty()

@@ -193,8 +193,14 @@ public:
         return token == QLatin1String("spring") || token == QLatin1String("sep");
     }
 
-    // Up to this many docks can coexist on a single monitor.
-    static constexpr int kMaxDocksPerScreen = 3;
+    // Up to this many docks can be configured on a single monitor. Six rather
+    // than the original three because a monitor may now hold its base dock(s)
+    // plus one set per virtual desktop (see dockDesktops()).
+    static constexpr int kMaxDocksPerScreen = 6;
+
+    // How many virtual desktops the dock offers to bind docks to. Fixed on
+    // purpose: the UI lists at most this many, whatever KWin reports.
+    static constexpr int kMaxDesktops = 3;
 
     // A dock is identified by a "dockId": the first dock on a screen uses the
     // bare screen name (slot 0, backward compatible); extra docks append
@@ -332,6 +338,15 @@ public:
     // "<screen> — Dock <slot+1>".
     QString alias() const { return m_alias; }
     void setAlias(const QString &alias);
+
+    // Virtual desktops this dock belongs to, as 1-based positions ("Escritorio
+    // 1" == 1), persisted as "desktops=" in the dock's own file. An **empty**
+    // list is the default and means "base dock": shown on every desktop that
+    // has no dock of its own on this monitor (see DockManager::wantedDocks,
+    // which is the only place that rule lives). Not exposed to QML: the dock
+    // draws nothing out of it, only DockManager and the settings dialog care.
+    QList<int> dockDesktops() const { return m_dockDesktops; }
+    void setDockDesktops(const QList<int> &desktops);
 
     // Copy this dock's persisted settings into dstDockId's settings file, so a
     // new dock can start from an existing one's configuration. Copies the live
@@ -653,6 +668,7 @@ signals:
     void pinnedChanged();
     void screenNameChanged();
     void aliasChanged();
+    void dockDesktopsChanged();
     void panelModeChanged();
     void compactChanged();
     void alignmentChanged();
@@ -756,6 +772,7 @@ private:
     QSettings m_settings;
     QString m_dockId;
     QString m_alias; // user-chosen friendly name; empty = default "<screen> — Dock <n>"
+    QList<int> m_dockDesktops; // 1-based virtual desktops; empty = base dock
     int m_edge = Bottom;
     int m_iconSize = 48;
     int m_widgetIconScale = 100; // % of iconSize applied to widget sections

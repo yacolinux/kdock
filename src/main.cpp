@@ -18,6 +18,7 @@
 #include "batterycontrol.h"
 #include "overviewcontrol.h"
 #include "desktopcontrol.h"
+#include "virtualdesktops.h"
 #include "activewindowcontrol.h"
 #include "maxmincontrol.h"
 #include "monitorcontrol.h"
@@ -143,7 +144,8 @@ int main(int argc, char *argv[])
     DesktopControl desktopControl;
     MonitorControl monitorControl;
     MaxMinControl maxmin;
-    ActiveWindowControl activeWindow(monitor);
+    VirtualDesktops virtualDesktops;
+    ActiveWindowControl activeWindow(monitor, &virtualDesktops);
     WallpaperControl wallpaperControl;
     PowerControl power;
     SystrayHost systray;
@@ -179,6 +181,7 @@ int main(int argc, char *argv[])
     shared.disks = &disks;
     shared.network = &network;
     shared.appearance = &appearance;
+    shared.desktops = &virtualDesktops;
 
     DockManager manager(shared);
 

@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QStandardPaths>
 
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -630,6 +631,18 @@ void DockConfig::load()
                    .toStringList();
     m_screenName = m_settings.value(QStringLiteral("screenName")).toString();
     m_alias = m_settings.value(QStringLiteral("alias")).toString();
+    // Stored as a string list of 1-based positions; out-of-range entries are
+    // dropped so a hand-edited file can't hide a dock on a desktop that the UI
+    // cannot show again.
+    m_dockDesktops.clear();
+    const QStringList desktops = m_settings.value(QStringLiteral("desktops")).toStringList();
+    for (const QString &entry : desktops) {
+        bool ok = false;
+        const int position = entry.toInt(&ok);
+        if (ok && position >= 1 && position <= kMaxDesktops && !m_dockDesktops.contains(position))
+            m_dockDesktops.append(position);
+    }
+    std::sort(m_dockDesktops.begin(), m_dockDesktops.end());
     m_panelMode = m_settings.value(QStringLiteral("panelMode"), false).toBool();
     m_compact = m_settings.value(QStringLiteral("compact"), false).toBool();
     m_alignment = m_settings.value(QStringLiteral("alignment"), Center).toInt();
@@ -1390,6 +1403,30 @@ void DockConfig::setAlias(const QString &alias)
     else
         m_settings.setValue(QStringLiteral("alias"), trimmed);
     emit aliasChanged();
+}
+
+void DockConfig::setDockDesktops(const QList<int> &desktops)
+{
+    QList<int> clean;
+    for (int position : desktops) {
+        if (position >= 1 && position <= kMaxDesktops && !clean.contains(position))
+            clean.append(position);
+    }
+    std::sort(clean.begin(), clean.end());
+    if (m_dockDesktops == clean)
+        return;
+    m_dockDesktops = clean;
+    if (clean.isEmpty()) {
+        // Drop the key entirely: absent means "base dock", and that is also
+        // what every config written before this feature existed looks like.
+        m_settings.remove(QStringLiteral("desktops"));
+    } else {
+        QStringList stored;
+        for (int position : std::as_const(clean))
+            stored << QString::number(position);
+        m_settings.setValue(QStringLiteral("desktops"), stored);
+    }
+    emit dockDesktopsChanged();
 }
 
 bool DockConfig::copySettingsTo(const QString &dstDockId) const

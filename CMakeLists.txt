@@ -34,6 +34,7 @@ qt_add_executable(kdock
     src/waylandclipboard.cpp  src/waylandclipboard.h
     src/overviewcontrol.cpp   src/overviewcontrol.h
     src/desktopcontrol.cpp    src/desktopcontrol.h
+    src/virtualdesktops.cpp   src/virtualdesktops.h
     src/monitorcontrol.cpp    src/monitorcontrol.h
     src/maxmincontrol.cpp     src/maxmincontrol.h
     src/activewindowcontrol.cpp src/activewindowcontrol.h

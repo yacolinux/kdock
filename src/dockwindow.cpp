@@ -154,6 +154,12 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     m_tileLauncher = new TileMenuLauncher(this);
     rootContext()->setContextProperty(QStringLiteral("tileLauncher"), m_tileLauncher);
 
+    // The autohide mask is a rectangle derived from the surface size, so it goes
+    // stale whenever the dock resizes (an icon-size change, or coming back from
+    // another virtual desktop with a brand-new surface).
+    connect(this, &QWindow::widthChanged, this, [this] { if (m_hidden) applyHiddenMask(); });
+    connect(this, &QWindow::heightChanged, this, [this] { if (m_hidden) applyHiddenMask(); });
+
     setResizeMode(QQuickView::SizeViewToRootObject); // content drives surface size
     setSource(QUrl(QStringLiteral("qrc:/qml/Dock.qml")));
 
@@ -300,8 +306,12 @@ void DockWindow::setHidden(bool hidden)
     if (m_hidden == hidden)
         return;
     m_hidden = hidden;
+    applyHiddenMask();
+}
 
-    if (!hidden) {
+void DockWindow::applyHiddenMask()
+{
+    if (!m_hidden) {
         setMask(QRegion());
         return;
     }
@@ -315,6 +325,30 @@ void DockWindow::setHidden(bool hidden)
     case DockConfig::Right:  r = QRect(width() - strip, 0, strip, height()); break;
     }
     setMask(QRegion(r));
+}
+
+void DockWindow::setDeskVisible(bool visible)
+{
+    if (!visible) {
+        hide();
+        return;
+    }
+
+    // hide() tore the layer surface down, and applyScreen() deliberately skips
+    // rebuilding it while the window is invisible (see its `wasVisible`), so the
+    // output this dock should bind to may have changed behind our back. Resolve
+    // it again before showing, or the dock comes back on the wrong monitor.
+    applyScreen();
+    if (!isVisible())
+        show();
+    // The input mask belongs to the platform window, which is a new one: without
+    // this an autohidden dock would come back fully clickable and swallow every
+    // click meant for the window underneath. The size only settles once the
+    // compositor has configured the fresh surface, and the mask is built from
+    // it, hence the deferred second pass (the resize hook in the constructor
+    // catches the rest).
+    applyHiddenMask();
+    QTimer::singleShot(0, this, [this] { applyHiddenMask(); });
 }
 
 void DockWindow::setPrimary(bool primary)

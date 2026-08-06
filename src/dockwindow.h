@@ -59,6 +59,12 @@ public:
     // through to the windows below.
     Q_INVOKABLE void setHidden(bool hidden);
 
+    // Map or unmap the surface because the current virtual desktop wants (or
+    // no longer wants) this dock. Everything above the surface — the QML
+    // engine, the model, the clocks — stays alive, so coming back is cheap;
+    // see DockManager::sync().
+    void setDeskVisible(bool visible);
+
     // The manager backing the settings dialog's per-monitor selector.
     void setManager(DockManager *manager) { m_manager = manager; }
 
@@ -95,6 +101,10 @@ private:
     // deferred call so the dock isn't torn down and rebuilt repeatedly.
     void applyScreen();
     void scheduleApplyScreen();
+    // (Re)apply the autohide input mask for the current m_hidden state. Split
+    // out of setHidden() because remapping the surface needs it too, and
+    // setHidden() returns early when the flag didn't change.
+    void applyHiddenMask();
     int thickness() const;
 
     DockConfig *m_config;
