@@ -56,6 +56,7 @@ class DisksControl;
 class NetworkControl;
 class AppearanceControl;
 class VirtualDesktops;
+class DesktopWallpapers;
 
 class DockManager : public QObject
 {
@@ -84,6 +85,7 @@ public:
         NetworkControl *network = nullptr;
         AppearanceControl *appearance = nullptr;
         VirtualDesktops *desktops = nullptr;
+        DesktopWallpapers *desktopWallpapers = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -191,6 +193,7 @@ public:
     ScriptRunnersManager *scriptRunners() const { return m_shared.scriptRunners; }
     SystrayHost *systrayHost() const { return m_shared.systrayHost; }
     AudioControl *audio() const { return m_shared.audio; }
+    DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
 
 private:
     struct Instance {

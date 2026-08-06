@@ -119,6 +119,13 @@ private:
     QWidget *createScriptRunnersTab();
     QWidget *createBackupTab();
     QWidget *createMonitorsTab();
+    // Wallpapers per virtual desktop. Not per-dock: it drives the whole
+    // session's containments, so the tab looks the same whichever dock is
+    // selected. Desktop 1 is read-only there — it belongs to KDE.
+    QWidget *createWallpapersTab();
+    // Repaint the read-only "what KDE has on desktop 1" list from the stored
+    // snapshot. No-op when the tab isn't built.
+    void reloadWallpaperSnapshot();
     // Toggle + "Configurar" for the accessory previews binary. Only added when
     // kdock-previews is actually installed (see PreviewsLauncher).
     QWidget *createPreviewsTab();
@@ -232,4 +239,8 @@ private:
     TileMenuLauncher *m_tileLauncher = nullptr;
     QCheckBox *m_previewsEnabled = nullptr;
     QLabel *m_previewsStatus = nullptr;
+
+    // Wallpapers tab: the read-only view of the stored desktop-1 config, kept
+    // as a member because a capture lands asynchronously.
+    QListWidget *m_wallpaperSnapshotList = nullptr;
 };

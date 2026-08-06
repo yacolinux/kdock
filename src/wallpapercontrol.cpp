@@ -1,5 +1,7 @@
 #include "wallpapercontrol.h"
 
+#include "plasmascript.h"
+
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
@@ -27,14 +29,6 @@ QString targetIndexJs(int x, int y)
         "if(g.x===%1&&g.y===%2){t=i;break;}}")
         .arg(x)
         .arg(y);
-}
-
-QString escapeJs(const QString &s)
-{
-    QString r = s;
-    r.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
-    r.replace(QLatin1Char('\''), QStringLiteral("\\'"));
-    return r;
 }
 
 } // namespace
@@ -100,12 +94,7 @@ void WallpaperControl::advanceForGeometry(int x, int y)
             "print('OK'+String.fromCharCode(31)+d.readConfig('Image')"
             "+String.fromCharCode(31)+d.readConfig('SlidePaths'));}}}}");
 
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.kde.plasmashell"), QStringLiteral("/PlasmaShell"),
-        QStringLiteral("org.kde.PlasmaShell"), QStringLiteral("evaluateScript"));
-    msg << readScript;
-
-    auto reply = QDBusConnection::sessionBus().asyncCall(msg);
+    auto reply = PlasmaScript::evaluate(readScript);
     auto *watcher = new QDBusPendingCallWatcher(reply, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, x, y](QDBusPendingCallWatcher *w) {
         w->deleteLater();
@@ -133,8 +122,8 @@ void WallpaperControl::advanceForGeometry(int x, int y)
                 "if(t>=0){var ds=desktops();for(var j=0;j<ds.length;j++){var d=ds[j];"
                 "if(d.screen===t){d.currentConfigGroup=['Wallpaper','org.kde.slideshow','General'];"
                 "d.writeConfig('Image','%1');d.reloadConfig();break;}}}")
-                .arg(escapeJs(nextUrl));
-        runPlasmaScript(writeScript);
+                .arg(PlasmaScript::escapeJs(nextUrl));
+        PlasmaScript::run(writeScript);
     });
 }
 
@@ -163,15 +152,6 @@ QString WallpaperControl::nextImage(const QStringList &folders, const QString &c
     int idx = files.indexOf(currentPath);
     // idx < 0 (current not in the set) → start at the first image.
     return files.at((idx + 1) % files.size());
-}
-
-void WallpaperControl::runPlasmaScript(const QString &script)
-{
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QStringLiteral("org.kde.plasmashell"), QStringLiteral("/PlasmaShell"),
-        QStringLiteral("org.kde.PlasmaShell"), QStringLiteral("evaluateScript"));
-    msg << script;
-    QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 void WallpaperControl::invokeGlobalShortcut()

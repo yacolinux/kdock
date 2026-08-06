@@ -50,6 +50,8 @@ src/
   activewindowcontrol.{h,cpp} — Closes the active window (left click) or pushes it to the next virtual desktop without following it (right click); token closewindow
   kwinshortcut.{h,cpp}    — Shared helper for the KDE-only widgets: sessionIsKde() + invoke(<KWin global shortcut name>)
   wallpapercontrol.{h,cpp} — Advances the KDE slideshow wallpaper to the next image on a specific monitor (token nextwallpaper)
+  desktopwallpapers.{h,cpp} — A different wallpaper per virtual desktop: snapshots KDE's own config for desktop 1 and puts a static image per monitor on desktops 2..3 (no widget; Settings -> Wallpapers)
+  plasmascript.h          — Header-only helpers over org.kde.PlasmaShell.evaluateScript (escapeJs / evaluate / run / evaluateBlocking), shared by the two above
   powercontrol.{h,cpp}     — Session/power actions via KDE D-Bus (logout/reboot/shutdown/lock/suspend); tokens session + app-menu footer
   relanzadorconfig.{h,cpp}    — Config for one Relanzador (nested mini-dock); see relanzador.md
   relanzadormodel.{h,cpp}     — Model of the apps inside one Relanzador
@@ -252,7 +254,7 @@ protocols/
 - `AppMenu` is instantiated in `DockWindow`'s constructor as a child of the `DockWindow`; `main.cpp` does not need to include it.
 
 ### Multi-instance / `DockManager` (`src/dockmanager.cpp`)
-- `main.cpp` no longer builds a single dock. It creates the **system-wide singletons** (`Theme`, `DesktopEntryIndex`, `WindowMonitor`, `VolumeControl`, `BrightnessControl`, `OverviewControl`, `DesktopControl`, `MonitorControl`, `MaxMinControl`, `ActiveWindowControl`, `SystrayHost`, `RelanzadoresManager`, `ScriptRunnersManager`, `ClipboardHistory`), packs them into a `DockManager::Shared` struct, and constructs a `DockManager`.
+- `main.cpp` no longer builds a single dock. It creates the **system-wide singletons** (`Theme`, `DesktopEntryIndex`, `WindowMonitor`, `VolumeControl`, `BrightnessControl`, `OverviewControl`, `DesktopControl`, `MonitorControl`, `MaxMinControl`, `ActiveWindowControl`, `SystrayHost`, `RelanzadoresManager`, `ScriptRunnersManager`, `ClipboardHistory`, `DesktopWallpapers`), packs them into a `DockManager::Shared` struct, and constructs a `DockManager`. `DesktopWallpapers` viaja en `Shared` solo para que la solapa *Wallpapers* lo alcance con `m_manager->desktopWallpapers()`, igual que `audio()`: no hay dock que lo use, así que `dockwindow.{h,cpp}` no se toca.
 - **Opt-in per (monitor, slot)**: the user enables a dock (Settings → Monitor + Dock selectors → "Show dock here"). The enabled set is persisted as `enabledScreens` (StringList of **dockIds**; key name kept for backward compat) in the shared `kdock.conf` via `DockConfig::enabledDocks()` / `DockConfig::setDockEnabled()`. `DockManager::setDockEnabled` also **seeds a new non-slot-0 dock with a free screen edge** (one not used by the monitor's other docks) so they don't overlap.
 - **Per-dock config**: `DockConfig(const QString &dockId)` opens the dock's file. The constructor body is a shared `DockConfig::load()` used by both constructors. The dockId is retained (`DockConfig::dockId()`); `screenName` (the bound output, `screenOfDockId(dockId)`, shared by all slots on a monitor) is written into the file so `DockWindow::applyScreen()` binds the surface to the right `wl_output`.
 - **First-run migration** (`DockManager::migrateFirstRun`): when `enabledScreens` is empty, copies the old shared `kdock.conf` into `kdock-<primary>.conf` (slot 0) and enables the primary monitor's slot 0 — the existing single-dock setup carries over unchanged.
@@ -364,6 +366,64 @@ protocols/
 - **KEY finding (verified live, final)**: on this Plasma 6, switching a containment's `wallpaperPlugin` to `org.kde.image` and then (in a **separate** `evaluateScript` call) **back** to `org.kde.slideshow` + `reloadConfig()` makes KDE **advance the slideshow to its next image and repaint** — exactly like the desktop's right-click "Next Wallpaper". No `Image` is written by us. (Doing the toggle in one call does **not** repaint; writing the slideshow `Image` + `reloadConfig()` alone does **not** repaint either.) So the final script is just: (1) list target screens (connected, currently `org.kde.slideshow`, geometry-matched if `KDOCK_SCREEN`); (2) set them to `org.kde.image` **without** `reloadConfig()`; (3) `sleep 0`; (4) set them back to `org.kde.slideshow` + `reloadConfig()`. **Two subtleties that fixed a double-change flash**: (a) the image switch must NOT `reloadConfig()` — reloading there repaints to whatever stale image is stored in the `org.kde.image` group first (a visible extra change); (b) `sleep 0` is enough (the two separate D-Bus calls already serialize). Result: a single visible advance, slideshow mode preserved. The slideshow config (folder/interval/order) is never touched. **This replaced an earlier version that read `SlidePaths` and computed the next image in bash — no longer needed.**
 - **Targeting**: `KDOCK_SCREEN` set (dock icon) → only that monitor, mapping connector→Plasma screen index by geometry via `kscreen-doctor --json` (pos) matched against `screenGeometry(i)`. No var (console) → every connected screen currently in `org.kde.slideshow`.
 - **Gotchas**: use `qdbus6` (there is no `qdbus`); run it with `bash`/`./` not `sh` (Ubuntu `sh` is dash → the bash arrays / `<(...)` / `<<<` fail). `ScriptRunnersManager::run()` executes an **executable** script directly (honoring its shebang), else falls back to `sh <path>`.
+
+### Wallpapers por escritorio virtual (`src/desktopwallpapers.{h,cpp}`, 2026-08-06)
+
+- **Por qué hace falta**: en Plasma el *containment* del escritorio es **por pantalla, no por
+  escritorio virtual** (verificado en vivo: con 2 monitores hay 2 containments con `screen>=0`,
+  más los huérfanos con `screen=-1` de monitores viejos). O sea que todos los escritorios
+  comparten un fondo y la única salida es **reescribirlo en el momento del cambio**.
+- **El reparto es asimétrico a propósito**:
+  - **El Escritorio 1 es de KDE.** Lo que el usuario haya configurado ahí (acá, un slideshow
+    por monitor) se *fotografía* antes de tocar nada y se restaura cada vez que vuelve, al
+    salir del proceso, y al arrancar si una corrida anterior murió con nuestro fondo puesto.
+    Desde kdock **no se edita**: la solapa lo muestra en modo lectura.
+  - **Los escritorios 2..`DockConfig::kMaxDesktops`** llevan una imagen estática por monitor,
+    con clave el nombre del conector (`eDP-1`, `DP-1`…), tope `kMaxScreens = 5`. Un monitor
+    **sin imagen configurada no se toca**, así que se queda con lo que tenga.
+  - Escritorios más allá del tope tampoco se tocan: el usuario nunca dijo qué poner ahí.
+- **Apagado por defecto** (`enabled` arranca en false). No es cosmético: `VirtualDesktops` sale
+  de D-Bus, así que **un proceso bajo Xvfb ve los escritorios reales** y reaccionaría a los
+  cambios del usuario — la reja es que la config vive en el `kdock.conf` compartido y el arnés
+  siempre usa un `XDG_DATA_HOME` descartable.
+- **Snapshot genérico y persistido**: la captura sale de un `evaluateScript` que recorre los
+  containments y lee **`d.configKeys`** del grupo `["Wallpaper", <plugin>, "General"]`, o sea
+  que no hay ninguna clave hardcodeada y cualquier plugin (slideshow, `org.kde.image`, otro)
+  hace round-trip. Se guarda como JSON en una sola clave (`[Wallpapers] snapshot=`) del
+  `kdock.conf` compartido: una clave sola evita pelearse con el escapado de `QSettings` para
+  rutas y nombres de clave arbitrarios, y de paso entra sola en el Backup. **Se fusiona, nunca
+  se reemplaza**: la entrada de un monitor desenchufado hoy tiene que seguir estando cuando
+  vuelva.
+- **Dos rejas para no fotografiar nuestro propio fondo** (que sería perder la config del
+  usuario para siempre): solo se captura con `applied == false`, y se descarta la captura de un
+  monitor cuyo plugin sea `org.kde.image` **y** cuya `Image` coincida con alguna de las
+  imágenes configuradas en `[Wallpapers2]`/`[Wallpapers3]`.
+- **Repintar exige DOS `evaluateScript` separados**, uno que escribe y otro que hace
+  `reloadConfig()` — la misma regla del hallazgo de `next-wall.sh` de más arriba. **Verificado
+  en vivo el 2026-08-06 incluyendo el caso que faltaba**: de escritorio 2 a 3 el plugin
+  **no cambia** (`org.kde.image` → `org.kde.image`) y aun así repinta. La única forma de *ver*
+  el fondo es desde un escritorio virtual vacío: en el escritorio de trabajo las ventanas lo
+  tapan, y el containment **no es un toplevel**, así que `kdock-previews --dump-captures` no lo
+  enumera.
+- **Al restaurar un slideshow, la imagen concreta avanza una** (el plugin, al recargar, pasa a
+  la siguiente). La *configuración* —plugin, carpetas, intervalo— vuelve idéntica, que es lo que
+  importa; un slideshow avanza solo de todos modos.
+- **Config** (`kdock.conf` compartido, estáticos al estilo `DockConfig::favoritesShared()`):
+  `[Wallpapers] enabled/fillMode/snapshot/applied` y **una sección por escritorio**,
+  `[Wallpapers2]`, `[Wallpapers3]`, con el conector como clave. Una sección por escritorio y no
+  `desktop2/eDP-1` porque `QSettings` solo mapea el **primer** `/` a la sección.
+- **`SIGTERM` no dispara `aboutToQuit`** — ver la trampa en `CLAUDE.md`. `main.cpp` instala un
+  handler (socketpair + `QSocketNotifier`) que restaura y sale con `::_exit(0)` **sin
+  desenrollar**: un `quit()` limpio destruye los `QQmlEngine` con los bindings vivos y escupe
+  ~1800 *"property of null"* al journal en cada cierre de sesión.
+- **Solapa *Wallpapers*** (`SettingsDialog::createWallpapersTab()`): no es por dock (como Redes
+  y Audio). Interruptor + combo de `FillMode`, el grupo de solo lectura del Escritorio 1 con
+  *Volver a capturar ahora* (habilitado **solo desde el Escritorio 1**) y *Restaurar ahora*, un
+  `QGroupBox` por escritorio con una fila por monitor (miniatura + ruta + *Elegir…* + *Quitar*),
+  y *Aplicar ahora*. El *Elegir…* usa `QFileDialog::getOpenFileName()` **nativo**: en una sesión
+  Plasma el `QPlatformTheme` de *plasma-integration* sirve el diálogo de KDE, que **previsualiza
+  imágenes**, sin que kdock dependa de KDE Frameworks. La miniatura se decodifica con
+  `QImageReader::setScaledSize()`, no cargando el archivo entero.
 
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.

@@ -8,6 +8,7 @@
 #include "dockconfig.h"
 #include "dockmanager.h"
 #include "dockmodel.h"
+#include "desktopwallpapers.h"
 #include "iconcolorprovider.h"
 #include "relanzadorconfig.h"
 #include "relanzadoresmanager.h"
@@ -39,6 +40,7 @@
 #include <QLineEdit>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QImageReader>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
@@ -55,6 +57,7 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -213,6 +216,10 @@ void SettingsDialog::buildTabs()
         addTab(createMonitorsTab(), tr("Monitores"));
         m_monitorsTabIndex = m_tabWidget->count() - 1;
     }
+    // Not a per-dock setting either: it drives the whole session's wallpapers.
+    m_wallpaperSnapshotList = nullptr;
+    if (m_manager)
+        addTab(createWallpapersTab(), tr("Wallpapers"));
     // Not a per-dock setting: the previews are their own process with their own
     // config, so this tab looks the same whichever dock is selected.
     if (PreviewsLauncher::available())
@@ -3368,6 +3375,234 @@ QWidget *SettingsDialog::createPreviewsTab()
     poll->setInterval(2000);
     connect(poll, &QTimer::timeout, tab, refreshStatus);
     poll->start();
+
+    return tab;
+}
+
+void SettingsDialog::reloadWallpaperSnapshot()
+{
+    if (!m_wallpaperSnapshotList)
+        return;
+    m_wallpaperSnapshotList->clear();
+    const auto snapshot = DesktopWallpapers::snapshot();
+    if (snapshot.isEmpty()) {
+        m_wallpaperSnapshotList->addItem(
+            tr("(todavía sin guardar — se guarda sola la primera vez que salgas "
+               "del Escritorio 1)"));
+        return;
+    }
+    // Sorted so the list doesn't reshuffle between refreshes (the snapshot is a
+    // hash).
+    QStringList screens = snapshot.keys();
+    screens.sort();
+    for (const QString &screen : std::as_const(screens)) {
+        const WallpaperSnapshot &snap = snapshot[screen];
+        // The slideshow's folders say more than its current image; a plain
+        // image only has the image.
+        QString detail = snap.keys.value(QStringLiteral("SlidePaths"));
+        if (detail.isEmpty())
+            detail = QUrl(snap.keys.value(QStringLiteral("Image"))).toLocalFile();
+        m_wallpaperSnapshotList->addItem(
+            QStringLiteral("%1 — %2 — %3").arg(screen, snap.plugin, detail));
+    }
+}
+
+QWidget *SettingsDialog::createWallpapersTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+    DesktopWallpapers *wallpapers = m_manager ? m_manager->desktopWallpapers() : nullptr;
+
+    auto *info = new QLabel(
+        tr("Plasma no tiene un fondo por escritorio virtual: el fondo es de la pantalla, "
+           "no del escritorio. kdock lo consigue reescribiéndolo en el momento del cambio. "
+           "El Escritorio 1 es de KDE y no se toca desde acá: su configuración se guarda "
+           "sola y vuelve cada vez que regresás a él (y cuando kdock se cierra)."),
+        tab);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    auto *enable = new QCheckBox(
+        tr("Cambiar el fondo al cambiar de escritorio virtual"), tab);
+    enable->setChecked(DesktopWallpapers::enabled());
+    layout->addWidget(enable);
+
+    auto *fillRow = new QHBoxLayout;
+    fillRow->addWidget(new QLabel(tr("Modo de ajuste:"), tab));
+    auto *fillMode = new QComboBox(tab);
+    // Plasma's org.kde.image FillMode, in its own order.
+    fillMode->addItem(tr("Estirada"), 0);
+    fillMode->addItem(tr("Escalada, manteniendo proporciones"), 1);
+    fillMode->addItem(tr("Escalada y recortada"), 2);
+    fillMode->addItem(tr("Mosaico"), 3);
+    fillMode->addItem(tr("Mosaico vertical"), 4);
+    fillMode->addItem(tr("Mosaico horizontal"), 5);
+    fillMode->addItem(tr("Centrada"), 6);
+    fillMode->setCurrentIndex(fillMode->findData(DesktopWallpapers::fillMode()));
+    fillRow->addWidget(fillMode);
+    fillRow->addStretch();
+    layout->addLayout(fillRow);
+
+    // ---- Desktop 1: read-only view of what KDE has --------------------------
+    auto *kdeGroup = new QGroupBox(tr("Escritorio 1 — configuración de KDE (se conserva siempre)"), tab);
+    auto *kdeLayout = new QVBoxLayout(kdeGroup);
+    m_wallpaperSnapshotList = new QListWidget(kdeGroup);
+    m_wallpaperSnapshotList->setMaximumHeight(90);
+    m_wallpaperSnapshotList->setSelectionMode(QAbstractItemView::NoSelection);
+    kdeLayout->addWidget(m_wallpaperSnapshotList);
+
+    auto *kdeButtons = new QHBoxLayout;
+    auto *recapture = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                      tr("Volver a capturar ahora"), kdeGroup);
+    // Capturing while another desktop's wallpaper is up would store *ours* as
+    // if it were KDE's, so the button only works from desktop 1.
+    const int currentDesktop = m_manager ? m_manager->currentDesktop() : 0;
+    recapture->setEnabled(wallpapers && currentDesktop == 1);
+    if (currentDesktop != 1) {
+        recapture->setToolTip(
+            tr("Solo desde el Escritorio 1: es el único momento en que lo que está "
+               "en pantalla es la configuración de KDE."));
+    }
+    auto *restoreNow = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-undo")),
+                                       tr("Restaurar ahora"), kdeGroup);
+    restoreNow->setEnabled(wallpapers);
+    kdeButtons->addWidget(recapture);
+    kdeButtons->addWidget(restoreNow);
+    kdeButtons->addStretch();
+    kdeLayout->addLayout(kdeButtons);
+    layout->addWidget(kdeGroup);
+
+    reloadWallpaperSnapshot();
+
+    // ---- Desktops 2..kMaxDesktops: one static image per monitor -------------
+    const QStringList screens = DesktopWallpapers::configuredScreens();
+    const QStringList desktopNames = m_manager ? m_manager->desktopNamesForUi() : QStringList();
+
+    // A thumbnail without decoding the whole file: wallpapers are megabytes and
+    // there is one per monitor per desktop.
+    const auto thumbnailOf = [](const QString &path) -> QPixmap {
+        if (path.isEmpty())
+            return {};
+        QImageReader reader(path);
+        reader.setAutoTransform(true);
+        QSize size = reader.size();
+        if (size.isValid()) {
+            size.scale(96, 54, Qt::KeepAspectRatio);
+            reader.setScaledSize(size);
+        }
+        const QImage image = reader.read();
+        return image.isNull() ? QPixmap() : QPixmap::fromImage(image);
+    };
+
+    for (int desktop = 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
+        const QString name = desktop <= desktopNames.size()
+                                 ? desktopNames.at(desktop - 1)
+                                 : tr("Escritorio %1").arg(desktop);
+        auto *group = new QGroupBox(name, tab);
+        auto *form = new QFormLayout(group);
+
+        if (screens.isEmpty()) {
+            form->addRow(new QLabel(tr("No hay monitores detectados."), group));
+            layout->addWidget(group);
+            continue;
+        }
+
+        for (const QString &screen : screens) {
+            auto *row = new QWidget(group);
+            auto *rowLayout = new QHBoxLayout(row);
+            rowLayout->setContentsMargins(0, 0, 0, 0);
+
+            auto *thumb = new QLabel(row);
+            thumb->setFixedSize(96, 54);
+            thumb->setAlignment(Qt::AlignCenter);
+            thumb->setFrameShape(QFrame::StyledPanel);
+            auto *path = new QLineEdit(row);
+            path->setReadOnly(true);
+            path->setPlaceholderText(tr("(sin definir — este monitor no se toca)"));
+            auto *choose = new QPushButton(QIcon::fromTheme(QStringLiteral("document-open")),
+                                           tr("Elegir…"), row);
+            auto *clear = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-clear")),
+                                          tr("Quitar"), row);
+            rowLayout->addWidget(thumb);
+            rowLayout->addWidget(path, 1);
+            rowLayout->addWidget(choose);
+            rowLayout->addWidget(clear);
+
+            const auto refreshRow = [thumb, path, clear, thumbnailOf, desktop, screen] {
+                const QString file = DesktopWallpapers::imageFor(desktop, screen);
+                path->setText(file);
+                const QPixmap pixmap = thumbnailOf(file);
+                thumb->setPixmap(pixmap);
+                thumb->setText(pixmap.isNull() && !file.isEmpty() ? tr("?") : QString());
+                clear->setEnabled(!file.isEmpty());
+            };
+            refreshRow();
+
+            connect(choose, &QPushButton::clicked, this, [this, refreshRow, desktop, screen] {
+                const QString current = DesktopWallpapers::imageFor(desktop, screen);
+                const QString start =
+                    current.isEmpty()
+                        ? QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+                        : QFileInfo(current).absolutePath();
+                // Native on purpose: in a Plasma session the platform theme
+                // serves KDE's own file dialog, which previews images — without
+                // kdock taking a dependency on KDE Frameworks.
+                const QString chosen = QFileDialog::getOpenFileName(
+                    this, tr("Elegir imagen de fondo"), start,
+                    tr("Imágenes (*.jpg *.jpeg *.png *.webp *.bmp *.gif *.svg *.svgz)"));
+                if (chosen.isEmpty())
+                    return;
+                DesktopWallpapers::setImageFor(desktop, screen, chosen);
+                refreshRow();
+            });
+            connect(clear, &QPushButton::clicked, this, [refreshRow, desktop, screen] {
+                DesktopWallpapers::setImageFor(desktop, screen, QString());
+                refreshRow();
+            });
+
+            form->addRow(screen, row);
+        }
+        layout->addWidget(group);
+    }
+
+    auto *applyRow = new QHBoxLayout;
+    auto *applyNow = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")),
+                                     tr("Aplicar ahora"), tab);
+    applyNow->setToolTip(tr("Pone el juego del escritorio actual sin tener que salir y volver."));
+    applyNow->setEnabled(wallpapers && currentDesktop >= 2);
+    applyRow->addWidget(applyNow);
+    applyRow->addStretch();
+    layout->addLayout(applyRow);
+
+    layout->addStretch();
+
+    // ---- Wiring -------------------------------------------------------------
+    connect(enable, &QCheckBox::toggled, this, [wallpapers](bool on) {
+        DesktopWallpapers::setEnabled(on);
+        // Turning it on should not wait for the next desktop switch.
+        if (on && wallpapers)
+            wallpapers->start();
+    });
+    connect(fillMode, &QComboBox::currentIndexChanged, this, [fillMode](int) {
+        DesktopWallpapers::setFillMode(fillMode->currentData().toInt());
+    });
+    connect(recapture, &QPushButton::clicked, this, [wallpapers] {
+        if (wallpapers)
+            wallpapers->capture(true);
+    });
+    connect(restoreNow, &QPushButton::clicked, this, [wallpapers] {
+        if (wallpapers)
+            wallpapers->restore();
+    });
+    connect(applyNow, &QPushButton::clicked, this, [this, wallpapers] {
+        if (wallpapers && m_manager)
+            wallpapers->apply(m_manager->currentDesktop());
+    });
+    if (wallpapers) {
+        // Bound to `tab`, so the connection dies when buildTabs() deletes it.
+        connect(wallpapers, &DesktopWallpapers::snapshotChanged, tab,
+                [this] { reloadWallpaperSnapshot(); });
+    }
 
     return tab;
 }

@@ -272,6 +272,13 @@ el esquema al usuario sin que lo pida.
 Para verificarlo, dos líneas de sonda que impriman `value()` por los dos caminos valen más que
 leer el `.conf`: el archivo se ve perfecto en ambos casos.
 
+Y el corolario para escribir: **`QSettings` mapea a la sección solo el PRIMER `/`**, el resto
+queda dentro del nombre de la clave. Una clave `Wallpapers/desktop2/eDP-1` no da
+`[Wallpapers2] eDP-1`, da `[Wallpapers] desktop2/eDP-1`, y ahí los caracteres raros del resto
+entran en las reglas de escapado. Si la segunda mitad es un dato (un nombre de conector, una
+ruta), usá **una sección por valor** (`[Wallpapers2]`, `[Wallpapers3]`) o metelo todo en una
+sola clave como JSON — que es lo que hace el snapshot de `DesktopWallpapers`.
+
 El `main.cpp` de prueba instancia el widget, y con un `QTimer::singleShot` hace
 `w.grab().save("/tmp/p/out.png")` y sale; el PNG se lee directo. Vale la pena correrlo dos
 veces, una con `app.setPalette()` claro y otra oscuro: el diálogo hereda el esquema de KDE
@@ -432,6 +439,13 @@ Tres cosas de este arnés:
   `pgrep -x kdock` **excluyendo el `/usr/local/bin/kdock` del usuario**. `pgrep -f
   './build/kdock'` también matchea el propio shell del comando y te mata la corrida a la
   mitad (exit 144, mismo problema que el `pkill -f` de más abajo).
+
+**Y ojo con la otra mitad de eso**: como el arnés llega al bus real, **cualquier feature que
+reaccione a `VirtualDesktops::currentChanged` actúa sobre la sesión de verdad desde adentro de
+Xvfb**. Los wallpapers por escritorio le cambiarían el fondo al usuario en cada corrida; la
+única reja es que su `enabled` vive en el `kdock.conf` compartido y **arranca en false**, así
+que con un `XDG_DATA_HOME` descartable la clase es inerte. Si agregás algo parecido, dale el
+mismo interruptor apagado por defecto en vez de confiar en el aislamiento.
 
 **El widget paginador sí se prueba entero bajo Xvfb**, y de punta a punta, porque el clic va
 por XTEST y el cambio de escritorio va por D-Bus al KWin **de verdad**: dock bajo Xvfb →
@@ -647,6 +661,26 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   clics de los hijos— y lo excluye del `Binding` de `hovered`, que sobre un componente que no
   declara esa property escupe un warning en cada arranque. El precio es que un bloque no se
   arrastra como unidad, igual que la bandeja.
+- **`SIGTERM` no dispara `aboutToQuit`, y arreglarlo mal te inunda el journal.** Qt no instala
+  handler para `SIGTERM`, así que un cierre de sesión (o un `kill` pelado) mata el proceso sin
+  emitir nunca `aboutToQuit` — el hook desde el que `DesktopWallpapers` devuelve el fondo de
+  KDE. Se destapó en el arnés en vivo: matar la instancia en el escritorio 2 dejaba **nuestra**
+  imagen puesta (2026-08-06). Pero la corrección obvia —handler → `qApp->quit()`— cambia el
+  cierre de golpe por un desenrollado completo, y destruir los `QQmlEngine` con los bindings
+  vivos escupe **~1793 líneas** de `TypeError: Cannot read property '…' of null` (15 → 1808
+  líneas de stderr, medido). O sea que "arreglé el SIGTERM" te deja el journal ilegible en
+  cada logout. El handler de `main.cpp` (socketpair + `QSocketNotifier`, lo async-signal-safe
+  es escribir un byte) hace lo mínimo y sale con **`::_exit(0)` sin desenrollar**, que es
+  exactamente como moría antes. Si agregás algo al cierre, va en ese callback, no en un
+  `quit()` limpio.
+- **Un fondo de escritorio solo se puede *ver* desde un escritorio virtual vacío.** El
+  containment del escritorio **no es un toplevel**: no aparece en
+  `kdock-previews --dump-captures` y no hay forma de capturarlo solo. Una captura de pantalla
+  del escritorio de trabajo sale tapada por las ventanas del usuario y parece que el fondo "no
+  cambió". La receta que funcionó (2026-08-06): anotar el escritorio actual, `switchTo(3)`
+  (que está vacío), `spectacle-custom -b -n -f -o …` entre paso y paso, y **volver al
+  original**. Sin eso no se puede distinguir "escribió bien la config" de "repintó", que son
+  dos cosas distintas — la config se verifica leyendo `evaluateScript`, el repintado no.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de

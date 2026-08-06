@@ -40,6 +40,8 @@ qt_add_executable(kdock
     src/activewindowcontrol.cpp src/activewindowcontrol.h
     src/kwinshortcut.cpp      src/kwinshortcut.h
     src/wallpapercontrol.cpp  src/wallpapercontrol.h
+    src/desktopwallpapers.cpp src/desktopwallpapers.h
+    src/plasmascript.h
     src/brightnesscontrol.cpp src/brightnesscontrol.h
     src/batterycontrol.cpp    src/batterycontrol.h
     src/systray.cpp           src/systray.h

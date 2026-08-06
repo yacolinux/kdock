@@ -26,8 +26,6 @@ public:
 
 private:
     void checkAvailability();
-    // Fire-and-forget evaluateScript on plasmashell.
-    void runPlasmaScript(const QString &script);
     // Primary-only fallback: invoke the KDE global shortcut.
     void invokeGlobalShortcut();
     // Read the target screen's slideshow config, compute the next image and

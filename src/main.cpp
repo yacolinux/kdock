@@ -1,10 +1,17 @@
 #include <QApplication>
 #include <QQmlEngine>
 #include <QScreen>
+#include <QSocketNotifier>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
 #include <QtPlugin>
+
+#include <csignal>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include <functional>
 
 #include "clockwidget.h"
 #include "clockwidget2.h"
@@ -23,6 +30,7 @@
 #include "maxmincontrol.h"
 #include "monitorcontrol.h"
 #include "wallpapercontrol.h"
+#include "desktopwallpapers.h"
 #include "powercontrol.h"
 #include "previewslauncher.h"
 #include "tilemenulauncher.h"
@@ -44,6 +52,54 @@
 
 // In-tree layer-shell integration (see layershell.cpp)
 Q_IMPORT_PLUGIN(KDockLayerShellPlugin)
+
+namespace {
+
+int g_quitSignalFd[2] = {-1, -1};
+
+void onQuitSignal(int)
+{
+    // Async-signal-safe on purpose: one byte down the pipe, and the notifier
+    // below does the real work back on the event loop.
+    const char byte = 1;
+    const ssize_t written = ::write(g_quitSignalFd[1], &byte, 1);
+    Q_UNUSED(written);
+}
+
+// Qt installs no handler for SIGTERM, so a logout (or a plain `kill`) tears the
+// process down without ever emitting aboutToQuit. That matters since the
+// wallpapers-per-desktop feature restores KDE's own wallpaper from that hook:
+// without this, being killed on desktop 2 would leave our static image up until
+// the next run put it back (DesktopWallpapers::start).
+//
+// `onQuit` runs on the event loop and is expected **not to return** — see the
+// call site: unwinding the whole application here would tear the QQmlEngines
+// down under live bindings and flood the journal with ~1800 "property of null"
+// warnings on every logout, which is precisely what a SIGTERM used to avoid by
+// killing the process outright.
+void installQuitSignalHandler(QCoreApplication *app, std::function<void()> onQuit)
+{
+    if (::socketpair(AF_UNIX, SOCK_STREAM, 0, g_quitSignalFd) != 0)
+        return;
+    auto *notifier = new QSocketNotifier(g_quitSignalFd[0], QSocketNotifier::Read, app);
+    QObject::connect(notifier, &QSocketNotifier::activated, app,
+                     [notifier, onQuit = std::move(onQuit)] {
+                         notifier->setEnabled(false);
+                         char byte = 0;
+                         const ssize_t read = ::read(g_quitSignalFd[0], &byte, 1);
+                         Q_UNUSED(read);
+                         onQuit();
+                     });
+
+    struct sigaction action = {};
+    action.sa_handler = onQuitSignal;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    for (int signalNumber : {SIGTERM, SIGINT, SIGHUP})
+        ::sigaction(signalNumber, &action, nullptr);
+}
+
+} // namespace
 
 // One-shot mode used by next-wall.sh: advance the KDE slideshow wallpaper on a
 // single monitor, then exit. Reuses the dock's per-monitor engine
@@ -147,6 +203,7 @@ int main(int argc, char *argv[])
     VirtualDesktops virtualDesktops;
     ActiveWindowControl activeWindow(monitor, &virtualDesktops);
     WallpaperControl wallpaperControl;
+    DesktopWallpapers desktopWallpapers(&virtualDesktops);
     PowerControl power;
     SystrayHost systray;
     RelanzadoresManager relanzadores(&apps);
@@ -182,8 +239,22 @@ int main(int argc, char *argv[])
     shared.network = &network;
     shared.appearance = &appearance;
     shared.desktops = &virtualDesktops;
+    shared.desktopWallpapers = &desktopWallpapers;
 
     DockManager manager(shared);
+
+    // Wallpapers per virtual desktop. start() re-applies the current desktop's
+    // set (or puts desktop 1 back if a previous run died with ours up), and the
+    // quit hook always leaves KDE's own wallpaper behind.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &desktopWallpapers,
+                     &DesktopWallpapers::quit);
+    // On a signal (logout, `kill`) put KDE's wallpaper back and then leave the
+    // same way we used to: immediately, without unwinding. See the helper.
+    installQuitSignalHandler(&app, [&desktopWallpapers] {
+        desktopWallpapers.quit();
+        ::_exit(0);
+    });
+    desktopWallpapers.start();
 
     // Optional system-wide side effects of dark mode (KDE color scheme / icon
     // theme, dock icon override). Built after the docks so its first sync()
