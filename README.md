@@ -77,6 +77,10 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   de recortar.
 - **Drag & drop** para reordenar íconos y secciones enteras, con separadores dinámicos
   (*springs*) que empujan el resto hacia el otro extremo.
+- **Mandar ventanas a otro escritorio virtual** desde el clic derecho de un ícono de
+  aplicación: *Escritorio → Ventana aquí* la trae al escritorio actual, y *Enviar a…* la manda
+  a otro **sin seguirla** — vos te quedás donde estás. Mueve todas las ventanas de esa app,
+  igual que *Cerrar todas*.
 - **Íconos y colores del sistema**: `QIcon::fromTheme` + esquema de color leído de
   `~/.config/kdeglobals` con recarga en vivo. El fondo de las apps corriendo se tiñe con el
   color dominante del propio ícono.
@@ -131,6 +135,7 @@ Frameworks:
 | Siguiente fondo | Avanza la presentación de fondos de un monitor | D-Bus de Plasma |
 | Sesión | Cerrar sesión, reiniciar, apagar, bloquear, suspender | D-Bus de KDE |
 | Mostrar escritorio | Toggle de "mostrar escritorio" | Protocolo del compositor |
+| Escritorios | Paginador mínimo: un número por escritorio virtual, clic para ir; el actual va resaltado | KWin (D-Bus) |
 | Auto-ocultar | Prende y apaga el auto-ocultado | — |
 | Modo oscuro | Clic izquierdo: esquema normal; clic derecho: modo oscuro | — |
 | Relanzadores | Mini-dock anidado: un ícono despliega una barra con otros lanzadores | — |

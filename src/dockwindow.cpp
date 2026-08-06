@@ -29,6 +29,7 @@
 #include "systraymodel.h"
 #include "systrayimageprovider.h"
 #include "tilemenulauncher.h"
+#include "virtualdesktops.h"
 #include "theme.h"
 #include "volumecontrol.h"
 
@@ -64,7 +65,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        ScriptRunnersManager *scriptRunners,
                        ClipboardHistory *clipboardHistory,
                        DisksControl *disks, NetworkControl *network,
-                       AppearanceControl *appearance, WindowMonitor *monitor)
+                       AppearanceControl *appearance, WindowMonitor *monitor,
+                       VirtualDesktops *desktops)
     : m_config(config)
     , m_theme(theme)
     , m_model(model)
@@ -82,6 +84,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_wallpaperControl(wallpaperControl)
     , m_power(power)
     , m_appearance(appearance)
+    , m_desktops(desktops)
 {
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
@@ -146,6 +149,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("disks"), disks);
     rootContext()->setContextProperty(QStringLiteral("network"), network);
     rootContext()->setContextProperty(QStringLiteral("appearance"), appearance);
+    rootContext()->setContextProperty(QStringLiteral("virtualDesktops"), m_desktops);
     rootContext()->setContextProperty(QStringLiteral("dockIsPrimary"), m_primary);
     rootContext()->setContextProperty(QStringLiteral("apps"), m_apps);
     rootContext()->setContextProperty(QStringLiteral("showdesktop"), monitor);

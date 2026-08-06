@@ -433,6 +433,22 @@ Tres cosas de este arnés:
   './build/kdock'` también matchea el propio shell del comando y te mata la corrida a la
   mitad (exit 144, mismo problema que el `pkill -f` de más abajo).
 
+**El widget paginador sí se prueba entero bajo Xvfb**, y de punta a punta, porque el clic va
+por XTEST y el cambio de escritorio va por D-Bus al KWin **de verdad**: dock bajo Xvfb →
+`xdotool click` sobre el número → `busctl get-property … current` confirma el cambio. Anotá
+el escritorio original y restauralo, porque le estás cambiando el escritorio al usuario. La
+misma corrida sirve para ver que el resaltado sigue al escritorio actual, capturando el dock
+después del clic.
+
+**Los menús contextuales también se abren con `xdotool` bajo Xvfb** (clic derecho sobre el
+ícono, y el submenú con un clic sobre su fila), y `import -window root` los agarra porque son
+`Popup.Window`. Es la única forma de ver que un `Menu` no le está cortando la última letra al
+ítem más ancho. Pero ojo con la trampa: bajo Xvfb **el dock no tiene ninguna ventana** (no hay
+plasma-window en X11, `WindowMonitor::create()` devuelve nullptr), así que todo ítem con
+`enabled: delegateRoot.windowCount > 0` sale gris y parece roto. Para verlo, abrí la reja a
+propósito (`enabled: true`), capturá, y **revertí** — control positivo barato, y el `grep -c
+TEMP` te avisa si te olvidaste de volver atrás.
+
 ### Manejar el diálogo desde código encuentra lo que la captura no muestra
 
 Vale para cualquier solapa, y para la de Redes fue decisivo: una sonda que linkea los `.o`,
@@ -616,6 +632,21 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   existen tiene que pasar por ahí**, que es el único lugar donde vive esa regla. Corolarios:
   un modelo de un dock oculto se sigue actualizando (barato, pero no es cero), y contar
   `m_instances` para saber cuántos docks hay en pantalla da de más.
+- **En el protocolo de ventanas de Plasma, "en ningún escritorio" significa "en TODOS".**
+  `AbstractWindow::desktops` (lo que llenan `virtual_desktop_entered`/`left`) llega **vacío**
+  para una ventana anclada a todos los escritorios, que es exactamente al revés de lo que se
+  lee. Tratarlo como "no está en ninguno" hace que mover esa ventana no deje nada y termine
+  en dos escritorios. `moveToOnlyDesktop()` se apoya en eso: para una lista vacía manda solo
+  el *enter* y KWin la reduce al destino.
+- **Un widget nuevo cuyo backend ya existe se salta casi todo el checklist de siete
+  archivos**, pero no `knownWidgetTokens()`. El `pager` reusa `VirtualDesktops` (ya viaja en
+  `Shared`), así que solo hizo falta: la context property en `dockwindow.cpp`, el flag en
+  `DockConfig` (+ token + etiqueta), el `Component` en `Dock.qml` y el casillero del diálogo.
+  Y si el widget tiene **varios blancos de clic adentro** (como el pager o la bandeja), va
+  también en **`isBlock()`**: eso apaga el `MouseArea` de la sección —que si no se come los
+  clics de los hijos— y lo excluye del `Binding` de `hovered`, que sobre un componente que no
+  declara esa property escupe un warning en cada arranque. El precio es que un bloque no se
+  arrastra como unidad, igual que la bandeja.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de

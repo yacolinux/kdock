@@ -45,6 +45,35 @@ void PlasmaWindow::moveToDesktop(const QString &enterId, const QString &leaveId)
         request_leave_virtual_desktop(leaveId);
 }
 
+void PlasmaWindow::moveToOnlyDesktop(const QString &enterId)
+{
+    if (enterId.isEmpty())
+        return;
+    // Enter first (see moveToDesktop), then drop everything else. A window on
+    // all desktops has an empty list, so it is just the enter — which is
+    // exactly right: the compositor narrows it down to the one we asked for.
+    request_enter_virtual_desktop(enterId);
+    const QStringList previous = desktops;
+    for (const QString &id : previous) {
+        if (id != enterId)
+            request_leave_virtual_desktop(id);
+    }
+}
+
+void PlasmaWindow::org_kde_plasma_window_virtual_desktop_entered(const QString &id)
+{
+    if (!id.isEmpty() && !desktops.contains(id)) {
+        desktops.append(id);
+        emit changed();
+    }
+}
+
+void PlasmaWindow::org_kde_plasma_window_virtual_desktop_left(const QString &id)
+{
+    if (desktops.removeAll(id) > 0)
+        emit changed();
+}
+
 void PlasmaWindow::org_kde_plasma_window_title_changed(const QString &t)
 {
     title = t;

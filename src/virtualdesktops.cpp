@@ -22,8 +22,9 @@ VirtualDesktops::VirtualDesktops(QObject *parent)
                 QStringLiteral("currentChanged"), this,
                 SLOT(onCurrentChanged(QString)));
     // Adding or removing a desktop renumbers everything after it, so the whole
-    // list (and the current position) has to be re-read.
-    for (const char *signal : {"desktopCreated", "desktopRemoved"}) {
+    // list (and the current position) has to be re-read. A rename only changes
+    // a name, but that name is what the pager and the menus show.
+    for (const char *signal : {"desktopCreated", "desktopRemoved", "desktopDataChanged"}) {
         bus.connect(QLatin1String(kService), QLatin1String(kPath), QLatin1String(kIface),
                     QString::fromLatin1(signal), this, SLOT(refreshDesktops()));
     }
@@ -54,6 +55,7 @@ QVariant VirtualDesktops::desktopProperty(const char *name)
 void VirtualDesktops::refreshDesktops()
 {
     const QStringList previousIds = m_ids;
+    const QStringList previousNames = m_names;
     m_ids.clear();
     m_names.clear();
 
@@ -88,7 +90,9 @@ void VirtualDesktops::refreshDesktops()
     }
 
     refreshCurrent();
-    if (m_ids != previousIds)
+    // Names too, not just ids: `names` notifies through this signal and a
+    // rename leaves the uuids untouched.
+    if (m_ids != previousIds || m_names != previousNames)
         emit countChanged();
 }
 
@@ -129,4 +133,28 @@ QString VirtualDesktops::nameOf(int position) const
 QString VirtualDesktops::currentDesktopId() const
 {
     return m_currentId;
+}
+
+QString VirtualDesktops::idOf(int position) const
+{
+    if (position < 1 || position > m_ids.size())
+        return {};
+    return m_ids.at(position - 1);
+}
+
+void VirtualDesktops::switchTo(int position)
+{
+    const QString id = idOf(position);
+    if (id.isEmpty() || id == m_currentId)
+        return;
+
+    // `current` is a writable property, so switching is a Properties.Set with
+    // the uuid. KWin answers with currentChanged, which is what actually
+    // updates our state — nothing is assumed here.
+    QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(kService), QLatin1String(kPath),
+                                                      QStringLiteral("org.freedesktop.DBus.Properties"),
+                                                      QStringLiteral("Set"));
+    msg << QLatin1String(kIface) << QStringLiteral("current")
+        << QVariant::fromValue(QDBusVariant(id));
+    QDBusConnection::sessionBus().call(msg, QDBus::NoBlock);
 }

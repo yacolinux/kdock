@@ -20,6 +20,10 @@ public:
     bool activated = false;
     bool minimized = false;
     bool skipTaskbar = false;
+    // uuids of the virtual desktops this window is on. **Empty means "on all
+    // desktops"**, which is how the plasma-window protocol spells it — not
+    // "on none". Only the plasma-window backend fills it in.
+    QStringList desktops;
 
     virtual void activate() = 0;
     virtual void minimize() = 0;
@@ -38,6 +42,11 @@ public:
         Q_UNUSED(enterId)
         Q_UNUSED(leaveId)
     }
+    // Leave the window on exactly one desktop: enter `enterId` and drop every
+    // other desktop it was on. Separate from moveToDesktop() because the caller
+    // there knows the single desktop to leave, while here the answer is the
+    // window's own state — which only the backend tracks.
+    virtual void moveToOnlyDesktop(const QString &enterId) { Q_UNUSED(enterId) }
 
 signals:
     void changed();

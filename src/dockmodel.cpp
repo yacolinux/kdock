@@ -1,5 +1,7 @@
 #include "dockmodel.h"
 
+#include "virtualdesktops.h"
+
 #include "dockconfig.h"
 #include "windowmonitor.h"
 
@@ -22,11 +24,12 @@ QString DockModel::Item::iconName() const
 }
 
 DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
-                     QObject *parent)
+                     VirtualDesktops *desktops, QObject *parent)
     : QAbstractListModel(parent)
     , m_config(config)
     , m_apps(apps)
     , m_monitor(monitor)
+    , m_desktops(desktops)
 {
     connect(m_config, &DockConfig::pinnedChanged, this, [this] {
         if (!m_updatingPinned)
@@ -321,6 +324,23 @@ void DockModel::closeAll(int row)
     const auto windows = m_items.at(row).windows;
     for (AbstractWindow *w : windows)
         w->requestClose();
+}
+
+void DockModel::sendToDesktop(int row, int position)
+{
+    if (row < 0 || row >= m_items.size() || m_items.at(row).isSeparator || !m_desktops)
+        return;
+    const QString id = m_desktops->idOf(position);
+    if (id.isEmpty())
+        return;
+    // Every window under the icon moves, like "close all windows" closes them
+    // all: the menu hangs off the app, not off one of its windows. The view
+    // stays where it is — this never switches desktops.
+    const auto windows = m_items.at(row).windows;
+    for (AbstractWindow *w : windows) {
+        if (w->canChangeDesktop())
+            w->moveToOnlyDesktop(id);
+    }
 }
 
 void DockModel::togglePinned(int row)

@@ -716,6 +716,7 @@ void DockConfig::load()
     m_showCloseWindow = m_settings.value(QStringLiteral("showCloseWindow"), false).toBool();
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
     m_showDarkMode = m_settings.value(QStringLiteral("showDarkMode"), false).toBool();
+    m_showPager = m_settings.value(QStringLiteral("showPager"), false).toBool();
     m_darkMode = m_settings.value(QStringLiteral("darkMode"), false).toBool();
     m_showClock2 = m_settings.value(QStringLiteral("showClock2"), false).toBool();
     m_groupWindows = m_settings.value(QStringLiteral("groupWindows"), true).toBool();
@@ -750,7 +751,7 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
             QStringLiteral("closewindow"),
             QStringLiteral("nextwallpaper"), QStringLiteral("darkmode"),
-            QStringLiteral("autohide"),
+            QStringLiteral("pager"),       QStringLiteral("autohide"),
             QStringLiteral("showdesktop"), QStringLiteral("systray"),
             QStringLiteral("relanzadores"), QStringLiteral("scriptrunners"),
             QStringLiteral("session"),     QStringLiteral("settings")};
@@ -1290,6 +1291,15 @@ void DockConfig::setShowDarkMode(bool show)
     emit showDarkModeChanged();
 }
 
+void DockConfig::setShowPager(bool show)
+{
+    if (m_showPager == show)
+        return;
+    m_showPager = show;
+    m_settings.setValue(QStringLiteral("showPager"), show);
+    emit showPagerChanged();
+}
+
 void DockConfig::setDarkMode(bool on)
 {
     if (m_darkMode == on)
@@ -1658,6 +1668,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("closewindow"),   tr("Close window")},
         {QStringLiteral("nextwallpaper"), tr("Next wallpaper")},
         {QStringLiteral("darkmode"),      tr("Modo oscuro")},
+        {QStringLiteral("pager"),         tr("Escritorios")},
         {QStringLiteral("autohide"),      tr("Auto-hide toggle")},
         {QStringLiteral("showdesktop"),   tr("Show desktop")},
         {QStringLiteral("systray"),       tr("System tray")},

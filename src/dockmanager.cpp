@@ -537,7 +537,7 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
 {
     DockConfig *cfg = configFor(dockId);
 
-    auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, this);
+    auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, m_shared.desktops, this);
     // Every dock gets its own view of the shared tray host: the model is a
     // filtered list over SystrayHost::items(), so several are harmless. Which
     // dock actually draws it is the per-dock "showSystray" flag, gated in QML —
@@ -571,7 +571,8 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
         clock2, m_shared.brightness, m_shared.battery, m_shared.overview, m_shared.desktopControl,
         m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power, systrayModel, m_shared.systrayHost,
         m_shared.relanzadores, m_shared.scriptRunners, m_shared.clipboardHistory,
-        m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor);
+        m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor,
+        m_shared.desktops);
     window->setManager(this);
     window->setPrimary(primary);
     window->show();

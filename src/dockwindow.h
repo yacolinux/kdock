@@ -34,6 +34,7 @@ class NetworkControl;
 class AppearanceControl;
 class WindowMonitor;
 class TileMenuLauncher;
+class VirtualDesktops;
 
 class DockWindow : public QQuickView
 {
@@ -52,7 +53,8 @@ public:
                ClipboardHistory *clipboardHistory = nullptr,
                DisksControl *disks = nullptr, NetworkControl *network = nullptr,
                AppearanceControl *appearance = nullptr,
-               WindowMonitor *monitor = nullptr);
+               WindowMonitor *monitor = nullptr,
+               VirtualDesktops *desktops = nullptr);
 
     // Called from QML when the autohide animation finishes: shrinks the
     // input region to a thin strip on the screen edge so clicks pass
@@ -126,6 +128,7 @@ private:
     WallpaperControl *m_wallpaperControl = nullptr;
     PowerControl *m_power = nullptr;
     AppearanceControl *m_appearance = nullptr;
+    VirtualDesktops *m_desktops = nullptr;
     // Drives the separate kdock-tilemenu process (context property
     // "tileLauncher"); owned by this window.
     TileMenuLauncher *m_tileLauncher = nullptr;

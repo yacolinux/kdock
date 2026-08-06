@@ -1373,6 +1373,13 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showDarkMode, &QCheckBox::toggled, m_config, &DockConfig::setShowDarkMode);
     form->addRow(tr("Modo oscuro:"), showDarkMode);
 
+    auto *showPager = new QCheckBox(tr("Mostrar el paginador de escritorios"), tab);
+    showPager->setChecked(m_config->showPager());
+    showPager->setToolTip(tr("Un número por escritorio virtual de KWin; el clic cambia "
+                             "a ese escritorio. El actual va resaltado."));
+    connect(showPager, &QCheckBox::toggled, m_config, &DockConfig::setShowPager);
+    form->addRow(tr("Escritorios:"), showPager);
+
     // The tray can live in any dock, but in only one at a time: several docks
     // drawing the same StatusNotifierItems would duplicate every icon and open
     // two menus for one click. While another dock holds it, the checkbox is

@@ -27,6 +27,7 @@ public:
     // Available since version 8 of the interface; the client binds 20.
     bool canChangeDesktop() const override { return true; }
     void moveToDesktop(const QString &enterId, const QString &leaveId) override;
+    void moveToOnlyDesktop(const QString &enterId) override;
 
 signals:
     void initialStateDone();
@@ -37,6 +38,11 @@ protected:
     void org_kde_plasma_window_state_changed(uint32_t flags) override;
     void org_kde_plasma_window_initial_state() override;
     void org_kde_plasma_window_unmapped() override;
+    // The compositor reports desktop membership one desktop at a time, and a
+    // window on *all* of them is reported as being on none (see
+    // AbstractWindow::desktops).
+    void org_kde_plasma_window_virtual_desktop_entered(const QString &id) override;
+    void org_kde_plasma_window_virtual_desktop_left(const QString &id) override;
 };
 
 class PlasmaWindowMonitor : public QWaylandClientExtensionTemplate<PlasmaWindowMonitor>,

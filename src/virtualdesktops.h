@@ -18,6 +18,11 @@
 class VirtualDesktops : public QObject
 {
     Q_OBJECT
+    // Exposed to QML as the `virtualDesktops` context property, for the pager
+    // widget and the app icons' "send to desktop" menu.
+    Q_PROPERTY(int count READ count NOTIFY countChanged)
+    Q_PROPERTY(int current READ currentPosition NOTIFY currentChanged)
+    Q_PROPERTY(QStringList names READ names NOTIFY countChanged)
 
 public:
     explicit VirtualDesktops(QObject *parent = nullptr);
@@ -29,12 +34,18 @@ public:
     // Desktop names in position order (index 0 is desktop 1).
     QStringList names() const { return m_names; }
     // Name of a 1-based position, or an empty string when it doesn't exist.
-    QString nameOf(int position) const;
+    Q_INVOKABLE QString nameOf(int position) const;
+
+    // Switch the session to a 1-based position. No-op for a position that
+    // doesn't exist, so a stale pager button cannot throw.
+    Q_INVOKABLE void switchTo(int position);
 
     // Ordered uuids, for the callers that talk to KWin in uuid terms
-    // (ActiveWindowControl moves windows between desktops).
+    // (ActiveWindowControl and DockModel move windows between desktops).
     QStringList desktopIds() const { return m_ids; }
     QString currentDesktopId() const;
+    // uuid of a 1-based position, empty when it doesn't exist.
+    QString idOf(int position) const;
 
 signals:
     void currentChanged(int position);

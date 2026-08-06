@@ -461,6 +461,7 @@ Item {
         case "closewindow": return config.showCloseWindow && activeWindow && activeWindow.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
         case "darkmode": return config.showDarkMode
+        case "pager": return config.showPager && virtualDesktops && virtualDesktops.count > 0
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
         case "systray": return systray && config.showSystray && systray.count > 0
@@ -500,6 +501,7 @@ Item {
         case "closewindow": return closeWindowComp
         case "nextwallpaper": return nextWallpaperComp
         case "darkmode": return darkModeComp
+        case "pager": return pagerComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
         case "systray": return systrayComp
@@ -518,6 +520,7 @@ Item {
     // and springs are draggable and dispatch their action from the section.
     function isBlock(token) {
         return token === "apps" || token === "systray" || token === "relanzadores"
+               || token === "pager"
                || token === "scriptrunners" || token === "menu" || token === "tilemenu"
                || token === "session"
                || token === "battery" || token === "clipboard" || token === "disks"
@@ -1352,6 +1355,66 @@ Item {
                                 iconName: "window-close"
                                 onTriggered: dockModel.closeAll(delegateRoot.index)
                             }
+                            // Move this app's windows between virtual desktops
+                            // without following them there. Only with a window
+                            // to move and a compositor that can do it (KWin).
+                            Menu {
+                                id: desktopMenu
+                                title: qsTr("Escritorio")
+                                popupType: Popup.Window
+                                // A Menu does not size itself to its widest
+                                // item; without this the last letter is clipped
+                                // by the popup border.
+                                width: Math.max(implicitWidth + 16, 210)
+                                enabled: delegateRoot.windowCount > 0 && virtualDesktops
+                                         && virtualDesktops.count > 0
+                                IconMenuItem {
+                                    text: qsTr("Ventana aquí")
+                                    iconName: "go-home"
+                                    // No-op when there is no current desktop
+                                    // (KWin unreachable): sendToDesktop guards.
+                                    onTriggered: dockModel.sendToDesktop(
+                                                     delegateRoot.index,
+                                                     virtualDesktops ? virtualDesktops.current : 0)
+                                }
+                                MenuSeparator {}
+                                // Three fixed items rather than a Repeater: the
+                                // supported number of desktops is fixed at three
+                                // (DockConfig::kMaxDesktops), and a Menu with
+                                // dynamically inserted children is the fiddly
+                                // part of QtQuick.Controls. Each one hides
+                                // itself when its desktop doesn't exist.
+                                IconMenuItem {
+                                    readonly property int position: 1
+                                    visible: virtualDesktops && virtualDesktops.count >= position
+                                    height: visible ? implicitHeight : 0
+                                    enabled: virtualDesktops && virtualDesktops.current !== position
+                                    text: qsTr("Enviar a %1").arg(
+                                              virtualDesktops ? virtualDesktops.nameOf(position) : "")
+                                    iconName: "go-next"
+                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                }
+                                IconMenuItem {
+                                    readonly property int position: 2
+                                    visible: virtualDesktops && virtualDesktops.count >= position
+                                    height: visible ? implicitHeight : 0
+                                    enabled: virtualDesktops && virtualDesktops.current !== position
+                                    text: qsTr("Enviar a %1").arg(
+                                              virtualDesktops ? virtualDesktops.nameOf(position) : "")
+                                    iconName: "go-next"
+                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                }
+                                IconMenuItem {
+                                    readonly property int position: 3
+                                    visible: virtualDesktops && virtualDesktops.count >= position
+                                    height: visible ? implicitHeight : 0
+                                    enabled: virtualDesktops && virtualDesktops.current !== position
+                                    text: qsTr("Enviar a %1").arg(
+                                              virtualDesktops ? virtualDesktops.nameOf(position) : "")
+                                    iconName: "go-next"
+                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                }
+                            }
                             MenuSeparator {}
                             Menu {
                                 id: locationMenu
@@ -2154,6 +2217,78 @@ Item {
                 opacity: 0.85
                 scale: parent.hovered ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    // Virtual-desktop pager: one number per desktop, click to switch. A block,
+    // because each number is its own click target. Deliberately plain — no
+    // window miniatures, just the number and a filled box for the current one.
+    Component {
+        id: pagerComp
+        Grid {
+            id: pagerGrid
+            columns: root.horizontal ? Math.max(1, pagerRepeater.count) : 1
+            spacing: Math.max(1, Math.round(root.spacingPx / 2))
+            // The number sits on theme.highlight when the desktop is current,
+            // so it needs the same luminance test the dock does over its own
+            // background (see root.dockBaseIsLight).
+            readonly property color highlightTextColor: {
+                const h = theme.highlight
+                return (0.299 * h.r + 0.587 * h.g + 0.114 * h.b) > 0.5 ? "#141414" : "#F2F2F2"
+            }
+            Repeater {
+                id: pagerRepeater
+                // Capped at the same three desktops the rest of kdock supports.
+                model: virtualDesktops ? Math.min(virtualDesktops.count, 3) : 0
+                Item {
+                    id: pagerCell
+                    required property int index
+                    readonly property int position: index + 1
+                    readonly property bool isCurrent:
+                        virtualDesktops && virtualDesktops.current === pagerCell.position
+                    // Square cells, a bit smaller than a widget icon: the three
+                    // together cost about as much dock length as one widget,
+                    // and the section layout centers the block in the row.
+                    readonly property int side:
+                        Math.max(Math.round(root.widgetIconPx * 0.62),
+                                 pagerNumber.implicitWidth + 8)
+                    width: pagerCell.side
+                    height: pagerCell.side
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 3
+                        color: pagerCell.isCurrent ? theme.highlight : "transparent"
+                        border.width: 1
+                        border.color: root.dockTextColor
+                        opacity: pagerCell.isCurrent ? 0.9
+                                 : (pagerMouse.containsMouse ? 0.55 : 0.28)
+                        Behavior on opacity { NumberAnimation { duration: 120 } }
+                    }
+                    Text {
+                        id: pagerNumber
+                        anchors.centerIn: parent
+                        text: pagerCell.position
+                        font.pixelSize: Math.max(8, Math.round(root.widgetIconPx * 0.52))
+                        font.bold: config.labelBold || pagerCell.isCurrent
+                        // pagerGrid contains this delegate, so its id resolves
+                        // here (the reverse would not).
+                        color: pagerCell.isCurrent ? pagerGrid.highlightTextColor
+                                                   : root.dockTextColor
+                    }
+                    ToolTip {
+                        popupType: Popup.Window
+                        visible: pagerMouse.containsMouse
+                        delay: 400
+                        text: virtualDesktops ? virtualDesktops.nameOf(pagerCell.position) : ""
+                    }
+                    MouseArea {
+                        id: pagerMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: if (virtualDesktops) virtualDesktops.switchTo(pagerCell.position)
+                    }
+                }
             }
         }
     }

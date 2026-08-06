@@ -11,6 +11,7 @@
 class DockConfig;
 class WindowMonitor;
 class AbstractWindow;
+class VirtualDesktops;
 
 class DockModel : public QAbstractListModel
 {
@@ -28,7 +29,7 @@ public:
     };
 
     DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
-              QObject *parent = nullptr);
+              VirtualDesktops *desktops = nullptr, QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -37,6 +38,10 @@ public:
     Q_INVOKABLE void activate(int row);     // left click: launch / focus / cycle / minimize
     Q_INVOKABLE void launch(int row);       // always start a new instance
     Q_INVOKABLE void closeAll(int row);
+    // Move every window of this icon to a 1-based virtual desktop, without
+    // switching the view there. No-op on wlroots (no desktop requests in
+    // wlr-foreign-toplevel) and when KWin reports no such desktop.
+    Q_INVOKABLE void sendToDesktop(int row, int position);
     Q_INVOKABLE void togglePinned(int row);
     Q_INVOKABLE QVariantList windowList(int row) const;
     Q_INVOKABLE void activateWindow(int row, int windowIndex);
@@ -75,6 +80,7 @@ private:
     DockConfig *m_config;
     DesktopEntryIndex *m_apps;
     WindowMonitor *m_monitor;
+    VirtualDesktops *m_desktops = nullptr;
     QList<Item> m_items;
     bool m_updatingPinned = false;
 };

@@ -101,6 +101,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showCloseWindow READ showCloseWindow WRITE setShowCloseWindow NOTIFY showCloseWindowChanged)
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
     Q_PROPERTY(bool showDarkMode READ showDarkMode WRITE setShowDarkMode NOTIFY showDarkModeChanged)
+    Q_PROPERTY(bool showPager READ showPager WRITE setShowPager NOTIFY showPagerChanged)
     // Dark mode: an *override* of the normal color scheme, never a rewrite of
     // it. See darkModeActive() — the "Normal" colors stay in the .conf exactly
     // where the user left them, so turning dark mode off restores them by
@@ -522,6 +523,9 @@ public:
     bool showCloseWindow() const { return m_showCloseWindow; }
     bool showNextWallpaper() const { return m_showNextWallpaper; }
     bool showDarkMode() const { return m_showDarkMode; }
+    // Virtual-desktop pager (token "pager"): the numbers of KWin's desktops,
+    // click to switch.
+    bool showPager() const { return m_showPager; }
     // This dock's own dark-mode flag. Only consulted when the app-wide switch
     // is off; see darkModeActive().
     bool darkMode() const { return m_darkMode; }
@@ -621,6 +625,7 @@ public:
     void setShowCloseWindow(bool show);
     void setShowNextWallpaper(bool show);
     void setShowDarkMode(bool show);
+    void setShowPager(bool show);
     void setDarkMode(bool on);
     // What the "Modo" submenu and the darkmode widget call: writes wherever the
     // effective value lives (the app-wide switch when it is on, this dock's own
@@ -724,6 +729,7 @@ signals:
     void showCloseWindowChanged();
     void showNextWallpaperChanged();
     void showDarkModeChanged();
+    void showPagerChanged();
     // One signal for the whole dark-mode group (own flag, app-wide switch,
     // exceptions, both colors): every QML binding that cares reads more than
     // one of them anyway.
@@ -851,6 +857,7 @@ private:
     bool m_showCloseWindow = false;
     bool m_showNextWallpaper = false;
     bool m_showDarkMode = false;
+    bool m_showPager = false;
     bool m_darkMode = false;
     bool m_groupWindows = true;
     QStringList m_menuFavorites;
