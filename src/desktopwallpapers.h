@@ -134,12 +134,19 @@ private:
     // Merges into the stored snapshot (never drops an existing monitor) and
     // persists.
     void mergeSnapshot(const QHash<QString, WallpaperSnapshot> &fresh);
-    // The two scripts a write needs: the one that writes the config and the one
+    // The scripts a write needs: the one that writes the config and the one
     // that reloads it. They must go out as **separate** evaluateScript calls or
     // Plasma does not repaint (see AGENTS.md).
     QString applyScript(int desktop) const;
     QString restoreScript() const;
     static QString reloadScript(const QStringList &geometryKeys);
+    // Slideshow-only: switches the configured monitors to org.kde.image **without
+    // reloading**. It exists to force the next apply to register as a *plugin
+    // change*: re-applying org.kde.slideshow over an already-slideshow containment
+    // keeps the plugin's Image key, so desktop N+1 with the same folder would
+    // repeat desktop N's image. Toggling away and back makes Plasma advance the
+    // slideshow (the next-wall.sh finding) — see DesktopWallpapers::apply().
+    QString toggleToImageScript(int desktop) const;
     // "x,y" of every connected screen, by connector name.
     static QHash<QString, QString> geometryKeys();
 

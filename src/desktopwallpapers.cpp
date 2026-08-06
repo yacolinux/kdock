@@ -522,8 +522,48 @@ QString DesktopWallpapers::reloadScript(const QStringList &geometryKeys)
            + QStringLiteral("if(!m.hasOwnProperty(key))continue;d.reloadConfig();}");
 }
 
+QString DesktopWallpapers::toggleToImageScript(int desktop) const
+{
+    const auto keys = geometryKeys();
+    QStringList entries;
+    for (auto it = keys.constBegin(); it != keys.constEnd(); ++it) {
+        if (slideshowFolder(desktop, it.key()).isEmpty())
+            continue; // monitor not configured for this desktop: leave it alone
+        entries << jsString(it.value()) + QStringLiteral(":1");
+    }
+    if (entries.isEmpty())
+        return {};
+    return QStringLiteral("var m={%1};").arg(entries.join(QLatin1Char(',')))
+           + containmentLoopJs()
+           + QStringLiteral(
+               "if(!m.hasOwnProperty(key))continue;"
+               "d.wallpaperPlugin='org.kde.image';}");
+}
+
 void DesktopWallpapers::apply(int desktop)
 {
+    if (slideshowEnabled(desktop)) {
+        // Slideshow: three **separate** evaluateScript calls.
+        //   1. Toggle the configured monitors to org.kde.image (no reload — the
+        //      plugin switch alone does not repaint, so there is no flash).
+        //   2. Write our slideshow config, switching back to org.kde.slideshow.
+        //   3. Reload, which re-reads the group and advances the slideshow.
+        // Without step 1, a slideshow desktop re-applied over a containment that
+        // already runs org.kde.slideshow (the previous desktop, same folder)
+        // keeps the plugin's Image key and **repeats the previous desktop's
+        // image** — see toggleToImageScript(). Step 3 must stay a separate call
+        // from step 2, exactly like the static/restore writes.
+        const QString toggle = toggleToImageScript(desktop);
+        const QString write = applyScript(desktop);
+        if (write.isEmpty())
+            return; // no monitor configured: nothing to write
+        PlasmaScript::run(toggle);
+        PlasmaScript::run(write);
+        PlasmaScript::run(reloadScript(geometryKeys().values()));
+        setApplied(true);
+        return;
+    }
+
     const QString write = applyScript(desktop);
     if (write.isEmpty())
         return;

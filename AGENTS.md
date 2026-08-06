@@ -417,6 +417,17 @@ protocols/
 - **Al restaurar un slideshow, la imagen concreta avanza una** (el plugin, al recargar, pasa a
   la siguiente). La *configuración* —plugin, carpetas, intervalo— vuelve idéntica, que es lo que
   importa; un slideshow avanza solo de todos modos.
+- **Un slideshow de escritorio N re-aplicado sobre un containment que ya corre
+  `org.kde.slideshow` REPITE la imagen** (bug 2026-08-06): el plugin conserva su clave `Image`,
+  así que escribir el mismo `SlidePaths` + `reloadConfig()` vuelve a mostrar el mismo cuadro —
+  exactamente lo que pasa de escritorio 2 a 3 cuando ambos usan la misma carpeta. La salida es
+  la del hallazgo de `next-wall.sh`: `apply()` de un escritorio slideshow hace **TRES** llamadas
+  separadas — (1) `toggleToImageScript()` cambia el plugin de los monitores configurados a
+  `org.kde.image` **sin reload** (el switch solo no repinta, así que no hay flash), (2) `applyScript()`
+  lo vuelve a `org.kde.slideshow` escribiendo `SlidePaths`/`SlideInterval`, (3) `reloadConfig()`.
+  El cambio de plugin fuerza el avance. La llamada (1) es la que hace que (2) se registre como
+  *cambio de plugin* y no como re-aplicación. `toggleToImageScript()` toca los mismos monitores
+  que `applyScript()` (los que tienen carpeta para ese escritorio); el resto no se toca.
 - **Config** (`kdock.conf` compartido, estáticos al estilo `DockConfig::favoritesShared()`):
   `[Wallpapers] enabled/fillMode/snapshot/applied` y **una sección por escritorio**,
   `[Wallpapers2]`..`[Wallpapers5]`, con el conector como clave y las tres claves del modo
