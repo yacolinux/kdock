@@ -2351,10 +2351,6 @@ Item {
                     width: pagerCell.side
                     height: pagerCell.side
 
-                    ToolTip.text: virtualDesktops ? virtualDesktops.nameOf(pagerCell.position) : ""
-                    ToolTip.visible: pagerMouse.containsMouse
-                    ToolTip.delay: 400
-
                     Rectangle {
                         anchors.fill: parent
                         radius: 3
