@@ -8,6 +8,7 @@
 #include "systraymodel.h"
 #include "virtualdesktops.h"
 
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -241,6 +242,62 @@ QString DockManager::duplicateDockForDesktop(const QString &srcDockId, int deskt
     DockConfig::addKnownDock(dstDockId);
     DockConfig::setDockEnabled(dstDockId, true);
     sync();
+    return dstDockId;
+}
+
+QString DockManager::moveDockToNextMonitor(const QString &dockId)
+{
+    if (dockId.isEmpty())
+        return {};
+
+    // Sweep configs renamed to .tmp by earlier moves: they are kept on disk so
+    // a moved-away dock can be brought back by hand, but the context-menu move
+    // is not the place to accumulate them. The next move from any dock cleans
+    // the previous one's leftovers.
+    {
+        const QDir dir = QFileInfo(DockConfig::settingsFilePath()).absoluteDir();
+        const QStringList tmpFiles =
+            dir.entryList(QStringList(QStringLiteral("kdock-*.conf.tmp")), QDir::Files);
+        for (const QString &name : tmpFiles)
+            QFile::remove(dir.filePath(name));
+    }
+
+    const QStringList connected = connectedScreens();
+    if (connected.size() < 2)
+        return {};
+
+    const QString currentScreen = DockConfig::screenOfDockId(dockId);
+    int idx = connected.indexOf(currentScreen);
+    // A dock on a screen that just disconnected wraps to the last monitor.
+    if (idx < 0)
+        idx = connected.size() - 1;
+    const QString targetScreen = connected.at((idx + 1) % connected.size());
+
+    const int slot = firstFreeSlot(targetScreen);
+    if (slot < 0)
+        return {};
+    const QString dstDockId = DockConfig::makeDockId(targetScreen, slot);
+
+    // Same reasoning as previewDockOnScreen(): the slot is free, so anything at
+    // its file path is a leftover from a removed dock and must not be reused.
+    if (DockConfig *cfg = m_configs.take(dstDockId))
+        delete cfg;
+    if (!configFor(dockId)->copySettingsTo(dstDockId))
+        return {};
+
+    // The old dock disappears from the Docks tab: it is disabled, dropped from
+    // knownDocks and its config file renamed to .tmp (see the sweep above).
+    DockConfig::setDockEnabled(dockId, false);
+    DockConfig::removeKnownDock(dockId);
+    const QString oldPath = DockConfig::instanceSettingsFilePath(dockId);
+    QFile::rename(oldPath, oldPath + QStringLiteral(".tmp"));
+
+    // The copy takes its place, enabled on the new monitor.
+    DockConfig::addKnownDock(dstDockId);
+    DockConfig::setDockEnabled(dstDockId, true);
+
+    sync();
+    emit dockListChanged();
     return dstDockId;
 }
 

@@ -964,6 +964,11 @@ Item {
                                 onTriggered: dockWindow.openSettings()
                             }
                             IconMenuItem {
+                                text: qsTr("Mover Sig. Monitor")
+                                iconName: "go-next"
+                                onTriggered: dockWindow.moveToNextMonitor()
+                            }
+                            IconMenuItem {
                                 text: qsTr("Crear dock vacío")
                                 iconName: "list-add"
                                 onTriggered: dockWindow.createEmptyDock()
@@ -1486,6 +1491,11 @@ Item {
                                     text: qsTr("Dock settings…")
                                     iconName: "configure"
                                     onTriggered: dockWindow.openSettings()
+                                }
+                                IconMenuItem {
+                                    text: qsTr("Mover Sig. Monitor")
+                                    iconName: "go-next"
+                                    onTriggered: dockWindow.moveToNextMonitor()
                                 }
                                 IconMenuItem {
                                     text: qsTr("Crear dock vacío")

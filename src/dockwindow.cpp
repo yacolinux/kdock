@@ -418,6 +418,24 @@ void DockWindow::createEmptyDock()
         m_dialog->showMonitorsTab(created);
 }
 
+void DockWindow::moveToNextMonitor()
+{
+    if (!m_manager || m_config->dockId().isEmpty())
+        return;
+    const QString dockId = m_config->dockId();
+    DockManager *manager = m_manager;
+    // Defer: moveDockToNextMonitor() -> sync() destroys this dock's instance
+    // (it is disabled on its old monitor), and we are inside the QML click
+    // handler that invoked us — same pattern as deleteDock().
+    QTimer::singleShot(0, this, [this, manager, dockId] {
+        const QString newId = manager->moveDockToNextMonitor(dockId);
+        // Land the (already open) settings dialog on the new dock so the Docks
+        // tab reflects the move instead of pointing at the renamed-away one.
+        if (!newId.isEmpty() && m_dialog)
+            m_dialog->showMonitorsTab(newId);
+    });
+}
+
 void DockWindow::openAudioSettings()
 {
     openSettings();

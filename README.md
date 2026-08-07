@@ -1,4 +1,4 @@
-# kdock  ·  RELEASE 0.1
+# kdock  ·  RELEASE 0.1.1
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -55,6 +55,9 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   en el mismo monitor para empezar a diferenciarlo. Y desde el clic derecho, **Dock → Crear
   dock vacío** agrega uno con los valores por defecto en el mismo monitor: si el escritorio
   en el que estás ya tiene docks propios, el nuevo se ata a él para que aparezca en el acto.
+  **Dock → Mover Sig. Monitor**, también del clic derecho, lleva el dock al siguiente monitor
+  conectado (y da la vuelta al llegar al último): la configuración viaja con él y el archivo
+  viejo queda renombrado como respaldo, limpiándose solo en el próximo move.
   Arriba del diálogo, un selector de **escritorio** y el **nombre** del dock dicen en todo
   momento cuál de todos estás editando; abrir Configuración desde un dock preselecciona el
   suyo. Los docks de un escritorio **no se

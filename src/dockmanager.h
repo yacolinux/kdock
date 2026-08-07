@@ -172,6 +172,16 @@ public:
     QString duplicateDockForDesktop(const QString &srcDockId, int desktop,
                                     QString *error = nullptr);
 
+    // Move a dock to the next connected monitor (wrapping around at the end of
+    // the list). Reuses the Docks-tab machinery: copySettingsTo() clones the
+    // config onto a free slot of the target monitor, then the old dock is
+    // disabled, removed from knownDocks and its config file renamed to
+    // "*.conf.tmp" (a leftover that can be reused by hand). The next call from
+    // any dock first sweeps those .tmp files. Returns the new dockId, or an
+    // empty string when there is only one monitor or the target has no free
+    // slot.
+    QString moveDockToNextMonitor(const QString &dockId);
+
     // The dockId that defaults relanzadores to shown: the lowest-slot enabled
     // dock on the primary monitor.
     QString primaryDockId() const;
@@ -201,6 +211,11 @@ public:
     SystrayHost *systrayHost() const { return m_shared.systrayHost; }
     AudioControl *audio() const { return m_shared.audio; }
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
+
+signals:
+    // Emitted whenever the set of enabled/known docks changes in a way that
+    // affects what the settings dialog lists (enabledDocks/knownDocks).
+    void dockListChanged();
 
 private:
     struct Instance {

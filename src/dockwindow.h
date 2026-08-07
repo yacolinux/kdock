@@ -84,6 +84,10 @@ public:
     // Create a second dock with the default settings on this monitor and open
     // the settings dialog on it (right-click → Dock → Crear dock vacío).
     Q_INVOKABLE void createEmptyDock();
+    // Move this dock to the next connected monitor (right-click → Dock →
+    // Mover Sig. Monitor). The old config is renamed to .tmp; see
+    // DockManager::moveDockToNextMonitor().
+    Q_INVOKABLE void moveToNextMonitor();
     // Open the settings dialog directly on the Audio tab (volume widget
     // right-click).
     Q_INVOKABLE void openAudioSettings();

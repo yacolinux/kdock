@@ -285,6 +285,16 @@ void SettingsDialog::buildTabs()
     addTab(createNetworkTab(), tr("Redes"));
     m_networkTabIndex = m_tabWidget->count() - 1;
     applyTabColors();
+
+    // A dock moved via the context menu (Dock → Mover Sig. Monitor) changes the
+    // enabled/known dock sets out from under the dialog; refresh the Docks tab
+    // so its lists match reality instead of going stale.
+    if (m_manager) {
+        connect(m_manager, &DockManager::dockListChanged, this, [this] {
+            reloadDocksList();
+            reloadMonitorsForSelectedDock();
+        });
+    }
 }
 
 void SettingsDialog::applyTabColors()
