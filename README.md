@@ -165,6 +165,13 @@ la propia: eso es todo lo que hace falta para agregar un idioma, sin recompilar.
 Para el chino hace falta una fuente CJK instalada (Noto Sans CJK o WenQuanYi); sin ella el
 sistema dibuja cuadraditos, y no es algo que kdock pueda resolver.
 
+Vienen además tres capas **ALT**, en inglés pero con los nombres cambiados por apodos —
+`english-ALT-startrek` (naves de Star Trek), `english-ALT-hacker` (apodos de hacker) y
+`english-ALT-starwars` (hardware de Star Wars) para los widgets, y las tres con la misma
+sección `Apps`: inteligencias artificiales de novelas de ciencia ficción y herramientas de
+hackeo ficticias. Son medio en broma, pero sirven de ejemplo completo de las cuatro
+secciones — sobre todo de `Apps`, que es la única que se llena con ids de `.desktop` reales.
+
 ### Widgets
 
 Todos opcionales y reordenables. Los backends hablan D-Bus o CLI directo, nunca KDE

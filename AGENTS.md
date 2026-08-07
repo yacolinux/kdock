@@ -902,6 +902,16 @@ que haya en el `.cpp`/`.qml`). Encima se carga **una traducción**, un `.md` de 
   predeterminado), *Usar este idioma*, *Actualizar apps* (agrega al archivo los `id = Name` de
   todas las apps instaladas que falten, idempotente), *Recargar* y *Nueva…* (duplica la
   seleccionada).
+- **Capas ALT** (2026-08-07): `english-ALT-startrek`, `english-ALT-hacker` y
+  `english-ALT-starwars` son `english.md` con la sección `Widgets` cambiada por apodos (naves
+  de Star Trek / apodos de hacker / hardware de Star Wars) y una sección `Apps` compartida de
+  82 entradas — IA de novelas de ciencia ficción y herramientas de hackeo ficticias — armada
+  contra los `.desktop` realmente instalados. Además de ser un chiste, son el **único ejemplo
+  con la sección `Apps` llena** que se entrega, que es la que no se puede generar desde el
+  código. Se regeneran con `python3 tools/gen-alt-layers.py` (las tablas de apodos están
+  adentro; con `APPS_CHECK=<volcado de ids>` avisa de los ids que no tengan `.desktop`); si
+  cambian las cadenas de `english.md`, `tools/sync-translations.py` las mantiene al día como
+  a cualquier otro idioma.
 - **Mantenimiento**: `python3 tools/gen-capabase.py` reescribe `capabase.md` desde el código
   (usa `lupdate`), y `python3 tools/sync-translations.py` re-sincroniza los demás `.md`
   conservando lo ya traducido y agregando las claves nuevas con el texto capabase. Los tres

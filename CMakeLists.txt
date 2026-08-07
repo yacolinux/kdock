@@ -95,6 +95,9 @@ qt_add_resources(kdock "translations"
     PREFIX "/"
     FILES translations/capabase.md translations/english.md translations/spanish.md
           translations/zh-CN.md
+          translations/english-ALT-startrek.md
+          translations/english-ALT-hacker.md
+          translations/english-ALT-starwars.md
 )
 
 # The in-tree layer-shell integration is built as a static Qt plugin
