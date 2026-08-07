@@ -198,6 +198,10 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
     mainLayout->addWidget(m_tabWidget);
 
     auto *box = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    // Qt labels its standard buttons from *its own* catalogs, i.e. in the system
+    // locale, which would leave a Spanish "Cerrar" in a dialog the user asked to
+    // see in another language. Setting the text puts it back on our layer.
+    box->button(QDialogButtonBox::Close)->setText(tr("Close"));
     // "Quit Dock" lives here now (removed from the icon right-click menu). Placed
     // with ResetRole so Qt lays it out on the opposite side from Close.
     auto *quitBtn = box->addButton(tr("Quit Dock"), QDialogButtonBox::ResetRole);

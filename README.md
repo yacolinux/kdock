@@ -143,7 +143,8 @@ Los textos escritos en el código son la **capa nativa, "capabase"**. Encima se 
 traducción: un archivo `.md` de texto plano en `~/.local/share/kdock/translations/`, que se
 elige y se edita desde la solapa *Traducciones* del panel de configuración (botón **Editar** →
 se abre con tu editor de texto predeterminado; al guardar, el dock toma los cambios solo, sin
-reiniciar nada). Vienen **español** e **inglés**, y se irán agregando más idiomas.
+reiniciar nada). Vienen **español**, **inglés** y **chino simplificado (zh-CN)**, y se irán
+agregando más idiomas.
 
 Cada archivo tiene cuatro títulos:
 
@@ -160,6 +161,9 @@ quiera y el resto sigue funcionando. Un widget que hayas **renombrado a mano** c
 nombre en todos los idiomas. El botón *Actualizar apps* llena la sección `Apps` con todas las
 aplicaciones instaladas, listas para renombrar, y *Nueva…* duplica una traducción para armar
 la propia: eso es todo lo que hace falta para agregar un idioma, sin recompilar.
+
+Para el chino hace falta una fuente CJK instalada (Noto Sans CJK o WenQuanYi); sin ella el
+sistema dibuja cuadraditos, y no es algo que kdock pueda resolver.
 
 ### Widgets
 

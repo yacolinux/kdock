@@ -144,6 +144,7 @@ Clock date: = Clock date:
 Clock font size: = Clock font size:
 Clock format: = Clock format:
 Clock seconds: = Clock seconds:
+Close = Close
 Close window: = Close window:
 Color de los nombres de apps y widgets, y del resaltado de las apps que están corriendo (que en modo oscuro deja de usar el color de cada ícono y pasa a este único color). = Color of the application and widget names, and of the highlight behind running apps (in dark mode that highlight stops using each icon's own color and uses this single color instead).
 Color de resaltado = Highlight color
