@@ -635,6 +635,7 @@ void DockConfig::load()
     m_widgetLabelMode = sanitizedWidgetLabelMode(
         m_settings.value(QStringLiteral("widgetLabelMode"), int(IconOnly)).toInt());
     m_labelBold = m_settings.value(QStringLiteral("labelBold"), false).toBool();
+    m_labelLines = qBound(1, m_settings.value(QStringLiteral("labelLines"), 1).toInt(), 2);
     m_autoShrinkIcons = m_settings.value(QStringLiteral("autoShrinkIcons"), true).toBool();
     m_autoShrinkMinIconSize =
         qBound(8, m_settings.value(QStringLiteral("autoShrinkMinIconSize"), 16).toInt(), 64);
@@ -1557,14 +1558,14 @@ int DockConfig::cellThicknessFor(int mode, int iconPx) const
     switch (mode) {
     case LabelBelow:
     case LabelAbove:
-        return horizontal ? iconPx + gap + iconLabelLineHeight()
+        return horizontal ? iconPx + gap + iconLabelBoxHeight()
                           : qMax(iconPx, labelW);
     case LabelRight:
     case LabelLeft:
-        return horizontal ? qMax(iconPx, iconLabelLineHeight())
+        return horizontal ? qMax(iconPx, iconLabelBoxHeight())
                           : iconPx + gap + labelW;
     case LabelOnly:
-        return horizontal ? iconLabelLineHeight() : labelW;
+        return horizontal ? iconLabelBoxHeight() : labelW;
     }
     return iconPx;
 }
@@ -1656,6 +1657,19 @@ void DockConfig::setLabelBold(bool on)
     emit labelBoldChanged();
     // Bold names are wider; Dock.qml re-measures on this signal and reports the
     // new width back, which is what actually moves the thickness.
+}
+
+void DockConfig::setLabelLines(int lines)
+{
+    lines = qBound(1, lines, 2);
+    if (m_labelLines == lines)
+        return;
+    m_labelLines = lines;
+    m_settings.setValue(QStringLiteral("labelLines"), lines);
+    emit labelLinesChanged();
+    // A second line is a second line height of cross-axis room, so the
+    // exclusive zone has to follow (see cellThicknessFor).
+    emit dockThicknessChanged();
 }
 
 void DockConfig::setAutoShrinkIcons(bool on)

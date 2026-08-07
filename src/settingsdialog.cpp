@@ -1160,6 +1160,17 @@ QWidget *SettingsDialog::createFuentesTab()
             [this, labelFont] { labelFont->setValue(m_config->iconLabelFontSize()); });
     form->addRow(tr("Name font size:"), labelFont);
 
+    auto *labelWrap = new QCheckBox(tr("Dos renglones"), tab);
+    labelWrap->setChecked(m_config->labelLines() > 1);
+    labelWrap->setToolTip(tr("Deja que un nombre largo se dibuje en dos renglones en vez de "
+                              "cortarse con puntos suspensivos. El nombre ocupa dos "
+                              "líneas de alto, así que el dock engorda otro tanto."));
+    connect(labelWrap, &QCheckBox::toggled, m_config,
+            [this](bool on) { m_config->setLabelLines(on ? 2 : 1); });
+    connect(m_config, &DockConfig::labelLinesChanged, labelWrap,
+            [this, labelWrap] { labelWrap->setChecked(m_config->labelLines() > 1); });
+    form->addRow(tr("Name lines:"), labelWrap);
+
     auto *labelBold = new QCheckBox(tr("Negritas"), tab);
     labelBold->setChecked(m_config->labelBold());
     labelBold->setToolTip(tr("Draw every name the dock shows — applications, widgets and "
@@ -1173,11 +1184,12 @@ QWidget *SettingsDialog::createFuentesTab()
     // (mirrors the gating of the Widgets tab). The bold toggle stays enabled
     // even with apps/widgets names off: it also drives the clock date, which
     // is always text.
-    auto syncLabelEnabled = [this, labelWidth, labelFont] {
+    auto syncLabelEnabled = [this, labelWidth, labelFont, labelWrap] {
         const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
                         || m_config->widgetLabelMode() != DockConfig::IconOnly;
         labelWidth->setEnabled(on);
         labelFont->setEnabled(on);
+        labelWrap->setEnabled(on);
     };
     connect(m_config, &DockConfig::iconLabelModeChanged, tab, syncLabelEnabled);
     connect(m_config, &DockConfig::widgetLabelModeChanged, tab, syncLabelEnabled);
@@ -1374,6 +1386,18 @@ QWidget *SettingsDialog::createWidgetsTab()
                 [this, labelFont] { labelFont->setValue(m_config->iconLabelFontSize()); });
         form->addRow(tr("· Name font size:"), labelFont);
 
+        // Mirrored in the Fuentes tab, like the width and the font size.
+        auto *labelWrap = new QCheckBox(tr("Dos renglones"), tab);
+        labelWrap->setChecked(m_config->labelLines() > 1);
+        labelWrap->setToolTip(tr("Deja que un nombre largo se dibuje en dos renglones en vez de "
+                                  "cortarse con puntos suspensivos. El nombre ocupa dos "
+                                  "líneas de alto, así que el dock engorda otro tanto."));
+        connect(labelWrap, &QCheckBox::toggled, m_config,
+                [this](bool on) { m_config->setLabelLines(on ? 2 : 1); });
+        connect(m_config, &DockConfig::labelLinesChanged, labelWrap,
+                [this, labelWrap] { labelWrap->setChecked(m_config->labelLines() > 1); });
+        form->addRow(tr("· Name lines:"), labelWrap);
+
         auto *labelBold = new QCheckBox(tr("Negritas"), tab);
         labelBold->setChecked(m_config->labelBold());
         labelBold->setToolTip(tr("Draw every name the dock shows — applications, widgets "
@@ -1406,11 +1430,12 @@ QWidget *SettingsDialog::createWidgetsTab()
         // The width and font size only mean something while some name is shown;
         // the bold toggle stays enabled because it also drives the clock date,
         // which is always text.
-        auto syncLabelEnabled = [this, labelWidth, labelFont] {
+        auto syncLabelEnabled = [this, labelWidth, labelFont, labelWrap] {
             const bool on = m_config->iconLabelMode() != DockConfig::IconOnly
                             || m_config->widgetLabelMode() != DockConfig::IconOnly;
             labelWidth->setEnabled(on);
             labelFont->setEnabled(on);
+            labelWrap->setEnabled(on);
         };
         connect(labelMode, &QComboBox::currentIndexChanged, this, [this, labelMode](int i) {
             m_config->setIconLabelMode(labelMode->itemData(i).toInt());

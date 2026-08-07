@@ -591,6 +591,8 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   `appCellThickness()` sale del `qMax`. Si agregás algo que dependa de las apps, acordate de
   las dos ramas — y de que `root.labelVisible` en `Dock.qml` es lo que corta la medición de
   los nombres de apps (si no, el dock reserva ancho para nombres que no dibuja).
+- **El alto de la caja del nombre no es una línea, es `iconLabelBoxHeight()`** (`iconLabelLineHeight() * labelLines`, 2026-08-07): con *Dos renglones* prendido los nombres se envuelven y la caja mide el doble. Toda rama nueva de `cellThicknessFor()` tiene que usar esa función, no `iconLabelLineHeight()`, o el dock reserva una línea y dibuja dos. El espejo en QML es `root.labelBoxHeight`.
+  Y ojo con el ancho: **una caja exactamente del ancho medido rompe la envoltura**. Qt tira la última letra al segundo renglón ("Clock" dibujado como "Cloc/k") aunque el texto entre; por eso `labelW` suma `root.labelSlack`, que es 1 px y **solo** con `labelLines > 1`. Se ve en una captura, no en el log.
 - **Una entrada de esa fórmula se mide en QML**: `config.effectiveLabelWidth`, el ancho del
   nombre más largo que el dock dibuja (`iconLabelWidth` es solo el tope). `Dock.qml` lo mide
   off-screen y lo reporta con `config.setMeasuredLabelWidth()`; el detalle está en

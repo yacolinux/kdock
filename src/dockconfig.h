@@ -125,6 +125,12 @@ class DockConfig : public QObject
     Q_PROPERTY(int iconLabelFontSize READ iconLabelFontSize WRITE setIconLabelFontSize NOTIFY iconLabelFontSizeChanged)
     Q_PROPERTY(int iconLabelFontPx READ iconLabelFontPx NOTIFY dockThicknessChanged)
     Q_PROPERTY(int iconLabelLineHeight READ iconLabelLineHeight NOTIFY dockThicknessChanged)
+    // How many lines a name may use, 1 or 2. With 2 a name longer than the box
+    // wraps instead of being elided, so long titles can be read whole; the box
+    // is that many line heights tall, which is why it moves the thickness.
+    // Shared by the app and the widget names, like the width and the font size.
+    Q_PROPERTY(int labelLines READ labelLines WRITE setLabelLines NOTIFY labelLinesChanged)
+    Q_PROPERTY(int iconLabelBoxHeight READ iconLabelBoxHeight NOTIFY dockThicknessChanged)
     Q_PROPERTY(int iconLabelGap READ iconLabelGap NOTIFY dockThicknessChanged)
     // Same idea for the non-app sections (widgets and blocks), configured apart
     // from the apps: a dock can name its widgets and not its apps, or vice versa.
@@ -414,6 +420,9 @@ public:
     // and line height, so the geometry below is not an estimate.
     int iconLabelFontPx() const;
     int iconLabelLineHeight() const;
+    int labelLines() const { return m_labelLines; }
+    // Height the name box gets: one line, or two when a name is allowed to wrap.
+    int iconLabelBoxHeight() const { return iconLabelLineHeight() * m_labelLines; }
     int iconLabelGap() const { return m_compact ? 2 : 4; } // icon <-> label
     // See IconLabelMode. Width and font size are shared with the app labels.
     int widgetLabelMode() const { return m_widgetLabelMode; }
@@ -581,6 +590,8 @@ public:
     void setIconLabelFontSize(int px); // 0 = automatic
     void setWidgetLabelMode(int mode);
     void setLabelBold(bool on);
+    // 1 or 2; anything else is clamped.
+    void setLabelLines(int lines);
     void setAutoShrinkIcons(bool on);
     void setAutoShrinkMinIconSize(int px);
     void setSpacing(int spacing);
@@ -681,6 +692,7 @@ signals:
     void iconLabelFontSizeChanged();
     void widgetLabelModeChanged();
     void labelBoldChanged();
+    void labelLinesChanged();
     void autoShrinkIconsChanged();
     void autoShrinkMinIconSizeChanged();
     void widgetNamesChanged();
@@ -829,6 +841,7 @@ private:
     int m_iconLabelFontSize = 0; // 0 = derived from iconSize
     int m_widgetLabelMode = IconOnly;
     bool m_labelBold = false;
+    int m_labelLines = 1;
     bool m_autoShrinkIcons = true;
     int m_autoShrinkMinIconSize = 16;
     QHash<QString, QString> m_widgetNames; // section token -> user rename

@@ -28,6 +28,14 @@ Item {
     // full width would cancel most of the room won by shrinking the icons.
     readonly property int labelFontPx: Math.max(7, Math.round(config.iconLabelFontPx * fitScale))
     readonly property int labelLineHeight: Math.round(labelFontPx * 1.4)
+    // A name may be drawn on one line or wrapped onto two (config.labelLines):
+    // the box is that many line heights tall, and it is the box — not the line —
+    // that every layout below reserves room for. DockConfig::iconLabelBoxHeight()
+    // is the same formula on the C++ side, which is what feeds the thickness.
+    readonly property int labelLines: config.labelLines
+    readonly property int labelBoxHeight: labelLineHeight * labelLines
+    // See labelW in the delegates: only wrapping needs the pixel.
+    readonly property int labelSlack: labelLines > 1 ? 1 : 0
     // The name box. On a horizontal dock this is the *cap* each cell shrinks
     // within (see labelW in the delegates). On a vertical dock every cell shares
     // one box, so using the cap there left a band of dead dock to the right of
@@ -743,9 +751,14 @@ Item {
                     // and font, and the box built from it then elides a name
                     // that fits ("Reloj" drawn as "Re…"). advanceWidth matches
                     // implicitWidth exactly (measured 2026-08-07).
+                    // The +1 is not cosmetic: with wrapping on, a box exactly
+                    // as wide as the measured advance can still make Qt break
+                    // the last character onto the second line ("Clock" drawn as
+                    // "Cloc/k"), so a name that fits gets one pixel of slack.
                     readonly property int labelW: !labelled ? 0
                         : (root.horizontal
-                           ? Math.min(Math.ceil(secLabelMetrics.advanceWidth), root.labelBoxWidth)
+                           ? Math.min(Math.ceil(secLabelMetrics.advanceWidth) + root.labelSlack,
+                                      root.labelBoxWidth)
                            : root.labelBoxWidth)
 
                     visible: root.sectionVisible(token)
@@ -792,8 +805,8 @@ Item {
                         }
                         implicitHeight: {
                             switch (sec.labelled ? root.widgetLabelMode : 0) {
-                            case 1: case 4: return contentH + root.labelGap + root.labelLineHeight
-                            case 2: case 5: return Math.max(contentH, root.labelLineHeight)
+                            case 1: case 4: return contentH + root.labelGap + root.labelBoxHeight
+                            case 2: case 5: return Math.max(contentH, root.labelBoxHeight)
                             }
                             return contentH
                         }
@@ -855,7 +868,7 @@ Item {
                                  : (secVisual.width - secVisual.contentW) / 2
                             y: root.widgetLabelMode === 1 && sec.labelled ? 0
                                : root.widgetLabelMode === 4 && sec.labelled
-                                 ? root.labelLineHeight + root.labelGap
+                                 ? root.labelBoxHeight + root.labelGap
                                  : (secVisual.height - secVisual.contentH) / 2
                             sourceComponent: root.componentFor(sec.token)
                             Binding {
@@ -875,7 +888,7 @@ Item {
                             visible: sec.labelled
                             text: sec.label
                             width: sec.labelW
-                            height: root.labelLineHeight
+                            height: root.labelBoxHeight
                             x: root.widgetLabelMode === 2 ? secVisual.contentW + root.labelGap
                                : root.widgetLabelMode === 5 ? 0
                                                             : (secVisual.width - width) / 2
@@ -883,6 +896,16 @@ Item {
                                : root.widgetLabelMode === 4 ? 0
                                                             : (secVisual.height - height) / 2
                             elide: Text.ElideRight
+                            // With two lines allowed the name wraps inside the
+                            // box instead of being elided, so a long title can be
+                            // read whole; the elide still catches what does not
+                            // fit in those lines. WrapAnywhere and not Wrap: a
+                            // single long word (and every CJK name) has no space
+                            // to break at, and Wrap would leave the second line
+                            // empty and elide anyway.
+                            wrapMode: root.labelLines > 1 ? Text.WrapAtWordBoundaryOrAnywhere
+                                                          : Text.NoWrap
+                            maximumLineCount: root.labelLines
                             horizontalAlignment: root.widgetLabelMode === 2 ? Text.AlignLeft
                                                  : root.widgetLabelMode === 5 ? Text.AlignRight
                                                                               : Text.AlignHCenter
@@ -1055,7 +1078,8 @@ Item {
                     // jumping around as windows open and close.
                     readonly property int labelW: !labelled ? 0
                         : (root.horizontal
-                           ? Math.min(Math.ceil(labelMetrics.advanceWidth), root.labelBoxWidth)
+                           ? Math.min(Math.ceil(labelMetrics.advanceWidth) + root.labelSlack,
+                                      root.labelBoxWidth)
                            : root.labelBoxWidth)
 
                     readonly property int cellW: {
@@ -1068,9 +1092,9 @@ Item {
                     }
                     readonly property int cellH: {
                         switch (labelled ? root.labelMode : 0) {
-                        case 1: case 4: return root.appIconPx + root.labelGap + root.labelLineHeight
-                        case 2: case 5: return Math.max(root.appIconPx, root.labelLineHeight)
-                        case 3: return root.labelLineHeight
+                        case 1: case 4: return root.appIconPx + root.labelGap + root.labelBoxHeight
+                        case 2: case 5: return Math.max(root.appIconPx, root.labelBoxHeight)
+                        case 3: return root.labelBoxHeight
                         }
                         return root.appIconPx
                     }
@@ -1211,7 +1235,7 @@ Item {
                                : root.labelMode === 5 ? delegateRoot.labelW + root.labelGap
                                                       : (content.width - width) / 2
                             y: root.labelMode === 1 ? 0
-                               : root.labelMode === 4 ? root.labelLineHeight + root.labelGap
+                               : root.labelMode === 4 ? root.labelBoxHeight + root.labelGap
                                                       : (content.height - height) / 2
 
                             Image {
@@ -1234,7 +1258,7 @@ Item {
                             visible: delegateRoot.labelled
                             text: delegateRoot.name
                             width: delegateRoot.labelW
-                            height: root.labelLineHeight
+                            height: root.labelBoxHeight
                             x: root.labelMode === 2 ? root.appIconPx + root.labelGap
                                : root.labelMode === 5 ? 0
                                                       : (content.width - width) / 2
@@ -1242,6 +1266,16 @@ Item {
                                : root.labelMode === 4 ? 0
                                                       : (content.height - height) / 2
                             elide: Text.ElideRight
+                            // With two lines allowed the name wraps inside the
+                            // box instead of being elided, so a long title can be
+                            // read whole; the elide still catches what does not
+                            // fit in those lines. WrapAnywhere and not Wrap: a
+                            // single long word (and every CJK name) has no space
+                            // to break at, and Wrap would leave the second line
+                            // empty and elide anyway.
+                            wrapMode: root.labelLines > 1 ? Text.WrapAtWordBoundaryOrAnywhere
+                                                          : Text.NoWrap
+                            maximumLineCount: root.labelLines
                             // Side labels hug the icon, so they align toward it.
                             horizontalAlignment: root.labelMode === 2 ? Text.AlignLeft
                                                  : root.labelMode === 5 ? Text.AlignRight
