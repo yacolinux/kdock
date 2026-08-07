@@ -8,6 +8,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QRect>
 
 class AbstractWindow : public QObject
 {
@@ -20,15 +21,24 @@ public:
     bool activated = false;
     bool minimized = false;
     bool skipTaskbar = false;
+    bool maximized = false;
+    bool maximizable = false;
+    bool transient = false; // has a parent window (dialog, popup)
     // uuids of the virtual desktops this window is on. **Empty means "on all
     // desktops"**, which is how the plasma-window protocol spells it — not
     // "on none". Only the plasma-window backend fills it in.
     QStringList desktops;
+    // Absolute geometry, updated by org_kde_plasma_window_geometry (KWin-only).
+    QRect geometry;
 
     virtual void activate() = 0;
     virtual void minimize() = 0;
     virtual void unminimize() {}
     virtual void requestClose() = 0;
+
+    virtual bool canMaximize() const { return false; }
+    virtual void maximize() {}
+    virtual void setMaximized(bool on) { Q_UNUSED(on); }
 
     // Move the window between virtual desktops *without* switching the view to
     // it — the compositor is told which desktop to add and which to drop, and

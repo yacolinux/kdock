@@ -1,4 +1,4 @@
-# kdock
+# kdock  ·  RELEASE 0.1
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -347,6 +347,37 @@ La configuración vive en el directorio de datos XDG:
 
 *Configuración → Backup* exporta e importa todo eso como un `.zip`.
 
+## Base de rendimiento (RELEASE 0.1)
+
+El dock arranca en ~240 MB RSS con el juego de docks del escritorio actual; cada escritorio
+virtual adicional suma ~57 MB la primera vez que se entra (construcción diferida), y a partir
+de ahí el RSS es plano — cambiar de escritorio solo muestra y oculta, nunca crea ni destruye.
+
+**Popups y tooltips.** Cada `ToolTip`, `Menu` y `Popup` con `popupType: Popup.Window` abre su
+propia `QQuickWindow` con un `QSGRenderThread` exclusivo y dos hilos del driver Mesa por
+contexto GL. QtQuick.Controls no los suelta después de cerrarlos, así que en una sesión de
+varias horas con media docena de docks el proceso acumulaba **68 hilos de render + 136 hilos
+Mesa** y un **heap de 571 MB**, sin techo. Desde esta versión:
+
+- Los **tooltips** usan las propiedades **adjuntas** de QtQuick (`ToolTip.text` /
+  `ToolTip.visible` / `ToolTip.delay`), que comparten **una sola instancia por ventana**
+  en vez de una por fila de la barra de tareas o del sistema. Patrón tomado de
+  `kdock-tilemenu`, donde bajó el RSS de 783 MB a 245 MB.
+
+- Los **popups de clic** (el menú de aplicaciones, el portapapeles, los discos, la red y los
+  selectores de tema) se cargan bajo demanda con `Loader { active: false }` y se destruyen
+  automáticamente tras **30 segundos sin uso**, con el mismo patrón de `tilemenu/`.
+
+El `ToolTip` del reloj mejorado mantiene su diseño personalizado como excepción (la API
+adjunta no admite `contentItem`).
+
+| | Antes (11 h / 6 docks) | Después |
+|---|---|---|
+| `QSGRenderThread` | 68 | ~4-6 (uno por ventana dock visible) |
+| Hilos Mesa | 136 | ~8-12 |
+| Heap | 571 MB | ~180 MB (estimado) |
+| Buffers i915 | 529 MB | ~120 MB (estimado) |
+
 ## Estructura del repositorio
 
 | Ruta | Qué es |
@@ -371,8 +402,10 @@ La configuración vive en el directorio de datos XDG:
 - **El espacio reservado no es por escritorio virtual.** KWin calcula el área de maximizado
   por monitor, no por escritorio, así que si los docks de dos escritorios reservan distinto
   espacio (otro borde, otro grosor), al cambiar de escritorio las ventanas maximizadas se
-  re-acomodan en todos. Es el gestor de ventanas haciendo su trabajo; kdock no interviene. Si
-  te molesta, que compartan borde y grosor —o que se auto-oculten, que no reservan nada.
+  re-acomodan en todos. kdock corrige esto: tras cada cambio, re-ejecuta el maximizado de las
+  ventanas que ya lo estaban (con reintentos escalonados), así que recuperan su tamaño incluso
+  con docks de distinto grosor. Se desactiva con el casillero de Configuración → General o con
+  `KDOCK_NO_WINDOW_ACTIONS=1`.
 - **Fondos por escritorio**: se configuran los escritorios 2 a 5 (el 1 es el de KDE); a partir
   del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y

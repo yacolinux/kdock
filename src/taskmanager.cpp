@@ -34,11 +34,12 @@ void WlrWindow::zwlr_foreign_toplevel_handle_v1_app_id(const QString &id)
 
 void WlrWindow::zwlr_foreign_toplevel_handle_v1_state(wl_array *state)
 {
-    activated = minimized = false;
+    activated = minimized = maximized = false;
     const auto *begin = static_cast<const uint32_t *>(state->data);
     const auto *end = begin + state->size / sizeof(uint32_t);
     for (const uint32_t *it = begin; it != end; ++it) {
         switch (*it) {
+        case ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MAXIMIZED: maximized = true; break;
         case ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_MINIMIZED: minimized = true; break;
         case ZWLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_ACTIVATED: activated = true; break;
         }

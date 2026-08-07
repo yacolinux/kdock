@@ -171,6 +171,18 @@ void DockConfig::setSharedFavorites(const QStringList &favorites)
     s.setValue(QStringLiteral("sharedMenuFavorites"), favorites);
 }
 
+bool DockConfig::maximizeWindowsOnDesktop()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("maximizeWindowsOnDesktop"), true).toBool();
+}
+
+void DockConfig::setMaximizeWindowsOnDesktop(bool on)
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("maximizeWindowsOnDesktop"), on);
+}
+
 bool DockConfig::darkModeAllDocks()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

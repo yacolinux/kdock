@@ -29,6 +29,18 @@ void PlasmaWindow::unminimize()
     set_state(ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MINIMIZED, 0);
 }
 
+void PlasmaWindow::maximize()
+{
+    set_state(ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZED,
+              ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZED);
+}
+
+void PlasmaWindow::setMaximized(bool on)
+{
+    set_state(ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZED,
+              on ? ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZED : 0);
+}
+
 void PlasmaWindow::requestClose()
 {
     close();
@@ -90,6 +102,8 @@ void PlasmaWindow::org_kde_plasma_window_state_changed(uint32_t flags)
 {
     activated = flags & ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_ACTIVE;
     minimized = flags & ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MINIMIZED;
+    maximized = flags & ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZED;
+    maximizable = flags & ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_MAXIMIZABLE;
     skipTaskbar = flags & ORG_KDE_PLASMA_WINDOW_MANAGEMENT_STATE_SKIPTASKBAR;
     emit changed();
 }
@@ -103,6 +117,16 @@ void PlasmaWindow::org_kde_plasma_window_initial_state()
 void PlasmaWindow::org_kde_plasma_window_unmapped()
 {
     emit windowClosed();
+}
+
+void PlasmaWindow::org_kde_plasma_window_parent_window(struct ::org_kde_plasma_window *parent)
+{
+    transient = (parent != nullptr);
+}
+
+void PlasmaWindow::org_kde_plasma_window_geometry(int32_t x, int32_t y, uint32_t width, uint32_t height)
+{
+    geometry = QRect(x, y, static_cast<int>(width), static_cast<int>(height));
 }
 
 // ---------------------------------------------------------------------------

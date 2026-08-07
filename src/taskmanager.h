@@ -23,6 +23,9 @@ public:
     void minimize() override { set_minimized(); }
     void unminimize() override { unset_minimized(); }
     void requestClose() override { zwlr_foreign_toplevel_handle_v1::close(); }
+    bool canMaximize() const override { return true; }
+    void maximize() override { set_maximized(); }
+    void setMaximized(bool on) override { if (on) set_maximized(); else unset_maximized(); }
 
 signals:
     void firstDone();

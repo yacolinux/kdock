@@ -769,6 +769,20 @@ QWidget *SettingsDialog::createGeneralTab()
     imgRow->addWidget(imgClear);
     form->addRow(tr("Panel image:"), imgRow);
 
+    // Re-maximize windows after a virtual-desktop switch when the two docks
+    // briefly coexist on the same output. Shared setting, not per dock.
+    {
+        auto *cb = new QCheckBox(tr("Restore maximized windows after desktop switch"), tab);
+        cb->setChecked(DockConfig::maximizeWindowsOnDesktop());
+        cb->setToolTip(tr("When a virtual-desktop switch briefly shows two docks on the same "
+                          "output, KWin can shrink the work area and leave maximized windows "
+                          "at the wrong size. This re-maximizes the ones that were maximized "
+                          "before the switch."));
+        connect(cb, &QCheckBox::toggled, this,
+                [](bool on) { DockConfig::setMaximizeWindowsOnDesktop(on); });
+        form->addRow(tr("Maximize windows:"), cb);
+    }
+
     // Separators (both kinds) and their size live in the Layout tab: they are
     // part of the section order, not a numeric setting.
 

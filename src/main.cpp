@@ -17,6 +17,7 @@
 #include "clockwidget2.h"
 #include "clipboardhistory.h"
 #include "desktopentry.h"
+#include "desktopmaximize.h"
 #include "dockconfig.h"
 #include "dockmanager.h"
 #include "dockmodel.h"
@@ -179,6 +180,16 @@ int main(int argc, char *argv[])
                 screen = args.at(si + 1);
             return runNextWallpaperCli(app, screen);
         }
+        // One-shot diagnostic probe: dump window state on every virtual-desktop
+        // switch without building any dock.
+        if (args.contains(QStringLiteral("--probe-maximize"))) {
+            const bool way = app.platformName().contains(QLatin1String("wayland"));
+            auto *probeMonitor = way ? WindowMonitor::create(&app) : nullptr;
+            VirtualDesktops probeDesktops;
+            return probeMonitor
+                ? DesktopMaximize::runProbe(&probeDesktops, probeMonitor)
+                : 1;
+        }
     }
 
     // Register types so QML can handle them
@@ -261,6 +272,12 @@ int main(int argc, char *argv[])
     // sees their real mode instead of "no dock is dark yet".
     DarkModeAppearance darkAppearance(&theme, &appearance);
     darkAppearance.sync();
+
+    // Re-maximize windows that lost their state when sync() briefly left two
+    // docks reserving exclusive zone on the same output during a desktop switch.
+    // No config checkbox means this runs silently; the global on/off is in the
+    // shared settings file (General tab) and the env escape below.
+    DesktopMaximize desktopMaximize(&virtualDesktops, monitor);
 
     // Accessory binary: bring up the preview strips if the user left them on
     // (Settings -> Previews). It is a separate process with its own config, so

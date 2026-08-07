@@ -24,6 +24,9 @@ public:
     void minimize() override;
     void unminimize() override;
     void requestClose() override;
+    bool canMaximize() const override { return true; }
+    void maximize() override;
+    void setMaximized(bool on) override;
     // Available since version 8 of the interface; the client binds 20.
     bool canChangeDesktop() const override { return true; }
     void moveToDesktop(const QString &enterId, const QString &leaveId) override;
@@ -43,6 +46,8 @@ protected:
     // AbstractWindow::desktops).
     void org_kde_plasma_window_virtual_desktop_entered(const QString &id) override;
     void org_kde_plasma_window_virtual_desktop_left(const QString &id) override;
+    void org_kde_plasma_window_parent_window(struct ::org_kde_plasma_window *parent) override;
+    void org_kde_plasma_window_geometry(int32_t x, int32_t y, uint32_t width, uint32_t height) override;
 };
 
 class PlasmaWindowMonitor : public QWaylandClientExtensionTemplate<PlasmaWindowMonitor>,

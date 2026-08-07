@@ -250,6 +250,13 @@ public:
     // every live DockConfig in the process and emits menuFavoritesChanged().
     static void setFavoritesShared(bool shared);
 
+    // Whether the dock should re-maximize windows that were maximized before a
+    // virtual-desktop switch (work-around for the work-area shrink when the
+    // incoming and outgoing docks briefly coexist on the same output). Default
+    // ON. Disable with KDOCK_NO_WINDOW_ACTIONS=1 for test harnesses.
+    static bool maximizeWindowsOnDesktop();
+    static void setMaximizeWindowsOnDesktop(bool on);
+
     // ---- Dark mode (app-wide part) ----------------------------------------
     // Breeze Dark's two colors, copied into the app on purpose: the dark scheme
     // must not shift under the dock when the user edits their KDE color scheme,

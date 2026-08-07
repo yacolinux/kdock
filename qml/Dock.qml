@@ -794,6 +794,13 @@ Item {
 
                         readonly property int sectionIndex: sec.index
 
+                        // Attached ToolTip: shares one instance per dock window,
+                        // instead of creating one Popup.Window per section row.
+                        ToolTip.text: root.sectionTooltip(sec.token)
+                        ToolTip.visible: secMouse.containsMouse && sec.draggable
+                                         && !secMouse.drag.active && sec.token !== "clock2"
+                        ToolTip.delay: 400
+
 
                         Drag.active: secMouse.drag.active
                         Drag.source: secVisual
@@ -913,14 +920,6 @@ Item {
                                 if (containsMouse && sec.token === "volume")
                                     volume.refresh()
                             }
-                        }
-
-                        ToolTip {
-                            popupType: Popup.Window
-                            visible: secMouse.containsMouse && sec.draggable && !secMouse.drag.active
-                                     && sec.token !== "clock2"
-                            delay: 400
-                            text: root.sectionTooltip(sec.token)
                         }
 
                         Menu {
@@ -1095,6 +1094,12 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
 
                         readonly property int itemIndex: delegateRoot.index
+
+                        // Attached ToolTip: one instance per dock window.
+                        ToolTip.text: delegateRoot.title || delegateRoot.name
+                        ToolTip.visible: mouseArea.containsMouse && !contextMenu.visible
+                                         && !mouseArea.drag.active
+                        ToolTip.delay: 600
 
                         Drag.active: mouseArea.drag.active
                         Drag.source: content
@@ -1289,14 +1294,6 @@ Item {
                                                    delegateRoot.active ? 1.0 : 0.55)
                                 }
                             }
-                        }
-
-                        ToolTip {
-                            popupType: Popup.Window
-                            visible: mouseArea.containsMouse && !contextMenu.visible
-                                     && !mouseArea.drag.active
-                            delay: 600
-                            text: delegateRoot.title || delegateRoot.name
                         }
 
                         MouseArea {
@@ -1659,6 +1656,10 @@ Item {
             id: sessionRoot
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
+
+            ToolTip.text: qsTr("Session")
+            ToolTip.visible: sessionMouse.containsMouse && !sessionMenu.visible
+            ToolTip.delay: 400
             Image {
                 id: sessionIcon
                 anchors.centerIn: parent
@@ -1670,12 +1671,6 @@ Item {
                 opacity: 0.85
                 scale: sessionMouse.containsMouse ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: sessionMouse.containsMouse && !sessionMenu.visible
-                delay: 400
-                text: qsTr("Session")
             }
             MouseArea {
                 id: sessionMouse
@@ -1727,6 +1722,10 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: battery.tooltipText
+            ToolTip.visible: batteryMouse.containsMouse && !profileMenu.visible
+            ToolTip.delay: 400
+
             function profileIcon(p) {
                 if (p === "power-saver") return "power-profile-power-saver"
                 if (p === "balanced") return "power-profile-balanced"
@@ -1762,12 +1761,6 @@ Item {
                 radius: 1.5
                 color: battery.percentage <= 15 && !battery.charging
                        ? "#e05050" : theme.highlight
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: batteryMouse.containsMouse && !profileMenu.visible
-                delay: 400
-                text: battery.tooltipText
             }
             MouseArea {
                 id: batteryMouse
@@ -1828,9 +1821,14 @@ Item {
             property var _theme: theme
             property var _config: config
             // Applications Menu is exempt from Widget icon scale: it always
-            // renders at the base iconSize.
+            // draws at the full icon size.
             implicitWidth: root.appIconPx
             implicitHeight: root.appIconPx
+
+            ToolTip.text: qsTr("Applications")
+            ToolTip.visible: menuMouse.containsMouse
+                             && !(menuLoader.item && menuLoader.item.visible)
+            ToolTip.delay: 400
 
             Image {
                 id: menuIcon
@@ -1840,14 +1838,9 @@ Item {
                 source: "image://icon/" + (config.menuIcon || "applications-all") + root.widgetIconSuffix
                 sourceSize: Qt.size(root.appIconPx * Screen.devicePixelRatio,
                                     root.appIconPx * Screen.devicePixelRatio)
-                scale: menuMouse.containsMouse || menuPopup.visible ? 1.12 : 1.0
+                scale: menuMouse.containsMouse
+                        || (menuLoader.item && menuLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: menuMouse.containsMouse && !menuPopup.visible
-                delay: 400
-                text: qsTr("Applications")
             }
             MouseArea {
                 id: menuMouse
@@ -1864,17 +1857,18 @@ Item {
                 // click on the icon = toggle closed).
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) { menuCtxMenu.popup(); return }
-                    if (menuPopup.visible) { menuPopup.close(); return }
-                    if (Date.now() - menuPopup.closedAt < 300) return
-                    menuPopup.open()
+                    if (menuLoader.active && menuLoader.item.visible) {
+                        menuLoader.item.close(); return
+                    }
+                    if (Date.now() - menuLoader.closedAt < 300) return
+                    menuLoader.active = true
+                    menuLoader.item.open()
                 }
             }
 
             Menu {
                 id: menuCtxMenu
                 popupType: Popup.Window
-                // Keeps the dock from auto-hiding while the menu is open, same as
-                // the section menu of the other widgets.
                 onAboutToShow: root.menuOpen = true
                 onClosed: root.menuOpen = false
                 IconMenuItem {
@@ -1890,25 +1884,37 @@ Item {
                 }
             }
 
-            AppMenuPopup {
-                id: menuPopup
+            Loader {
+                id: menuLoader
+                active: false
                 property double closedAt: 0
-                theme: menuRoot._theme
-                config: menuRoot._config
-                parent: menuRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (menuRoot._config.edge === 2) return menuRoot.width + 8   // left dock -> right
-                    if (menuRoot._config.edge === 3) return -width - 8           // right dock -> left
-                    return -width / 2 + menuRoot.width / 2
-                }
-                y: {
-                    if (menuRoot._config.edge === 0) return -height - 8          // bottom dock -> above
-                    if (menuRoot._config.edge === 1) return menuRoot.height + 8  // top dock -> below
-                    return 0
+                sourceComponent: AppMenuPopup {
+                    id: menuPopup
+                    theme: menuRoot._theme
+                    config: menuRoot._config
+                    parent: menuRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            menuLoader.closedAt = Date.now()
+                            idleTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (menuRoot._config.edge === 2) return menuRoot.width + 8
+                        if (menuRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + menuRoot.width / 2
+                    }
+                    y: {
+                        if (menuRoot._config.edge === 0) return -height - 8
+                        if (menuRoot._config.edge === 1) return menuRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleTimer
+                        interval: 30000
+                        onTriggered: menuLoader.active = false
+                    }
                 }
             }
         }
@@ -1926,6 +1932,10 @@ Item {
             implicitWidth: root.appIconPx
             implicitHeight: root.appIconPx
 
+            ToolTip.text: qsTr("Menú de mosaicos")
+            ToolTip.visible: tileMouse.containsMouse
+            ToolTip.delay: 400
+
             Image {
                 id: tileIcon
                 anchors.centerIn: parent
@@ -1937,12 +1947,6 @@ Item {
                                     root.appIconPx * Screen.devicePixelRatio)
                 scale: tileMouse.containsMouse ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: tileMouse.containsMouse
-                delay: 400
-                text: qsTr("Menú de mosaicos")
             }
             MouseArea {
                 id: tileMouse
@@ -1991,6 +1995,11 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: qsTr("Portapapeles")
+            ToolTip.visible: clipMouse.containsMouse
+                             && !(clipLoader.item && clipLoader.item.visible)
+            ToolTip.delay: 400
+
             Image {
                 id: clipIcon
                 anchors.centerIn: parent
@@ -1999,14 +2008,9 @@ Item {
                 source: "image://icon/edit-paste" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: clipMouse.containsMouse || clipPopup.visible ? 1.12 : 1.0
+                scale: clipMouse.containsMouse
+                        || (clipLoader.item && clipLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: clipMouse.containsMouse && !clipPopup.visible
-                delay: 400
-                text: qsTr("Portapapeles")
             }
             MouseArea {
                 id: clipMouse
@@ -2018,9 +2022,12 @@ Item {
                 // reopen when the click is the one that just closed it.
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) { clipMenu.popup(); return }
-                    if (clipPopup.visible) { clipPopup.close(); return }
-                    if (Date.now() - clipPopup.closedAt < 300) return
-                    clipPopup.open()
+                    if (clipLoader.active && clipLoader.item.visible) {
+                        clipLoader.item.close(); return
+                    }
+                    if (Date.now() - clipLoader.closedAt < 300) return
+                    clipLoader.active = true
+                    clipLoader.item.open()
                 }
             }
 
@@ -2055,25 +2062,37 @@ Item {
                 }
             }
 
-            ClipboardPopup {
-                id: clipPopup
+            Loader {
+                id: clipLoader
+                active: false
                 property double closedAt: 0
-                theme: clipRoot._theme
-                config: clipRoot._config
-                parent: clipRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (clipRoot._config.edge === 2) return clipRoot.width + 8   // left dock -> right
-                    if (clipRoot._config.edge === 3) return -width - 8           // right dock -> left
-                    return -width / 2 + clipRoot.width / 2
-                }
-                y: {
-                    if (clipRoot._config.edge === 0) return -height - 8          // bottom dock -> above
-                    if (clipRoot._config.edge === 1) return clipRoot.height + 8  // top dock -> below
-                    return 0
+                sourceComponent: ClipboardPopup {
+                    id: clipPopup
+                    theme: clipRoot._theme
+                    config: clipRoot._config
+                    parent: clipRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            clipLoader.closedAt = Date.now()
+                            idleClipTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (clipRoot._config.edge === 2) return clipRoot.width + 8
+                        if (clipRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + clipRoot.width / 2
+                    }
+                    y: {
+                        if (clipRoot._config.edge === 0) return -height - 8
+                        if (clipRoot._config.edge === 1) return clipRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleClipTimer
+                        interval: 30000
+                        onTriggered: clipLoader.active = false
+                    }
                 }
             }
         }
@@ -2089,6 +2108,11 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: qsTr("Dispositivos extraíbles")
+            ToolTip.visible: disksMouse.containsMouse
+                             && !(disksLoader.item && disksLoader.item.visible)
+            ToolTip.delay: 400
+
             Image {
                 id: disksIcon
                 anchors.centerIn: parent
@@ -2097,14 +2121,9 @@ Item {
                 source: "image://icon/drive-removable-media-usb" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: disksMouse.containsMouse || disksPopup.visible ? 1.12 : 1.0
+                scale: disksMouse.containsMouse
+                        || (disksLoader.item && disksLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: disksMouse.containsMouse && !disksPopup.visible
-                delay: 400
-                text: qsTr("Dispositivos extraíbles")
             }
             MouseArea {
                 id: disksMouse
@@ -2112,31 +2131,46 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 onClicked: {
-                    if (disksPopup.visible) { disksPopup.close(); return }
-                    if (Date.now() - disksPopup.closedAt < 300) return
-                    disksPopup.open()
+                    if (disksLoader.active && disksLoader.item.visible) {
+                        disksLoader.item.close(); return
+                    }
+                    if (Date.now() - disksLoader.closedAt < 300) return
+                    disksLoader.active = true
+                    disksLoader.item.open()
                 }
             }
 
-            DisksPopup {
-                id: disksPopup
+            Loader {
+                id: disksLoader
+                active: false
                 property double closedAt: 0
-                theme: disksRoot._theme
-                config: disksRoot._config
-                parent: disksRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (disksRoot._config.edge === 2) return disksRoot.width + 8
-                    if (disksRoot._config.edge === 3) return -width - 8
-                    return -width / 2 + disksRoot.width / 2
-                }
-                y: {
-                    if (disksRoot._config.edge === 0) return -height - 8
-                    if (disksRoot._config.edge === 1) return disksRoot.height + 8
-                    return 0
+                sourceComponent: DisksPopup {
+                    id: disksPopup
+                    theme: disksRoot._theme
+                    config: disksRoot._config
+                    parent: disksRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            disksLoader.closedAt = Date.now()
+                            idleDisksTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (disksRoot._config.edge === 2) return disksRoot.width + 8
+                        if (disksRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + disksRoot.width / 2
+                    }
+                    y: {
+                        if (disksRoot._config.edge === 0) return -height - 8
+                        if (disksRoot._config.edge === 1) return disksRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleDisksTimer
+                        interval: 30000
+                        onTriggered: disksLoader.active = false
+                    }
                 }
             }
         }
@@ -2152,6 +2186,10 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: network && network.primaryName ? network.primaryName : qsTr("Red")
+            ToolTip.visible: netMouse.containsMouse && !(netLoader.item && netLoader.item.visible)
+            ToolTip.delay: 400
+
             Image {
                 id: netIcon
                 anchors.centerIn: parent
@@ -2161,14 +2199,9 @@ Item {
                         + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: netMouse.containsMouse || netPopup.visible ? 1.12 : 1.0
+                scale: netMouse.containsMouse
+                        || (netLoader.item && netLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: netMouse.containsMouse && !netPopup.visible
-                delay: 400
-                text: network && network.primaryName ? network.primaryName : qsTr("Red")
             }
             MouseArea {
                 id: netMouse
@@ -2180,9 +2213,12 @@ Item {
                     // disabled for those), so the right click is this widget's
                     // own menu — same arrangement as the clipboard.
                     if (mouse.button === Qt.RightButton) { netMenu.popup(); return }
-                    if (netPopup.visible) { netPopup.close(); return }
-                    if (Date.now() - netPopup.closedAt < 300) return
-                    netPopup.open()
+                    if (netLoader.active && netLoader.item.visible) {
+                        netLoader.item.close(); return
+                    }
+                    if (Date.now() - netLoader.closedAt < 300) return
+                    netLoader.active = true
+                    netLoader.item.open()
                 }
             }
 
@@ -2211,25 +2247,37 @@ Item {
                 }
             }
 
-            NetworkPopup {
-                id: netPopup
+            Loader {
+                id: netLoader
+                active: false
                 property double closedAt: 0
-                theme: netRoot._theme
-                config: netRoot._config
-                parent: netRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (netRoot._config.edge === 2) return netRoot.width + 8
-                    if (netRoot._config.edge === 3) return -width - 8
-                    return -width / 2 + netRoot.width / 2
-                }
-                y: {
-                    if (netRoot._config.edge === 0) return -height - 8
-                    if (netRoot._config.edge === 1) return netRoot.height + 8
-                    return 0
+                sourceComponent: NetworkPopup {
+                    id: netPopup
+                    theme: netRoot._theme
+                    config: netRoot._config
+                    parent: netRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            netLoader.closedAt = Date.now()
+                            idleNetTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (netRoot._config.edge === 2) return netRoot.width + 8
+                        if (netRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + netRoot.width / 2
+                    }
+                    y: {
+                        if (netRoot._config.edge === 0) return -height - 8
+                        if (netRoot._config.edge === 1) return netRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleNetTimer
+                        interval: 30000
+                        onTriggered: netLoader.active = false
+                    }
                 }
             }
         }
@@ -2292,6 +2340,11 @@ Item {
                                  pagerNumber.implicitWidth + 8)
                     width: pagerCell.side
                     height: pagerCell.side
+
+                    ToolTip.text: virtualDesktops ? virtualDesktops.nameOf(pagerCell.position) : ""
+                    ToolTip.visible: pagerMouse.containsMouse
+                    ToolTip.delay: 400
+
                     Rectangle {
                         anchors.fill: parent
                         radius: 3
@@ -2312,12 +2365,6 @@ Item {
                         // here (the reverse would not).
                         color: pagerCell.isCurrent ? pagerGrid.highlightTextColor
                                                    : root.dockTextColor
-                    }
-                    ToolTip {
-                        popupType: Popup.Window
-                        visible: pagerMouse.containsMouse
-                        delay: 400
-                        text: virtualDesktops ? virtualDesktops.nameOf(pagerCell.position) : ""
                     }
                     MouseArea {
                         id: pagerMouse
@@ -2342,6 +2389,11 @@ Item {
                     id: systrayItem
                     width: root.systrayIconPx
                     height: root.systrayIconPx
+
+                    ToolTip.text: model.tooltip || model.service
+                    ToolTip.visible: systrayMouse.containsMouse
+                    ToolTip.delay: 400
+
                     Image {
                         anchors.centerIn: parent
                         width: Math.round(root.systrayIconPx * 0.75)
@@ -2355,12 +2407,6 @@ Item {
                                             root.systrayIconPx * Screen.devicePixelRatio)
                         scale: systrayMouse.containsMouse ? 1.12 : 1.0
                         Behavior on scale { NumberAnimation { duration: 120 } }
-                    }
-                    ToolTip {
-                        popupType: Popup.Window
-                        visible: systrayMouse.containsMouse
-                        delay: 400
-                        text: model.tooltip || model.service
                     }
                     MouseArea {
                         id: systrayMouse
@@ -2473,6 +2519,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: appearance && appearance.currentIconTheme
+                          ? qsTr("Iconset: %1").arg(appearance.currentIconTheme)
+                          : qsTr("Iconset de KDE")
+            ToolTip.visible: itMouse.containsMouse
+                             && !(itLoader.item && itLoader.item.visible)
+            ToolTip.delay: 400
+
             Image {
                 anchors.centerIn: parent
                 width: root.widgetIconPx
@@ -2480,16 +2533,9 @@ Item {
                 source: "image://icon/preferences-desktop-icons" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: itMouse.containsMouse || itPopup.visible ? 1.12 : 1.0
+                scale: itMouse.containsMouse
+                        || (itLoader.item && itLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: itMouse.containsMouse && !itPopup.visible
-                delay: 400
-                text: appearance && appearance.currentIconTheme
-                      ? qsTr("Iconset: %1").arg(appearance.currentIconTheme)
-                      : qsTr("Iconset de KDE")
             }
             MouseArea {
                 id: itMouse
@@ -2497,34 +2543,47 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 onClicked: {
-                    if (itPopup.visible) { itPopup.close(); return }
-                    // Closing by clicking outside already dismissed it; without
-                    // this the same click would reopen it.
-                    if (Date.now() - itPopup.closedAt < 300) return
-                    itPopup.open()
+                    if (itLoader.active && itLoader.item.visible) {
+                        itLoader.item.close(); return
+                    }
+                    if (Date.now() - itLoader.closedAt < 300) return
+                    itLoader.active = true
+                    itLoader.item.open()
                 }
             }
 
-            ThemeListPopup {
-                id: itPopup
+            Loader {
+                id: itLoader
+                active: false
                 property double closedAt: 0
-                mode: "icons"
-                theme: itRoot._theme
-                config: itRoot._config
-                parent: itRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (itRoot._config.edge === 2) return itRoot.width + 8
-                    if (itRoot._config.edge === 3) return -width - 8
-                    return -width / 2 + itRoot.width / 2
-                }
-                y: {
-                    if (itRoot._config.edge === 0) return -height - 8
-                    if (itRoot._config.edge === 1) return itRoot.height + 8
-                    return 0
+                sourceComponent: ThemeListPopup {
+                    id: itPopup
+                    mode: "icons"
+                    theme: itRoot._theme
+                    config: itRoot._config
+                    parent: itRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            itLoader.closedAt = Date.now()
+                            idleItTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (itRoot._config.edge === 2) return itRoot.width + 8
+                        if (itRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + itRoot.width / 2
+                    }
+                    y: {
+                        if (itRoot._config.edge === 0) return -height - 8
+                        if (itRoot._config.edge === 1) return itRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleItTimer
+                        interval: 30000
+                        onTriggered: itLoader.active = false
+                    }
                 }
             }
         }
@@ -2539,6 +2598,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
+            ToolTip.text: appearance && appearance.currentColorScheme
+                          ? qsTr("Colores: %1").arg(appearance.currentColorScheme)
+                          : qsTr("Esquema de color de KDE")
+            ToolTip.visible: csMouse.containsMouse
+                             && !(csLoader.item && csLoader.item.visible)
+            ToolTip.delay: 400
+
             Image {
                 anchors.centerIn: parent
                 width: root.widgetIconPx
@@ -2546,16 +2612,9 @@ Item {
                 source: "image://icon/preferences-desktop-color" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: csMouse.containsMouse || csPopup.visible ? 1.12 : 1.0
+                scale: csMouse.containsMouse
+                        || (csLoader.item && csLoader.item.visible) ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
-            }
-            ToolTip {
-                popupType: Popup.Window
-                visible: csMouse.containsMouse && !csPopup.visible
-                delay: 400
-                text: appearance && appearance.currentColorScheme
-                      ? qsTr("Colores: %1").arg(appearance.currentColorScheme)
-                      : qsTr("Esquema de color de KDE")
             }
             MouseArea {
                 id: csMouse
@@ -2563,32 +2622,47 @@ Item {
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton
                 onClicked: {
-                    if (csPopup.visible) { csPopup.close(); return }
-                    if (Date.now() - csPopup.closedAt < 300) return
-                    csPopup.open()
+                    if (csLoader.active && csLoader.item.visible) {
+                        csLoader.item.close(); return
+                    }
+                    if (Date.now() - csLoader.closedAt < 300) return
+                    csLoader.active = true
+                    csLoader.item.open()
                 }
             }
 
-            ThemeListPopup {
-                id: csPopup
+            Loader {
+                id: csLoader
+                active: false
                 property double closedAt: 0
-                mode: "colors"
-                theme: csRoot._theme
-                config: csRoot._config
-                parent: csRoot
-                onVisibleChanged: {
-                    root.menuOpen = visible
-                    if (!visible) closedAt = Date.now()
-                }
-                x: {
-                    if (csRoot._config.edge === 2) return csRoot.width + 8
-                    if (csRoot._config.edge === 3) return -width - 8
-                    return -width / 2 + csRoot.width / 2
-                }
-                y: {
-                    if (csRoot._config.edge === 0) return -height - 8
-                    if (csRoot._config.edge === 1) return csRoot.height + 8
-                    return 0
+                sourceComponent: ThemeListPopup {
+                    id: csPopup
+                    mode: "colors"
+                    theme: csRoot._theme
+                    config: csRoot._config
+                    parent: csRoot
+                    onVisibleChanged: {
+                        root.menuOpen = visible
+                        if (!visible) {
+                            csLoader.closedAt = Date.now()
+                            idleCsTimer.restart()
+                        }
+                    }
+                    x: {
+                        if (csRoot._config.edge === 2) return csRoot.width + 8
+                        if (csRoot._config.edge === 3) return -width - 8
+                        return -width / 2 + csRoot.width / 2
+                    }
+                    y: {
+                        if (csRoot._config.edge === 0) return -height - 8
+                        if (csRoot._config.edge === 1) return csRoot.height + 8
+                        return 0
+                    }
+                    Timer {
+                        id: idleCsTimer
+                        interval: 30000
+                        onTriggered: csLoader.active = false
+                    }
                 }
             }
         }
