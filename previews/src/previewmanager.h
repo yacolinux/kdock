@@ -60,6 +60,11 @@ public:
 
     void showSettings();
 
+    // Language changed (kdock wrote it to the shared conf): re-evaluate every
+    // qsTr() of the strips and rebuild the settings panel, which is Qt Widgets
+    // and baked its strings in when it was built.
+    void retranslate();
+
     // Used by the --dump-captures diagnostic in main.cpp.
     KWinWindows *windows() const { return m_windows; }
     ThumbnailSource *source() const;

@@ -50,6 +50,16 @@ qt_add_resources(kdock-previews "previews-qml"
     FILES qml/PreviewStrip.qml qml/PreviewCard.qml qml/StripMenu.qml
 )
 
+# Las cuatro capas base de traducción (nunca las ALT: este binario resuelve
+# siempre a la base, ver Translations::BaseOnly). Con BASE ".." caen en
+# :/translations, que es donde las busca seedFiles().
+qt_add_resources(kdock-previews "previews-translations"
+    PREFIX "/"
+    BASE ".."
+    FILES ../translations/capabase.md ../translations/english.md
+          ../translations/spanish.md ../translations/zh-CN.md
+)
+
 # The in-tree layer-shell integration is a static Qt plugin.
 target_compile_definitions(kdock-previews PRIVATE QT_STATICPLUGIN)
 

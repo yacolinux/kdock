@@ -4,6 +4,7 @@
 #include "dockconfig.h"
 #include "translations.h"
 
+#include <QCoreApplication>
 #include <QIcon>
 #include <QProcess>
 #include <QVariantMap>
@@ -49,6 +50,25 @@ const std::array<CategoryDef, 11> kCategories = {{
      {"Utility", "Accessories", nullptr, nullptr}},
 }};
 const char *kOther = "Other";
+
+// The category names double as section keys, so the table above has to keep
+// them in English. What the sidebar *shows* goes through the translation layer:
+// declared here so lupdate finds them, resolved by categoryLabel() at display
+// time (the key is unchanged, only the label moves).
+const char *const kCategoryLabels[] = {
+    QT_TRANSLATE_NOOP("AppMenu", "Development"), QT_TRANSLATE_NOOP("AppMenu", "Education"),
+    QT_TRANSLATE_NOOP("AppMenu", "Games"),       QT_TRANSLATE_NOOP("AppMenu", "Graphics"),
+    QT_TRANSLATE_NOOP("AppMenu", "Internet"),    QT_TRANSLATE_NOOP("AppMenu", "Multimedia"),
+    QT_TRANSLATE_NOOP("AppMenu", "Office"),      QT_TRANSLATE_NOOP("AppMenu", "Science"),
+    QT_TRANSLATE_NOOP("AppMenu", "Settings"),    QT_TRANSLATE_NOOP("AppMenu", "System"),
+    QT_TRANSLATE_NOOP("AppMenu", "Utilities"),   QT_TRANSLATE_NOOP("AppMenu", "Other"),
+};
+
+QString categoryLabel(const QString &category)
+{
+    Q_UNUSED(kCategoryLabels);
+    return QCoreApplication::translate("AppMenu", category.toUtf8().constData());
+}
 const IconCandidates kOtherIcons{"applications-other", "applications-utilities", nullptr};
 const IconCandidates kFavoritesIcons{"bookmarks", "emblem-favorite", "starred-symbolic"};
 const IconCandidates kAllIcons{"applications-all", "applications-other", nullptr};
@@ -171,7 +191,7 @@ QVariantList AppMenu::sections() const
     list.append(row(kFavoritesKey, tr("Favorites"), pickIcon(kFavoritesIcons)));
     list.append(row(kAllKey, tr("All Applications"), pickIcon(kAllIcons)));
     for (const QString &cat : m_presentCategories)
-        list.append(row(kCatPrefix + cat, cat, pickIcon(iconsForCategory(cat))));
+        list.append(row(kCatPrefix + cat, categoryLabel(cat), pickIcon(iconsForCategory(cat))));
     appendMenuSections(list, m_tree, QString(), 0);
     return list;
 }

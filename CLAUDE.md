@@ -549,6 +549,17 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   nuevo hay que agregarlo ahí, igual que un `.qml`.
 - **`Translations` se instancia primero en `main.cpp`**, antes que cualquier otro singleton:
   instala el `QTranslator`, y lo que se haya construido antes ya tiene sus cadenas en capabase.
+- **Las cadenas de `kdock-previews` y `kdock-tilemenu` están en el mismo catálogo** (el
+  `gen-capabase.py` escanea los tres árboles), y los dos binarios cargan **la base** del
+  idioma que eligió el dock: `english-ALT-hacker` les da `english`. Si agregás una cadena en
+  un accesorio, se regenera igual que las del dock.
+- **Trampa del arnés: un `XDG_DATA_HOME` de prueba reusado esconde las traducciones nuevas.**
+  `seedFiles()` copia del qrc **solo lo que falta** y nunca pisa un archivo existente — que es
+  lo correcto para el usuario, porque esos archivos son suyos. Pero en una corrida de prueba
+  significa que seguís leyendo el `.md` que sembró la corrida anterior, con lo cual una
+  traducción recién agregada "no aparece" y parece un bug del código. `rm -rf
+  <XDG_DATA_HOME>/kdock/translations` entre corridas (me pasó, 2026-08-07: las categorías del
+  menú salían en inglés con `language=spanish` y estaban perfectamente traducidas en el repo).
 - **Probar un idioma no necesita GUI**: sembrá `language=spanish` en el `kdock.conf` de
   prueba y corré el arnés de Xvfb; para el diálogo, la sonda que linkea los `.o` imprime los
   títulos de las solapas en cada idioma (`capabase` → "Layout", `spanish` → "Diseño"), que es

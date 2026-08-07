@@ -9,6 +9,7 @@
 #include "previewmanager.h"
 #include "previewsservice.h"
 #include "screenshotsource.h"
+#include "translations.h"
 #include "thumbnailsource.h"
 
 // In-tree layer-shell integration, shared verbatim with kdock (src/layershell.cpp).
@@ -135,7 +136,15 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    // Same translation layer as kdock, and the same setting: this binary does
+    // not choose a language, it follows the dock's. BaseOnly because an ALT
+    // layer only renames the dock's widgets and apps — here it means nothing,
+    // so "english-ALT-hacker" loads plain "english".
+    Translations translations(Translations::BaseOnly);
+
     PreviewManager manager;
+    QObject::connect(&translations, &Translations::changed, &manager,
+                     [&manager] { manager.retranslate(); });
     PreviewsService service(&manager);
     service.registerOnBus();
 

@@ -25,9 +25,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "translations" / "capabase.md"
 
-# lupdate names a QML context after the file, so the contexts of qml/*.qml are
-# exactly the UIdock bucket. Everything else is a C++ class.
-QML_CONTEXTS = {p.stem for p in (ROOT / "qml").glob("*.qml")}
+# lupdate names a QML context after the file, so the contexts of every qml/ tree
+# are exactly the UIdock bucket. Everything else is a C++ class.
+QML_DIRS = [ROOT / "qml", ROOT / "previews" / "qml", ROOT / "tilemenu" / "qml"]
+QML_CONTEXTS = {p.stem for d in QML_DIRS for p in d.glob("*.qml")}
+
+# The three binaries share one catalogue: the accessories' strings live in the
+# same .md files as the dock's (see AGENTS.md -> Capa de traducciones). Their
+# language is not chosen apart either — they follow kdock's, minus the ALT part.
+SCAN_DIRS = [ROOT / "src", ROOT / "qml",
+             ROOT / "previews" / "src", ROOT / "previews" / "qml",
+             ROOT / "tilemenu" / "src", ROOT / "tilemenu" / "qml"]
 
 HEADER = """# capabase
 
@@ -68,8 +76,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         ts = Path(tmp) / "kdock.ts"
         subprocess.run(
-            ["lupdate", "-no-obsolete", "-locations", "none",
-             str(ROOT / "src"), str(ROOT / "qml"), "-ts", str(ts)],
+            ["lupdate", "-no-obsolete", "-locations", "none"]
+            + [str(d) for d in SCAN_DIRS] + ["-ts", str(ts)],
             check=True, stdout=subprocess.DEVNULL,
         )
         tree = ET.parse(ts)

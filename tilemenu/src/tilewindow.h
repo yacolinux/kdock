@@ -42,6 +42,11 @@ public:
     Q_INVOKABLE void openSettings();
     Q_INVOKABLE void quitApp();
 
+    // Language changed (kdock wrote it to the shared conf): re-evaluate every
+    // qsTr() of the menu and rebuild the settings panel, which is Qt Widgets
+    // and baked its strings in when it was built.
+    void retranslate();
+
     // Modal helpers for the tile context menu. Each one keeps the menu from
     // closing while it is up (see m_modalDepth).
     Q_INVOKABLE QString pickIcon(const QString &current);

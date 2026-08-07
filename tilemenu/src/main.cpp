@@ -11,6 +11,7 @@
 #include "tilemenuservice.h"
 #include "tilemodel.h"
 #include "tilewindow.h"
+#include "translations.h"
 
 namespace {
 
@@ -89,6 +90,12 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    // Same translation layer as kdock, and the same setting: this binary does
+    // not choose a language, it follows the dock's. BaseOnly because an ALT
+    // layer only renames the dock's widgets and apps — here it means nothing,
+    // so "english-ALT-hacker" loads plain "english".
+    Translations translations(Translations::BaseOnly);
+
     Theme theme;
     DesktopEntryIndex apps;
     // The shared kdock.conf: this is where the menu favorites and the menu
@@ -102,6 +109,8 @@ int main(int argc, char *argv[])
     TileModel model(&layout, &menu, &config);
 
     TileWindow window(&config, &theme, &apps, &menu, &layout, &model, &power);
+    QObject::connect(&translations, &Translations::changed, &window,
+                     [&window] { window.retranslate(); });
     TileMenuService service(&window);
     service.registerOnBus();
 

@@ -154,8 +154,15 @@ QString KdockTranslator::translate(const char *context, const char *sourceText,
     return m_table.value(QString::fromUtf8(sourceText));
 }
 
-Translations::Translations(QObject *parent)
+QString Translations::baseLanguage(const QString &name)
+{
+    const int at = name.indexOf(QLatin1String("-ALT-"));
+    return at < 0 ? name : name.left(at);
+}
+
+Translations::Translations(Mode mode, QObject *parent)
     : QObject(parent)
+    , m_mode(mode)
 {
     g_instance = this;
     seedFiles();
@@ -163,7 +170,7 @@ Translations::Translations(QObject *parent)
     m_translator = new KdockTranslator(this);
     QCoreApplication::installTranslator(m_translator);
 
-    m_active = languageSetting();
+    m_active = resolved(languageSetting());
     loadActive();
 
     // Editing a file with the default editor has to show up in the dock without
@@ -171,10 +178,20 @@ Translations::Translations(QObject *parent)
     // watch, so the directory is watched and the path re-added on every hit.
     m_watcher = new QFileSystemWatcher(this);
     m_watcher->addPath(dirPath());
+    // The accessory binaries do not own the setting: kdock writes it to the
+    // shared kdock.conf and they have to follow, so the file itself is watched.
+    if (m_mode == BaseOnly)
+        m_watcher->addPath(DockConfig::settingsFilePath());
     auto *debounce = new QTimer(this);
     debounce->setSingleShot(true);
     debounce->setInterval(250);
-    connect(debounce, &QTimer::timeout, this, &Translations::reload);
+    connect(debounce, &QTimer::timeout, this, [this] {
+        // In BaseOnly mode the trigger is usually the shared conf changing, i.e.
+        // kdock switching language: re-read it before reloading.
+        if (m_mode == BaseOnly)
+            m_active = resolved(languageSetting());
+        reload();
+    });
     connect(m_watcher, &QFileSystemWatcher::directoryChanged, this,
             [debounce](const QString &) { debounce->start(); });
     connect(m_watcher, &QFileSystemWatcher::fileChanged, this,
@@ -244,11 +261,18 @@ void Translations::loadActive()
     m_apps = parsed.apps;
 }
 
+QString Translations::resolved(const QString &name) const
+{
+    return m_mode == BaseOnly ? baseLanguage(name) : name;
+}
+
 void Translations::setActive(const QString &name)
 {
+    // The name written to the config is the one the user picked; what this
+    // process *loads* may be its base (see resolved()).
     if (name.isEmpty() || name == m_active)
         return;
-    m_active = name;
+    m_active = resolved(name);
     QSettings settings(DockConfig::settingsFilePath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("language"), name);
     loadActive();

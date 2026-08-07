@@ -44,8 +44,19 @@ class Translations : public QObject
 {
     Q_OBJECT
 public:
-    explicit Translations(QObject *parent = nullptr);
+    enum Mode {
+        Full,      // kdock: whatever layer is selected, ALT ones included.
+        BaseOnly,  // the accessory binaries: an ALT layer falls back to its base.
+    };
+
+    explicit Translations(QObject *parent = nullptr) : Translations(Full, parent) {}
+    Translations(Mode mode, QObject *parent = nullptr);
     ~Translations() override;
+
+    // "english-ALT-hacker" -> "english". The ALT layers rename the dock's own
+    // widgets and apps, which means nothing in kdock-previews or
+    // kdock-tilemenu: they follow the language, not the joke.
+    static QString baseLanguage(const QString &name);
 
     // The layer is asked for from deep inside DockConfig/DockModel, which are
     // also built by the test probes: a null instance simply means capabase.
@@ -79,9 +90,12 @@ signals:
 private:
     void seedFiles();
     void loadActive();
+    // The layer this process actually loads for a given selection.
+    QString resolved(const QString &name) const;
 
     KdockTranslator *m_translator = nullptr;
     QFileSystemWatcher *m_watcher = nullptr;
+    Mode m_mode = Full;
     QString m_active;
     QHash<QString, QString> m_widgets;
     QHash<QString, QString> m_apps;

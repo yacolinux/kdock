@@ -921,10 +921,30 @@ que haya en el `.cpp`/`.qml`). Encima se carga **una traducción**, un `.md` de 
   conservando lo ya traducido y agregando las claves nuevas con el texto capabase. Los tres
   archivos van en el qrc y se copian al home en el primer arranque (`seedFiles()`, nunca pisa
   uno existente).
-- **Fuera de alcance por ahora**: `kdock-previews`, `kdock-tilemenu` y `kdock-calendar` linkean
-  `translations.cpp` (lo necesita `DockConfig`) pero **no instancian `Translations`**, así que
-  sus propias cadenas siguen en capabase. Alcanza con crear el objeto en su `main.cpp` el día
-  que se quieran traducir.
+- **Los accesorios también** (2026-08-07): `kdock-previews` y `kdock-tilemenu` instancian
+  `Translations(Translations::BaseOnly)` en su `main.cpp`. Tres consecuencias, y las tres son
+  la feature:
+  - **Un solo catálogo para los tres binarios**: `tools/gen-capabase.py` escanea `src/`,
+    `qml/`, `previews/{src,qml}` y `tilemenu/{src,qml}`, así que las cadenas de los accesorios
+    viven en los mismos `.md`. No hay archivos por binario.
+  - **El idioma no se elige aparte**: sale de la misma clave `language` del `kdock.conf`
+    compartido. Como los accesorios no la escriben, `Translations` en modo `BaseOnly` **vigila
+    ese archivo** además del directorio, y un cambio de idioma en el dock les llega en vivo
+    (`PreviewManager::retranslate()` / `TileWindow::retranslate()`: `engine()->retranslate()`
+    + rebuild del panel de Qt Widgets).
+  - **Una capa ALT cae a su base**: `Translations::baseLanguage()` corta en `-ALT-`, así que
+    con `english-ALT-hacker` puesto en el dock, el menú de mosaicos y las tiras salen en
+    `english` y con los nombres **reales** de las apps. Es lo correcto: los apodos renombran
+    los widgets y los lanzadores *del dock*, que es donde está el chiste; en el menú de
+    mosaicos serían nombres que no se pueden encontrar buscando.
+  Los dos binarios embeben en su qrc **solo las cuatro capas base** (nunca las ALT, que no
+  pueden cargar), para poder sembrarlas si corren sin kdock instalado.
+  `kdock-calendar` sigue afuera: no tiene una sola cadena traducible propia.
+- **Los nombres de categoría del menú son datos, no texto**: `kCategories` en `src/appmenu.cpp`
+  los usa como *clave* de sección (`cat:Development`), así que la tabla queda en inglés y lo
+  que se traduce es solo la etiqueta, en `categoryLabel()`. Las doce están declaradas con
+  `QT_TRANSLATE_NOOP` al lado para que `lupdate` las encuentre; el `tr()` de verdad es
+  dinámico. Así la sección elegida sobrevive a un cambio de idioma.
 
 ## Code Conventions
 

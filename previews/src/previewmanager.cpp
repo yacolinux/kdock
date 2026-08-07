@@ -13,6 +13,7 @@
 #include "theme.h"
 
 #include <QGuiApplication>
+#include <QQmlEngine>
 #include <QScreen>
 #include <QTimer>
 
@@ -209,6 +210,21 @@ void PreviewManager::destroyStrip(const QString &screenName)
     }
     if (inst.model)
         inst.model->deleteLater();
+}
+
+void PreviewManager::retranslate()
+{
+    for (Instance &inst : m_instances) {
+        if (inst.window)
+            inst.window->engine()->retranslate();
+    }
+    if (m_dialog) {
+        const bool wasVisible = m_dialog->isVisible();
+        m_dialog->deleteLater();
+        m_dialog = nullptr;
+        if (wasVisible)
+            showSettings();
+    }
 }
 
 void PreviewManager::showSettings()

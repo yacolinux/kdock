@@ -57,6 +57,16 @@ qt_add_resources(kdock-tilemenu "tilemenu-shared-qml"
     FILES ../qml/IconMenuItem.qml
 )
 
+# Las cuatro capas base de traducción (nunca las ALT: este binario resuelve
+# siempre a la base, ver Translations::BaseOnly). Con BASE ".." caen en
+# :/translations, que es donde las busca seedFiles().
+qt_add_resources(kdock-tilemenu "tilemenu-translations"
+    PREFIX "/"
+    BASE ".."
+    FILES ../translations/capabase.md ../translations/english.md
+          ../translations/spanish.md ../translations/zh-CN.md
+)
+
 target_link_libraries(kdock-tilemenu PRIVATE
     Qt6::Gui
     Qt6::Qml

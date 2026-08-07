@@ -145,6 +145,18 @@ void TileWindow::launch(const QString &id)
         hideMenu();
 }
 
+void TileWindow::retranslate()
+{
+    engine()->retranslate();
+    if (!m_settingsDialog)
+        return;
+    const bool wasVisible = m_settingsDialog->isVisible();
+    m_settingsDialog->deleteLater();
+    m_settingsDialog = nullptr;
+    if (wasVisible)
+        openSettings();
+}
+
 void TileWindow::openSettings()
 {
     if (!m_settingsDialog)
