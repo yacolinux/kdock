@@ -176,6 +176,39 @@ protocols/
 - El preview de iconset sale de `IconProvider::resolveInTheme()` (estática, sin motor QML): resuelve **por archivo** dentro de la cadena `Inherits` del tema. Nunca `QIcon::setThemeName()`, que es estado global del proceso — ver la trampa en `CLAUDE.md`. Los pixmaps se cachean por (modo, id, dpr).
 - El botón se pinta a mano (`paintEvent`) en vez de usar un `QToolButton`: hace falta preview + nombre elidido a la izquierda + flecha de dropdown a la derecha, y un QToolButton centra el conjunto. Cuando `kdeglobals` no trae ninguna clave `ColorScheme` el botón dice **"(sin definir)"** en vez de mentir con el primer ítem, que es lo que hacía el combo viejo. Ojo con esa leyenda: se veía **siempre**, porque la clave se leía como `General/ColorScheme` y `QSettings` mapea la sección `[General]` al nivel raíz — ver la trampa en `CLAUDE.md` (arreglado 2026-08-05).
 
+### Separador transparente (token `gap`, 2026-08-07)
+
+Un tercer separador repetible, además de `spring` (dinámico) y `sep` (estático): **se estira
+como un spring y además corta el fondo del dock**, así que el escritorio se ve por el medio y
+el dock se lee como dos.
+
+- **`DockConfig::isSpringToken()`** es nuevo: `gap` expande igual que `spring`, y varios
+  lugares tienen que preguntar por los dos (`root.hasSpring` en `Dock.qml`, que es lo que
+  enciende `fillMain`). En el delegate, `sec.isSpring` es `spring || gap` — o sea que todo el
+  layout, el arrastre y la exclusión de etiquetas siguen valiendo sin tocarlos.
+- **El fondo dejó de ser un `Rectangle`**: ahora es un `Repeater` sobre `root.gapRuns`, un
+  rectángulo por *tramo* entre huecos. Sin ningún `gap` hay exactamente un tramo y el dibujo es
+  el de siempre (radio 0 y sin borde en modo panel); con uno o más, **cada tramo se redondea
+  por su cuenta**, así que quedan dos píldoras y no un panel mordido. La imagen de fondo
+  opcional se dibuja por tramo (el mosaico reinicia en cada uno).
+- **`root.computeGapRuns()`** saca la geometría iterando `sectionRepeater.itemAt(i)` y
+  mapeando con `mapToItem(slider, …)`: los ids de adentro del delegate no se ven desde la raíz
+  (misma razón por la que existe `labelStrings()`). Calcula el **complemento** de los huecos y
+  lo publica en `gapRuns`; está debounced con un `Timer` de 16 ms y se re-dispara desde
+  `onWidthChanged`/`onHeightChanged` y las señales de `config` que mueven secciones
+  (`widgetOrder`, `panelMode`, `alignment`, `dockLength`, `edge`, `spacing`, `dockThickness`).
+- **El hueco también es hueco para el mouse**: la misma función manda los rectángulos a
+  `DockWindow::setGapRects()`, que los resta de la región de entrada (`applyHiddenMask()`, el
+  mismo `setMask()` que usa el auto-ocultado). Sin eso el hueco se vería pero se comería los
+  clics. Sin ningún `gap` la máscara sigue siendo `QRegion()` vacía — el camino rápido de antes.
+- **Lo que el hueco no libera es la zona exclusiva**: es un solo número por borde para toda la
+  superficie, así que las ventanas maximizadas siguen frenando en el grosor del dock a lo
+  largo de todo el borde. Es una limitación de layer-shell, no algo por arreglar.
+- **Solo tiene lugar donde un spring lo tiene**: en modo panel o con `dockLength > 0`. Con el
+  largo automático y sin panel, el dock se ajusta a su contenido y el hueco mide 0 px.
+- UI: botón *Agregar separador transparente* en la solapa Diseño y en el menú contextual de
+  cualquier sección, al lado de los otros dos.
+
 ### Auto-shrink de íconos (`config.autoShrinkIcons` + bloque "Auto-shrink" en `Dock.qml`)
 - El dock tiene largo fijo (el borde de pantalla en panel mode, `dockLength%` si no) pero su contenido no: con suficientes apps, widgets o etiquetas las secciones dejan de entrar. QtQuick Layouts **no recorta**: dibuja las secciones sobrantes encima de las otras. Para evitarlo, `root.fitScale` escala **todo** lo que ocupa largo — `appIconPx`, `widgetIconPx`, `systrayIconPx`, `spacingPx`, `clockFontPx`, el ancho de caja y la fuente de las etiquetas — hasta que el contenido entra, con piso en `autoShrinkMinIconSize` (default 16 px, el ícono de app; los de widget/systray conservan su proporción y pueden quedar más chicos).
 - **El factor se calcula iterando, no con un binding**: el largo necesario depende de la escala, así que un binding sería un loop. Cada pasada corrige por `avail/need * 0.995` y agenda otra (`fitTimer`, 16 ms); el largo necesario es *afín* en la escala (los textos y los gaps no escalan del todo), así que converge en 3-4 pasadas. `fitPasses` es solo un tope anti-runaway; la banda muerta (`> 0.005`) y el margen del 0.995 son lo que evita la oscilación al volver a crecer.

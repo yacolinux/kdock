@@ -103,7 +103,7 @@ Item {
     }
     onLabelVisibleChanged: scheduleLabelMeasure()
     onWidgetLabelVisibleChanged: scheduleLabelMeasure()
-    Component.onCompleted: scheduleLabelMeasure()
+    Component.onCompleted: { scheduleLabelMeasure(); scheduleGapRuns() }
     Connections {
         target: config
         // The only two inputs of config.iconLabelFontPx. Deliberately *not*
@@ -138,6 +138,74 @@ Item {
     // way theme.revision invalidates the icon URLs.
     function widgetNameOf(token) {
         return config.widgetNamesRevision, config.widgetName(token)
+    }
+
+    // ---- Transparent separators (token "gap") -----------------------------
+    // A gap expands like a spring and, on top of that, the panel background is
+    // not painted over it: the dock is drawn as one rectangle per *run* between
+    // gaps, so the desktop shows through in between and the dock reads as two.
+    // The same rectangles go to C++ (dockWindow.setGapRects) to be cut out of
+    // the surface's input region, or the hole would be see-through but still
+    // eat the clicks.
+    //
+    // The geometry is read from sectionRepeater's items, never from ids inside
+    // the delegate: those live in another component scope and are not reachable
+    // from here (same reason labelStrings() exists — see the measurement block
+    // above).
+    property var gapRuns: [{ pos: 0, size: 0 }]
+    Timer {
+        id: gapTimer
+        interval: 16
+        onTriggered: root.computeGapRuns()
+    }
+    function scheduleGapRuns() { gapTimer.restart() }
+    function computeGapRuns() {
+        const total = root.horizontal ? slider.width : slider.height
+        let holes = []
+        for (let i = 0; i < sectionRepeater.count; ++i) {
+            const sec = sectionRepeater.itemAt(i)
+            if (!sec || !sec.isGap || !sec.visible)
+                continue
+            const p = sec.mapToItem(slider, 0, 0)
+            const pos = root.horizontal ? p.x : p.y
+            const size = root.horizontal ? sec.width : sec.height
+            if (size > 0)
+                holes.push({ pos: Math.round(pos), size: Math.round(size) })
+        }
+        holes.sort((a, b) => a.pos - b.pos)
+        // Complement of the holes inside [0, total): what actually gets painted.
+        let runs = []
+        let at = 0
+        for (let h = 0; h < holes.length; ++h) {
+            const start = Math.max(at, holes[h].pos)
+            if (start > at)
+                runs.push({ pos: at, size: start - at })
+            at = Math.max(at, holes[h].pos + holes[h].size)
+        }
+        if (at < total)
+            runs.push({ pos: at, size: total - at })
+        root.gapRuns = runs.length > 0 ? runs : [{ pos: 0, size: total }]
+        // The input region follows the same rectangles, in surface coordinates.
+        let rects = []
+        for (let g = 0; g < holes.length; ++g) {
+            rects.push(root.horizontal
+                       ? { x: holes[g].pos, y: 0, width: holes[g].size, height: root.height }
+                       : { x: 0, y: holes[g].pos, width: root.width, height: holes[g].size })
+        }
+        dockWindow.setGapRects(rects)
+    }
+    onWidthChanged: scheduleGapRuns()
+    onHeightChanged: scheduleGapRuns()
+    Connections {
+        target: config
+        // Anything that moves a section along the dock moves the holes with it.
+        function onWidgetOrderChanged() { root.scheduleGapRuns() }
+        function onPanelModeChanged() { root.scheduleGapRuns() }
+        function onAlignmentChanged() { root.scheduleGapRuns() }
+        function onDockLengthChanged() { root.scheduleGapRuns() }
+        function onEdgeChanged() { root.scheduleGapRuns() }
+        function onSpacingChanged() { root.scheduleGapRuns() }
+        function onDockThicknessChanged() { root.scheduleGapRuns() }
     }
 
     // ---- Auto-shrink ------------------------------------------------------
@@ -397,6 +465,7 @@ Item {
     // Dynamic separators only distribute space when the dock spans the whole
     // edge (panel mode). Outside panel mode they are no-ops (size 0).
     readonly property bool hasSpring: config.widgetOrder.indexOf("spring") >= 0
+                                      || config.widgetOrder.indexOf("gap") >= 0
     readonly property bool fillMain: config.panelMode && hasSpring
 
     // Relanzadores shown on this dock (per-dock visibility). Primary dock shows
@@ -482,6 +551,7 @@ Item {
         case "settings": return config.showSettingsButton
         case "spring": return true
         case "sep": return true
+        case "gap": return true
         }
         return false
     }
@@ -522,6 +592,7 @@ Item {
         case "settings": return settingsComp
         case "spring": return springComp
         case "sep": return staticSepComp
+        case "gap": return springComp
         }
         return null
     }
@@ -560,6 +631,7 @@ Item {
         case "tilemenu": return qsTr("Menú de mosaicos (pantalla completa)")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
+        case "gap": return qsTr("Transparent separator")
         }
         return ""
     }
@@ -637,41 +709,55 @@ Item {
             }
         }
 
-        Rectangle {
-            id: background
-            anchors.fill: parent
-            radius: config.panelMode ? 0 : (config.compact ? 6 : 12)
-            // Custom per-panel color overrides the inherited KDE theme background.
-            readonly property color baseColor: root.dockBaseColor
-            color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, config.opacity)
-            border.width: config.panelMode ? 0 : 1
-            border.color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.18)
+        // The panel background, one rectangle per run between transparent
+        // separators (root.gapRuns). With no gap there is exactly one run and
+        // this is the single rectangle it always was.
+        Repeater {
+            model: root.gapRuns
+            delegate: Rectangle {
+                id: background
+                required property var modelData
 
-            // Optional tiled background image, drawn over the base color. Scaled
-            // to the dock thickness and repeated along its length (side by side);
-            // orientation-aware. Honors config.opacity. Rounded-masked when the
-            // dock has rounded corners (non-panel mode).
-            Image {
-                id: bgImage
-                anchors.fill: parent
-                anchors.margins: background.border.width
-                visible: config.panelImage.length > 0
-                source: config.panelImageUrl
-                fillMode: root.horizontal ? Image.TileHorizontally : Image.TileVertically
-                opacity: config.opacity
-                asynchronous: true
-                cache: true
-                layer.enabled: visible && background.radius > 0
-                layer.effect: OpacityMask {
-                    maskSource: Rectangle {
-                        width: bgImage.width
-                        height: bgImage.height
-                        radius: background.radius
+                x: root.horizontal ? modelData.pos : 0
+                y: root.horizontal ? 0 : modelData.pos
+                width: root.horizontal ? modelData.size : slider.width
+                height: root.horizontal ? slider.height : modelData.size
+
+                // Every run is rounded on its own, so a gap leaves two pills
+                // rather than one panel with a bite out of it.
+                radius: config.panelMode && root.gapRuns.length < 2
+                        ? 0 : (config.compact ? 6 : 12)
+                readonly property color baseColor: root.dockBaseColor
+                color: Qt.rgba(baseColor.r, baseColor.g, baseColor.b, config.opacity)
+                border.width: config.panelMode && root.gapRuns.length < 2 ? 0 : 1
+                border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                      theme.foreground.b, 0.18)
+
+                // Optional tiled background image, drawn over the base color.
+                // Scaled to the dock thickness and repeated along its length;
+                // orientation-aware. Honors config.opacity, and is masked to the
+                // run's rounded corners.
+                Image {
+                    id: bgImage
+                    anchors.fill: parent
+                    anchors.margins: background.border.width
+                    visible: config.panelImage.length > 0
+                    source: config.panelImageUrl
+                    fillMode: root.horizontal ? Image.TileHorizontally : Image.TileVertically
+                    opacity: config.opacity
+                    asynchronous: true
+                    cache: true
+                    layer.enabled: visible && background.radius > 0
+                    layer.effect: OpacityMask {
+                        maskSource: Rectangle {
+                            width: bgImage.width
+                            height: bgImage.height
+                            radius: background.radius
+                        }
                     }
                 }
             }
         }
-
 
         GridLayout {
             id: sectionLayout
@@ -722,7 +808,10 @@ Item {
                     required property string modelData
 
                     readonly property string token: modelData
-                    readonly property bool isSpring: token === "spring"
+                    // The transparent separator expands exactly like a spring;
+                    // what it adds is the hole (see root.gapRuns).
+                    readonly property bool isGap: token === "gap"
+                    readonly property bool isSpring: token === "spring" || isGap
                     readonly property bool isStaticSep: token === "sep"
                     readonly property bool block: root.isBlock(token)
                     readonly property bool draggable: !block
@@ -973,10 +1062,16 @@ Item {
                                 onTriggered: config.insertSeparator(sec.index + 1)
                             }
                             IconMenuItem {
+                                text: qsTr("Add transparent separator")
+                                iconName: "list-add"
+                                onTriggered: config.insertGap(sec.index + 1)
+                            }
+                            IconMenuItem {
                                 visible: sec.isSpring || sec.isStaticSep
                                 height: visible ? implicitHeight : 0
-                                text: sec.isSpring ? qsTr("Remove dynamic separator")
-                                                   : qsTr("Remove static separator")
+                                text: sec.isGap ? qsTr("Remove transparent separator")
+                                                : sec.isSpring ? qsTr("Remove dynamic separator")
+                                                               : qsTr("Remove static separator")
                                 iconName: "list-remove"
                                 onTriggered: config.removeSectionAt(sec.index)
                             }

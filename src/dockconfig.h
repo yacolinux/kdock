@@ -195,10 +195,19 @@ public:
 
     // Tokens that may appear any number of times in widgetOrder (every other
     // token is unique and comes from knownWidgetTokens()): the dynamic
-    // separator, which expands, and the static one, a separatorSize px gap.
+    // separator, which expands; the static one, a separatorSize px gap; and the
+    // transparent one, which expands *and* cuts the panel background so the
+    // desktop shows through (see gapRects()).
     static bool isRepeatableToken(const QString &token)
     {
-        return token == QLatin1String("spring") || token == QLatin1String("sep");
+        return token == QLatin1String("spring") || token == QLatin1String("sep")
+               || token == QLatin1String("gap");
+    }
+    // A separator that expands to fill the leftover room. The transparent one
+    // does it too, which is why several places have to test for both.
+    static bool isSpringToken(const QString &token)
+    {
+        return token == QLatin1String("spring") || token == QLatin1String("gap");
     }
 
     // Up to this many docks can be configured on a single monitor. Six rather
@@ -677,6 +686,9 @@ public:
     // Drag & drop / context-menu editing of the section order (from QML).
     Q_INVOKABLE void moveSection(int from, int to);
     Q_INVOKABLE void insertSpring(int at);
+    // Same as insertSpring, but the section also punches a hole in the
+    // panel background and in the surface's input region.
+    Q_INVOKABLE void insertGap(int at);
     // Fixed-size gap of separatorSize px between two sections.
     Q_INVOKABLE void insertSeparator(int at);
     Q_INVOKABLE void removeSectionAt(int at);

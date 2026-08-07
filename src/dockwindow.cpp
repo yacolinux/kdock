@@ -161,8 +161,12 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // The autohide mask is a rectangle derived from the surface size, so it goes
     // stale whenever the dock resizes (an icon-size change, or coming back from
     // another virtual desktop with a brand-new surface).
-    connect(this, &QWindow::widthChanged, this, [this] { if (m_hidden) applyHiddenMask(); });
-    connect(this, &QWindow::heightChanged, this, [this] { if (m_hidden) applyHiddenMask(); });
+    // The mask is the autohide strip while hidden, and the surface minus the
+    // transparent separators while visible: both follow the surface size.
+    connect(this, &QWindow::widthChanged, this,
+            [this] { if (m_hidden || !m_gapRects.isEmpty()) applyHiddenMask(); });
+    connect(this, &QWindow::heightChanged, this,
+            [this] { if (m_hidden || !m_gapRects.isEmpty()) applyHiddenMask(); });
 
     setResizeMode(QQuickView::SizeViewToRootObject); // content drives surface size
     setSource(QUrl(QStringLiteral("qrc:/qml/Dock.qml")));
@@ -313,10 +317,37 @@ void DockWindow::setHidden(bool hidden)
     applyHiddenMask();
 }
 
+void DockWindow::setGapRects(const QVariantList &rects)
+{
+    QList<QRect> parsed;
+    parsed.reserve(rects.size());
+    for (const QVariant &v : rects) {
+        const QVariantMap m = v.toMap();
+        const QRect r(m.value(QStringLiteral("x")).toInt(), m.value(QStringLiteral("y")).toInt(),
+                      m.value(QStringLiteral("width")).toInt(),
+                      m.value(QStringLiteral("height")).toInt());
+        if (!r.isEmpty())
+            parsed.append(r);
+    }
+    if (parsed == m_gapRects)
+        return;
+    m_gapRects = parsed;
+    applyHiddenMask();
+}
+
 void DockWindow::applyHiddenMask()
 {
     if (!m_hidden) {
-        setMask(QRegion());
+        // An empty region means "no mask at all", which is the whole surface —
+        // and the fast path for a dock without transparent separators.
+        if (m_gapRects.isEmpty()) {
+            setMask(QRegion());
+            return;
+        }
+        QRegion region(QRect(0, 0, width(), height()));
+        for (const QRect &r : std::as_const(m_gapRects))
+            region -= r;
+        setMask(region);
         return;
     }
 

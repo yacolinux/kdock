@@ -662,7 +662,13 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   Y un widget cuyo backend es un **lanzador de otro binario** (el `tilemenu`, con
   `TileMenuLauncher`) se salta `dockmanager.*`: el objeto es fino y sin estado, así que lo crea
   el propio `DockWindow` en su ctor —igual que `AppMenu`— en vez de viajar por `Shared`.
-- **Una sección que se repite (`spring`, `sep`) NO va en `knownWidgetTokens()`**: esa lista
+- **`Component.onCompleted` (y cualquier handler) se declara UNA sola vez por objeto.** Un
+  segundo `Component.onCompleted` en la raíz de `Dock.qml` no es un error de compilación ni una
+  advertencia de `qmllint`: es *"Property value set multiple times"* al cargar, o sea **el QML
+  entero no carga** y el dock sale de 160x160 con la ventana vacía. Si necesitás enganchar algo
+  más al arranque, sumalo al handler que ya existe (`{ scheduleLabelMeasure(); scheduleGapRuns() }`).
+  Lo agarró el arnés al primer intento, 2026-08-07.
+- **Una sección que se repite (`spring`, `sep`, `gap`) NO va en `knownWidgetTokens()`**: esa lista
   se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
   `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te
   olvidás, el token **desaparece del `widgetOrder` en el próximo load** sin imprimir nada.

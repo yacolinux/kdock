@@ -840,6 +840,14 @@ void DockConfig::insertSpring(int at)
     emit widgetOrderChanged();
 }
 
+void DockConfig::insertGap(int at)
+{
+    at = qBound(0, at, m_widgetOrder.size());
+    m_widgetOrder.insert(at, QStringLiteral("gap"));
+    m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
+    emit widgetOrderChanged();
+}
+
 void DockConfig::insertSeparator(int at)
 {
     at = qBound(0, at, m_widgetOrder.size());
@@ -1728,6 +1736,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("settings"),      QStringLiteral("Settings button")},
         {QStringLiteral("spring"),        QStringLiteral("Dynamic separator")},
         {QStringLiteral("sep"),           QStringLiteral("Static separator")},
+        {QStringLiteral("gap"),           QStringLiteral("Transparent separator")},
     };
     return labels.value(token, token);
 }

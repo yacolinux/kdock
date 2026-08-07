@@ -21,6 +21,7 @@ STARTREK = {
  'autohide': 'Saratoga',    'showdesktop': 'Hood',     'systray': 'Yamato',
  'relanzadores': 'Odyssey', 'scriptrunners': 'Franklin','session': 'Kelvin',
  'settings': 'Lexington',   'spring': 'Protostar',     'sep': 'Aventine',
+ 'gap': 'Neutral Zone',
 }
 
 # ---- 2) Hacker handles ------------------------------------------------------
@@ -35,6 +36,7 @@ HACKER = {
  'autohide': 'Ghost',       'showdesktop': 'Sneakers', 'systray': 'Condor',
  'relanzadores': 'Data Thief','scriptrunners': 'Script Kitty','session': 'Knight Lightning',
  'settings': 'Root',        'spring': 'Slack Space',   'sep': 'Null Byte',
+ 'gap': 'Air Gap',
 }
 
 # ---- 3) Star Wars hardware --------------------------------------------------
@@ -49,6 +51,7 @@ STARWARS = {
  'autohide': 'Cloaking Device','showdesktop': 'Blast Door','systray': 'Droid Socket',
  'relanzadores': 'Gonk Droid','scriptrunners': 'Power Converter','session': 'Reactor Core',
  'settings': 'Diagnostic Port','spring': 'Deflector Shield','sep': 'Bulkhead',
+ 'gap': 'Ray Shield',
 }
 
 # ---- 4) AI characters and systems from sci-fi novels, and
@@ -182,6 +185,7 @@ ZH_NAMES = {
  'Cloaking Device': '隐形装置',  'Blast Door': '防爆门',      'Droid Socket': '机器人接口',
  'Gonk Droid': '冈克机器人',     'Power Converter': '能量转换器','Reactor Core': '反应堆核心',
  'Diagnostic Port': '诊断端口',  'Deflector Shield': '偏导护盾','Bulkhead': '隔舱壁',
+ 'Neutral Zone': '中立区',       'Air Gap': '物理隔离',        'Ray Shield': '射线护盾',
  # 4) IA de novelas de ciencia ficción
  'Wintermute': '冬寂',          'Neuromancer': '神经漫游者',  'Mycroft Holmes': '迈克罗夫特',
  'Giskard': '吉斯卡特',         'Daneel': '丹尼尔',          'Multivac': '穆提瓦克',

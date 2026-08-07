@@ -2557,6 +2557,12 @@ QWidget *SettingsDialog::createLayoutTab()
     addSep->setToolTip(tr("Fixed gap of \"Separator size\" px between two sections."));
     auto *addSpring = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
                                       tr("Add dynamic separator"), tab);
+    auto *addGap = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
+                                   tr("Add transparent separator"), tab);
+    addGap->setToolTip(tr("Expands like a dynamic separator, and the dock's background is "
+                          "not painted over it: the desktop shows through and the dock reads "
+                          "as two. It only has room to open in panel mode or with a fixed "
+                          "dock length."));
     auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
                                    tr("Remove separator"), tab);
     auto *rename = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")),
@@ -2568,6 +2574,7 @@ QWidget *SettingsDialog::createLayoutTab()
     auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), tab);
     buttons->addWidget(addSep);
     buttons->addWidget(addSpring);
+    buttons->addWidget(addGap);
     buttons->addWidget(remove);
     buttons->addWidget(rename);
     buttons->addStretch();
@@ -2614,6 +2621,13 @@ QWidget *SettingsDialog::createLayoutTab()
         const int oi = orderIndexOfRow(row);
         const int at = oi >= 0 ? oi + 1 : m_config->widgetOrder().size();
         m_config->insertSpring(at);
+        m_layoutList->setCurrentRow(row + 1);
+    });
+    connect(addGap, &QPushButton::clicked, this, [this, orderIndexOfRow] {
+        const int row = m_layoutList->currentRow();
+        const int oi = orderIndexOfRow(row);
+        const int at = oi >= 0 ? oi + 1 : m_config->widgetOrder().size();
+        m_config->insertGap(at);
         m_layoutList->setCurrentRow(row + 1);
     });
     connect(addSep, &QPushButton::clicked, this, [this, orderIndexOfRow] {
@@ -2843,13 +2857,18 @@ void SettingsDialog::reloadLayoutList()
     // widgetOrder for compatibility). See AGENTS.md "Dormant / UI-unreachable".
     static const QStringList kHiddenFromLayout = {
         QStringLiteral("clock"), QStringLiteral("nextwallpaper")};
+    // One counter per kind: the numbering is what tells two otherwise identical
+    // separator rows apart, so a transparent one must not borrow the static
+    // one's number.
     int springNumber = 0;
     int sepNumber = 0;
+    int gapNumber = 0;
     for (int i = 0; i < order.size(); ++i) {
         const QString token = order.at(i);
         if (kHiddenFromLayout.contains(token))
             continue;
         const bool spring = token == QLatin1String("spring");
+        const bool gap = token == QLatin1String("gap");
         const bool separator = DockConfig::isRepeatableToken(token);
         // Separators are numbered (each kind on its own count): they are
         // otherwise indistinguishable, so there is no way to tell that Up/Down
@@ -2859,7 +2878,7 @@ void SettingsDialog::reloadLayoutList()
         QString shown;
         if (separator)
             shown = tr("%1 %2").arg(sectionLabel(token))
-                        .arg(spring ? ++springNumber : ++sepNumber);
+                        .arg(spring ? ++springNumber : gap ? ++gapNumber : ++sepNumber);
         else if (name == sectionLabel(token))
             shown = sectionLabel(token);
         else
@@ -2871,6 +2890,7 @@ void SettingsDialog::reloadLayoutList()
         auto *item = new QListWidgetItem(
             QIcon::fromTheme(!separator ? QStringLiteral("view-list-symbolic")
                              : spring   ? QStringLiteral("distribute-horizontal-margin")
+                             : gap      ? QStringLiteral("edit-clear-all")
                                         : QStringLiteral("distribute-vertical-margin")),
             shown, m_layoutList);
         item->setData(Qt::UserRole, token);

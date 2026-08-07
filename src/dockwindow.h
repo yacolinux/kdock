@@ -5,6 +5,8 @@
 #pragma once
 
 #include <QQuickView>
+#include <QRect>
+#include <QVariantList>
 
 class DockConfig;
 class DockModel;
@@ -60,6 +62,12 @@ public:
     // input region to a thin strip on the screen edge so clicks pass
     // through to the windows below.
     Q_INVOKABLE void setHidden(bool hidden);
+
+    // Rectangles (surface coordinates) covered by transparent separators, sent
+    // by Dock.qml whenever the layout moves. They are cut out of the input
+    // region: the hole shows the desktop, so it has to let the clicks through
+    // too, or it would be a see-through patch that still eats them.
+    Q_INVOKABLE void setGapRects(const QVariantList &rects);
 
     // Language changed: re-evaluate every qsTr() binding of this dock's QML and
     // rebuild the settings dialog (Qt Widgets has no retranslateUi here, the
@@ -145,6 +153,7 @@ private:
     // "tileLauncher"); owned by this window.
     TileMenuLauncher *m_tileLauncher = nullptr;
     bool m_hidden = false;
+    QList<QRect> m_gapRects; // transparent separators, see setGapRects()
     bool m_primary = false;
     bool m_screenChangePending = false;
     // wl_output the current layer surface was bound to (as a raw pointer value).
