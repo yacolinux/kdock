@@ -33,6 +33,7 @@ qt_add_executable(kdock-tilemenu
     # menu favorites — so this menu and the dock's menu share one favorites list
     # without a copy of either.
     ${KDOCK_SHARED_SRC}/dockconfig.cpp       ${KDOCK_SHARED_SRC}/dockconfig.h
+    ${KDOCK_SHARED_SRC}/translations.cpp   ${KDOCK_SHARED_SRC}/translations.h
 )
 
 target_include_directories(kdock-tilemenu PRIVATE ${KDOCK_SHARED_SRC})

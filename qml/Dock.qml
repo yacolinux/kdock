@@ -76,7 +76,7 @@ Item {
             const names = dockModel.labelStrings()
             for (let i = 0; i < names.length; ++i) {
                 appNameProbe.text = names[i]
-                max = Math.max(max, Math.ceil(appNameProbe.width))
+                max = Math.max(max, Math.ceil(appNameProbe.advanceWidth))
             }
         }
         if (root.widgetLabelVisible) {
@@ -85,7 +85,7 @@ Item {
                 if (!sec || !sec.visible || !sec.labelled)
                     continue
                 secNameProbe.text = sec.label
-                max = Math.max(max, Math.ceil(secNameProbe.width))
+                max = Math.max(max, Math.ceil(secNameProbe.advanceWidth))
             }
         }
         // 0 is a real answer, not "unknown": no name is being drawn (labels off,
@@ -106,6 +106,9 @@ Item {
         // Not an input of iconLabelFontPx, but it does change how wide the
         // section names come out (secNameProbe above).
         function onLabelBoldChanged() { root.scheduleLabelMeasure() }
+        // A rename — or a language change, which renames every section at once
+        // (DockConfig::retranslate) — changes the text secNameProbe measures.
+        function onWidgetNamesChanged() { root.scheduleLabelMeasure() }
     }
     Connections {
         target: dockModel
@@ -735,9 +738,14 @@ Item {
                     // Capped to the configured box on a horizontal dock (each
                     // section shrinks to its own name); fixed on a vertical one
                     // so the dock keeps a single width.
+                    // advanceWidth, not width: TextMetrics.width can come out a
+                    // pixel or two under Text.implicitWidth for the same string
+                    // and font, and the box built from it then elides a name
+                    // that fits ("Reloj" drawn as "Re…"). advanceWidth matches
+                    // implicitWidth exactly (measured 2026-08-07).
                     readonly property int labelW: !labelled ? 0
                         : (root.horizontal
-                           ? Math.min(Math.ceil(secLabelMetrics.width), root.labelBoxWidth)
+                           ? Math.min(Math.ceil(secLabelMetrics.advanceWidth), root.labelBoxWidth)
                            : root.labelBoxWidth)
 
                     visible: root.sectionVisible(token)
@@ -928,7 +936,7 @@ Item {
                             id: sectionMenu
                             popupType: Popup.Window
                             // A Menu doesn't size itself to its widest item.
-                            width: Math.max(implicitWidth + 16, 220)
+                            width: Math.max(implicitWidth + 64, 220)
                             onAboutToShow: root.menuOpen = true
                             onClosed: root.menuOpen = false
                             IconMenuItem {
@@ -1047,7 +1055,7 @@ Item {
                     // jumping around as windows open and close.
                     readonly property int labelW: !labelled ? 0
                         : (root.horizontal
-                           ? Math.min(Math.ceil(labelMetrics.width), root.labelBoxWidth)
+                           ? Math.min(Math.ceil(labelMetrics.advanceWidth), root.labelBoxWidth)
                            : root.labelBoxWidth)
 
                     readonly property int cellW: {
@@ -1327,6 +1335,11 @@ Item {
                         Menu {
                             id: contextMenu
                             popupType: Popup.Window
+                            // A translated label can be noticeably longer than the capabase one, and a
+                            // QtQuick Menu does not size itself to its widest item: without this the
+                            // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
+                            // of slack is measured, not decorative: 16 still clipped in Spanish.
+                            width: Math.max(implicitWidth + 64, 220)
                             onAboutToShow: {
                                 root.menuOpen = true
                                 windowMenuInstantiator.model = dockModel.windowList(delegateRoot.index)
@@ -1378,7 +1391,7 @@ Item {
                                 // A Menu does not size itself to its widest
                                 // item; without this the last letter is clipped
                                 // by the popup border.
-                                width: Math.max(implicitWidth + 16, 210)
+                                width: Math.max(implicitWidth + 64, 210)
                                 enabled: delegateRoot.windowCount > 0 && virtualDesktops
                                          && virtualDesktops.count > 0
                                 IconMenuItem {
@@ -1485,7 +1498,7 @@ Item {
                                 // A Menu doesn't size itself to its widest item,
                                 // so "Crear dock vacío" would lose its last
                                 // letter to the popup border.
-                                width: Math.max(implicitWidth + 16, 200)
+                                width: Math.max(implicitWidth + 64, 200)
                                 IconMenuItem {
                                     text: qsTr("Nombre…")
                                     iconName: "edit-rename"
@@ -1699,6 +1712,11 @@ Item {
             Menu {
                 id: sessionMenu
                 popupType: Popup.Window
+                // A translated label can be noticeably longer than the capabase one, and a
+                // QtQuick Menu does not size itself to its widest item: without this the
+                // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
+                // of slack is measured, not decorative: 16 still clipped in Spanish.
+                width: Math.max(implicitWidth + 64, 200)
                 onAboutToShow: root.menuOpen = true
                 onClosed: root.menuOpen = false
                 IconMenuItem {
@@ -1802,6 +1820,11 @@ Item {
             Menu {
                 id: profileMenu
                 popupType: Popup.Window
+                // A translated label can be noticeably longer than the capabase one, and a
+                // QtQuick Menu does not size itself to its widest item: without this the
+                // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
+                // of slack is measured, not decorative: 16 still clipped in Spanish.
+                width: Math.max(implicitWidth + 64, 200)
                 onAboutToShow: root.menuOpen = true
                 onClosed: root.menuOpen = false
                 IconMenuItem {
@@ -1894,6 +1917,11 @@ Item {
             Menu {
                 id: menuCtxMenu
                 popupType: Popup.Window
+                // A translated label can be noticeably longer than the capabase one, and a
+                // QtQuick Menu does not size itself to its widest item: without this the
+                // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
+                // of slack is measured, not decorative: 16 still clipped in Spanish.
+                width: Math.max(implicitWidth + 64, 220)
                 onAboutToShow: root.menuOpen = true
                 onClosed: root.menuOpen = false
                 IconMenuItem {
@@ -1993,6 +2021,11 @@ Item {
             Menu {
                 id: tileCtxMenu
                 popupType: Popup.Window
+                // A translated label can be noticeably longer than the capabase one, and a
+                // QtQuick Menu does not size itself to its widest item: without this the
+                // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
+                // of slack is measured, not decorative: 16 still clipped in Spanish.
+                width: Math.max(implicitWidth + 64, 220)
                 onAboutToShow: root.menuOpen = true
                 onClosed: root.menuOpen = false
                 IconMenuItem {
@@ -2068,7 +2101,7 @@ Item {
                 // Mixing checkable items (which reserve a tick column) with
                 // IconMenuItem makes the implicit width come out short and the
                 // last letter is clipped by the popup border.
-                width: Math.max(implicitWidth + 16, 220)
+                width: Math.max(implicitWidth + 64, 220)
                 IconMenuItem {
                     text: qsTr("Borrar Historial")
                     iconName: "edit-clear-history"
@@ -2263,7 +2296,7 @@ Item {
             Menu {
                 id: netMenu
                 popupType: Popup.Window
-                width: Math.max(implicitWidth + 16, 220)
+                width: Math.max(implicitWidth + 64, 220)
                 IconMenuItem {
                     text: qsTr("Configurar redes…")
                     iconName: "configure"

@@ -137,6 +137,30 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   espaciado regulables: las celdas se calculan desde el ícono, así que unas pocas apps no
   se desparraman por todo el popup.
 
+#### Interfaz traducible, en archivos de texto
+
+Los textos escritos en el código son la **capa nativa, "capabase"**. Encima se carga una
+traducción: un archivo `.md` de texto plano en `~/.local/share/kdock/translations/`, que se
+elige y se edita desde la solapa *Traducciones* del panel de configuración (botón **Editar** →
+se abre con tu editor de texto predeterminado; al guardar, el dock toma los cambios solo, sin
+reiniciar nada). Vienen **español** e **inglés**, y se irán agregando más idiomas.
+
+Cada archivo tiene cuatro títulos:
+
+| Título | Qué traduce | Clave |
+|---|---|---|
+| `Configuracion` | El panel de configuración | el texto capabase |
+| `UIdock` | Menús, tooltips y popups del dock | el texto capabase |
+| `Widgets` | Los nombres de los widgets | el token del widget (`clock`, `pager`…) |
+| `Apps` | Los nombres de las aplicaciones | el id del `.desktop` |
+
+Lo que una traducción no incluya cae al texto de capabase — y para las apps, al `Name=` de su
+`.desktop` —, así que un archivo incompleto es perfectamente válido: se traduce lo que se
+quiera y el resto sigue funcionando. Un widget que hayas **renombrado a mano** conserva ese
+nombre en todos los idiomas. El botón *Actualizar apps* llena la sección `Apps` con todas las
+aplicaciones instaladas, listas para renombrar, y *Nueva…* duplica una traducción para armar
+la propia: eso es todo lo que hace falta para agregar un idioma, sin recompilar.
+
 ### Widgets
 
 Todos opcionales y reordenables. Los backends hablan D-Bus o CLI directo, nunca KDE
@@ -394,6 +418,8 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
 | `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
 | `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
+| `translations/` | Las capas de traducción (`capabase.md` + un `.md` por idioma). Se copian al home en el primer arranque y se editan ahí |
+| `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código) y `sync-translations.py` (propaga las claves nuevas a los demás idiomas) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |
 | `CLAUDE.md` | Cómo compilar, probar e instalar; arneses de prueba sin GUI |
@@ -416,6 +442,8 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
   del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y
   un slideshow avanza solo de todas formas.
+- **Traducciones**: por ahora solo el dock y su panel de configuración. Los tres binarios
+  accesorios (`kdock-previews`, `kdock-tilemenu`, `kdock-calendar`) siguen en capabase.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que
   layer-shell-qt): una versión mayor nueva de Qt puede pedir ajustes.
 

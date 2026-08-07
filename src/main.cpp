@@ -47,6 +47,7 @@
 #include "systray.h"
 #include "systraymodel.h"
 #include "theme.h"
+#include "translations.h"
 #include "volumecontrol.h"
 #include "audiocontrol.h"
 #include "windowmonitor.h"
@@ -198,6 +199,10 @@ int main(int argc, char *argv[])
     qmlRegisterUncreatableType<ScriptRunnerConfig>("kdock", 1, 0, "ScriptRunnerConfig", QStringLiteral("Access via ScriptRunnersManager"));
 
     const bool wayland = app.platformName().contains(QLatin1String("wayland"));
+
+    // First of the singletons: it installs the QTranslator every tr()/qsTr()
+    // below goes through, so nothing built before it would be translated.
+    Translations translations;
 
     // System-wide singletons shared by every dock instance.
     Theme theme;

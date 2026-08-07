@@ -31,6 +31,7 @@ qt_add_executable(kdock-previews
     # only includes Qt headers) is what keeps the two docks agreeing on the path
     # *and* on the icon theme, without a copy of either.
     ${KDOCK_SHARED_SRC}/dockconfig.cpp    ${KDOCK_SHARED_SRC}/dockconfig.h
+    ${KDOCK_SHARED_SRC}/translations.cpp   ${KDOCK_SHARED_SRC}/translations.h
 )
 
 target_include_directories(kdock-previews PRIVATE ${KDOCK_SHARED_SRC})

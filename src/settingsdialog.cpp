@@ -20,11 +20,14 @@
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
 #include "systray.h"
+#include "translations.h"
 
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
+#include <QDesktopServices>
+#include <QDir>
 #include <QComboBox>
 #include <QGroupBox>
 #include <QCoreApplication>
@@ -58,6 +61,7 @@
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -284,6 +288,13 @@ void SettingsDialog::buildTabs()
     m_networkTabIndex = -1;
     addTab(createNetworkTab(), tr("Redes"));
     m_networkTabIndex = m_tabWidget->count() - 1;
+    // Dead last on purpose: it is the tab that decides in which language every
+    // other tab is written.
+    m_translationsTabIndex = -1;
+    if (Translations::instance()) {
+        addTab(createTranslationsTab(), tr("Traducciones"));
+        m_translationsTabIndex = m_tabWidget->count() - 1;
+    }
     applyTabColors();
 
     // A dock moved via the context menu (Dock → Mover Sig. Monitor) changes the
@@ -3477,6 +3488,158 @@ QWidget *SettingsDialog::createBackupTab()
     });
 
     return tab;
+}
+
+namespace {
+// The translations directory with the home directory folded back to "~".
+QString translationsDirLabel()
+{
+    QString path = Translations::dirPath();
+    const QString home = QDir::homePath();
+    if (!home.isEmpty() && path.startsWith(home))
+        path.replace(0, home.size(), QStringLiteral("~"));
+    return path;
+}
+} // namespace
+
+void SettingsDialog::reloadTranslationsList()
+{
+    Translations *layer = Translations::instance();
+    if (!m_translationsList || !layer)
+        return;
+    const QString previous = m_translationsList->currentItem()
+                                 ? m_translationsList->currentItem()->data(Qt::UserRole).toString()
+                                 : layer->activeName();
+    m_translationsList->clear();
+    const QString active = layer->activeName();
+    for (const QString &name : layer->available()) {
+        const bool isActive = (name == active);
+        auto *item = new QListWidgetItem(
+            isActive ? tr("%1  — en uso").arg(name) : name, m_translationsList);
+        item->setData(Qt::UserRole, name);
+        if (isActive) {
+            QFont bold = item->font();
+            bold.setBold(true);
+            item->setFont(bold);
+            item->setIcon(QIcon::fromTheme(QStringLiteral("dialog-ok")));
+        }
+        if (name == previous)
+            m_translationsList->setCurrentItem(item);
+    }
+    if (!m_translationsList->currentItem() && m_translationsList->count() > 0)
+        m_translationsList->setCurrentRow(0);
+}
+
+QWidget *SettingsDialog::createTranslationsTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+    Translations *layer = Translations::instance();
+
+    auto *info = new QLabel(
+        tr("Idioma de la interfaz. Cada traducción es un archivo de texto en "
+           "%1, con cuatro títulos: Configuracion (este diálogo), UIdock (menús "
+           "y ventanas del dock), Widgets (nombres de los widgets) y Apps "
+           "(nombres de aplicaciones, por id de .desktop).\n\n"
+           "Lo que una traducción no incluya usa el texto nativo \"capabase\"; "
+           "para las apps, el Name= de su .desktop. Un widget renombrado a mano "
+           "(solapa Layout) conserva ese nombre en todos los idiomas.")
+            // ~ instead of the real home: the label is documentation, and the
+            // literal path is one more thing that differs per machine.
+            .arg(translationsDirLabel()),
+        tab);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    auto *row = new QHBoxLayout;
+    m_translationsList = new QListWidget(tab);
+    row->addWidget(m_translationsList, 1);
+
+    auto *buttons = new QVBoxLayout;
+    auto *edit = new QPushButton(QIcon::fromTheme(QStringLiteral("document-edit")),
+                                 tr("Editar"), tab);
+    edit->setToolTip(tr("Abre el archivo con el editor de texto predeterminado. "
+                        "Al guardarlo, el dock toma los cambios solo."));
+    auto *use = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")),
+                                tr("Usar este idioma"), tab);
+    auto *refresh = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                    tr("Actualizar apps"), tab);
+    refresh->setToolTip(tr("Agrega al archivo los nombres de todas las "
+                           "aplicaciones instaladas que todavía no estén."));
+    auto *reload = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                   tr("Recargar"), tab);
+    auto *create = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
+                                   tr("Nueva…"), tab);
+    create->setToolTip(tr("Copia la traducción seleccionada con otro nombre."));
+    for (QPushButton *b : {edit, use, refresh, reload, create})
+        buttons->addWidget(b);
+    buttons->addStretch();
+    row->addLayout(buttons);
+    layout->addLayout(row, 1);
+
+    // The selected name, not the row: the list is rebuilt on every change.
+    auto selected = [this]() -> QString {
+        QListWidgetItem *item = m_translationsList->currentItem();
+        return item ? item->data(Qt::UserRole).toString() : QString();
+    };
+
+    connect(edit, &QPushButton::clicked, this, [this, selected] {
+        const QString name = selected();
+        if (name.isEmpty())
+            return;
+        QDesktopServices::openUrl(QUrl::fromLocalFile(Translations::filePathFor(name)));
+    });
+    connect(use, &QPushButton::clicked, this, [this, layer, selected] {
+        const QString name = selected();
+        if (!name.isEmpty())
+            layer->setActive(name);
+    });
+    connect(m_translationsList, &QListWidget::itemDoubleClicked, this,
+            [layer](QListWidgetItem *item) {
+                layer->setActive(item->data(Qt::UserRole).toString());
+            });
+    connect(refresh, &QPushButton::clicked, this, [this, layer, selected] {
+        const QString name = selected();
+        if (name.isEmpty() || !m_apps)
+            return;
+        const int added = layer->refreshApps(name, m_apps->all());
+        QMessageBox::information(
+            this, tr("Actualizar apps"),
+            added > 0 ? tr("Se agregaron %1 aplicaciones a \"%2\".").arg(added).arg(name)
+                      : tr("\"%1\" ya tenía todas las aplicaciones instaladas.").arg(name));
+    });
+    connect(reload, &QPushButton::clicked, this, [layer] { layer->reload(); });
+    connect(create, &QPushButton::clicked, this, [this, layer, selected] {
+        const QString base = selected();
+        if (base.isEmpty())
+            return;
+        bool ok = false;
+        const QString name = QInputDialog::getText(
+            this, tr("Nueva traducción"),
+            tr("Nombre del idioma nuevo (copia de \"%1\"):").arg(base),
+            QLineEdit::Normal, QString(), &ok);
+        if (!ok)
+            return;
+        QString error;
+        if (!layer->createFrom(base, name, &error))
+            QMessageBox::warning(this, tr("Nueva traducción"), error);
+        else
+            reloadTranslationsList();
+    });
+
+    // Rebuilding the whole dialog on a language change would destroy this tab
+    // mid-signal, so the list is refreshed through the event loop.
+    connect(layer, &Translations::changed, this,
+            [this] { QTimer::singleShot(0, this, [this] { reloadTranslationsList(); }); });
+
+    reloadTranslationsList();
+    return tab;
+}
+
+void SettingsDialog::showTranslationsTab()
+{
+    if (m_translationsTabIndex >= 0 && m_translationsTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_translationsTabIndex);
 }
 
 QWidget *SettingsDialog::createPreviewsTab()

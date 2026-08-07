@@ -2,6 +2,7 @@
 
 #include "desktopentry.h"
 #include "dockconfig.h"
+#include "translations.h"
 
 #include <QIcon>
 #include <QProcess>
@@ -200,7 +201,7 @@ QVariantMap AppMenu::entryToMap(const QString &id) const
     const DesktopEntry e = m_apps->byId(id);
     QVariantMap m;
     m[QStringLiteral("id")] = e.isValid() ? e.id : id;
-    m[QStringLiteral("name")] = e.isValid() && !e.name.isEmpty() ? e.name : id;
+    m[QStringLiteral("name")] = e.isValid() && !e.name.isEmpty() ? appNameFor(e) : id;
     m[QStringLiteral("icon")] = e.isValid() && !e.icon.isEmpty()
                                     ? e.icon : QStringLiteral("application-x-executable");
     m[QStringLiteral("comment")] = e.comment;
@@ -248,7 +249,10 @@ QVariantList AppMenu::search(const QString &query) const
         return {};
     QVariantList list;
     for (const DesktopEntry &e : m_apps->all()) {
-        if (e.name.contains(q, Qt::CaseInsensitive)
+        // The translated name is what the row shows, so it has to be searchable
+        // too; the original Name= keeps working for anyone who types that.
+        if (appNameFor(e).contains(q, Qt::CaseInsensitive)
+            || e.name.contains(q, Qt::CaseInsensitive)
             || e.comment.contains(q, Qt::CaseInsensitive)
             || e.id.contains(q, Qt::CaseInsensitive))
             list.append(entryToMap(e.id));

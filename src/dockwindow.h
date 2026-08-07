@@ -61,6 +61,11 @@ public:
     // through to the windows below.
     Q_INVOKABLE void setHidden(bool hidden);
 
+    // Language changed: re-evaluate every qsTr() binding of this dock's QML and
+    // rebuild the settings dialog (Qt Widgets has no retranslateUi here, the
+    // strings were baked in when the widgets were built).
+    void retranslate();
+
     // Map or unmap the surface because the current virtual desktop wants (or
     // no longer wants) this dock. Everything above the surface — the QML
     // engine, the model, the clocks — stays alive, so coming back is cheap;

@@ -6,6 +6,7 @@
 #include "dockmodel.h"
 #include "dockwindow.h"
 #include "systraymodel.h"
+#include "translations.h"
 #include "virtualdesktops.h"
 
 #include <QDir>
@@ -27,6 +28,23 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, [this] { sync(); });
+
+    // Language change: the strings are already served by the translator, but
+    // what is on screen was built with the old ones. Every dock re-evaluates its
+    // QML and rebuilds its dialog, and every config re-emits its widget names.
+    if (Translations *layer = Translations::instance()) {
+        connect(layer, &Translations::changed, this, [this] {
+            DockConfig::retranslate();
+            for (Instance &inst : m_instances) {
+                if (inst.window)
+                    inst.window->retranslate();
+            }
+            for (Instance &inst : m_previews) {
+                if (inst.window)
+                    inst.window->retranslate();
+            }
+        });
+    }
 
     if (m_shared.desktops) {
         // Switching desktops is the same kind of event as plugging a monitor:

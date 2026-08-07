@@ -3,6 +3,7 @@
 #include "virtualdesktops.h"
 
 #include "dockconfig.h"
+#include "translations.h"
 #include "windowmonitor.h"
 
 #include <QVariantMap>
@@ -10,7 +11,7 @@
 QString DockModel::Item::displayName() const
 {
     if (entry.isValid() && !entry.name.isEmpty())
-        return entry.name;
+        return appNameFor(entry);
     if (!windows.isEmpty() && !windows.first()->title.isEmpty())
         return windows.first()->title;
     return fallbackAppId;
@@ -38,6 +39,15 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
     connect(m_config, &DockConfig::separator1Changed, this, &DockModel::rebuild);
     connect(m_config, &DockConfig::separator2Changed, this, &DockModel::rebuild);
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
+    // App names come from the translation layer (see Item::displayName), so a
+    // language change is a rename of every row at once.
+    if (Translations *layer = Translations::instance()) {
+        connect(layer, &Translations::changed, this, [this] {
+            if (m_items.isEmpty())
+                return;
+            emit dataChanged(index(0), index(m_items.size() - 1), {NameRole});
+        });
+    }
     if (m_monitor) {
         connect(m_monitor, &WindowMonitor::windowAdded, this, [this](AbstractWindow *w) {
             connect(w, &AbstractWindow::changed, this, [this, w] { windowChanged(w); });

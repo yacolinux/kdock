@@ -290,7 +290,7 @@ Popup {
                                 Menu {
                                     id: apMenu
                                     popupType: Popup.Window
-                                    width: Math.max(implicitWidth + 16, 200)
+                                    width: Math.max(implicitWidth + 64, 200)
                                     MenuItem {
                                         text: qsTr("Olvidar esta red")
                                         onTriggered: network.forgetConnection(apRow.modelData.connPath)

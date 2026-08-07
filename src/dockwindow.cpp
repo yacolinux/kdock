@@ -374,6 +374,23 @@ void DockWindow::openSettings()
     m_dialog->activateWindow();
 }
 
+void DockWindow::retranslate()
+{
+    engine()->retranslate();
+    if (!m_dialog)
+        return;
+    // The dialog is normally where the change was made, so it is rebuilt and
+    // reopened on the Traducciones tab. deleteLater(): this runs from inside the
+    // old dialog's own signal handler.
+    const bool wasVisible = m_dialog->isVisible();
+    m_dialog->deleteLater();
+    m_dialog = nullptr;
+    if (!wasVisible)
+        return;
+    openSettings();
+    m_dialog->showTranslationsTab();
+}
+
 void DockWindow::openSettingsToDock()
 {
     openSettings();

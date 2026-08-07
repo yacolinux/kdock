@@ -862,6 +862,54 @@ engancharlo nunca implica editar el QML del dock. Es un **cuarto binario**, con 
 - **Lo que se toca en kdock, y es nada**: solo `add_subdirectory(calendar)` en el
   `CMakeLists.txt` raíz. No comparte ningún archivo de `src/`.
 
+### Capa de traducciones (`src/translations.{h,cpp}`, `translations/*.md`, 2026-08-07)
+
+Los textos escritos en el código son la **capa nativa "capabase"** (ni inglés ni español: lo
+que haya en el `.cpp`/`.qml`). Encima se carga **una traducción**, un `.md` de texto plano en
+`~/.local/share/kdock/translations/` que el usuario edita con su editor. Se entregan tres:
+`capabase.md`, `english.md` y `spanish.md`.
+
+- **Todo pasa por un `QTranslator` propio.** `KdockTranslator::translate()` busca la cadena
+  fuente en un `QHash` y devuelve un `QString` **nulo** cuando no la tiene, que es como se le
+  dice a Qt "usá el texto fuente" ⇒ el fallback a capabase sale gratis. Como `tr()` y `qsTr()`
+  ya pasan por `QCoreApplication::translate()`, las ~690 cadenas del proyecto quedan cubiertas
+  **sin tocar un solo call site**.
+- **Cuatro secciones**, dos formas de indexar:
+  `## Configuracion` y `## UIdock` van por **cadena fuente** (el texto capabase) y se cargan en
+  **un solo mapa** — la división es para que el archivo se lea, no para la búsqueda: indexar
+  por el *context* de Qt rompería una traducción cada vez que una cadena cambia de clase.
+  `## Widgets` va por **token** de sección (`clock`, `pager`…) y `## Apps` por **id de
+  `.desktop`**.
+- **Precedencia de un nombre de widget**: renombre manual del usuario → traducción → capabase
+  (`DockConfig::widgetName()` → `translatedWidgetLabel()`). El renombre es una decisión
+  explícita y sobrevive al cambio de idioma. Por eso `defaultWidgetLabel()` **no** usa `tr()`:
+  es la tabla capabase contra la que se escriben las traducciones.
+- **Nombre de app**: `appNameFor(entry)` (en `translations.cpp`) es el único lugar que decide;
+  lo llaman `DockModel::Item::displayName()` y `AppMenu::entryToMap()`. Sin entrada en `Apps`,
+  el `Name=` del `.desktop`. `AppMenu::search()` busca contra los dos nombres.
+- **El idioma es global**: clave `language` del `kdock.conf` compartido (ojo: `value("language")`,
+  no `"General/language"` — QSettings mapea `[General]` a la raíz).
+- **Repintado en vivo** al cambiar de idioma o al guardar el archivo desde el editor (hay un
+  `QFileSystemWatcher` sobre el directorio, con rebote de 250 ms): `Translations::changed` →
+  `DockConfig::retranslate()` (bump de `widgetNamesRevision` en cada config viva) +
+  `DockWindow::retranslate()` por dock, que llama `engine()->retranslate()` (re-evalúa todos
+  los `qsTr()`) y **recrea el diálogo** — Qt Widgets no tiene `retranslateUi` acá. `DockModel`
+  emite `dataChanged(NameRole)` por su cuenta.
+- **UI**: solapa **Traducciones**, la última del diálogo. Lista los `.md` presentes (el activo
+  en negrita y con tilde) y ofrece *Editar* (`QDesktopServices::openUrl` → editor
+  predeterminado), *Usar este idioma*, *Actualizar apps* (agrega al archivo los `id = Name` de
+  todas las apps instaladas que falten, idempotente), *Recargar* y *Nueva…* (duplica la
+  seleccionada).
+- **Mantenimiento**: `python3 tools/gen-capabase.py` reescribe `capabase.md` desde el código
+  (usa `lupdate`), y `python3 tools/sync-translations.py` re-sincroniza los demás `.md`
+  conservando lo ya traducido y agregando las claves nuevas con el texto capabase. Los tres
+  archivos van en el qrc y se copian al home en el primer arranque (`seedFiles()`, nunca pisa
+  uno existente).
+- **Fuera de alcance por ahora**: `kdock-previews`, `kdock-tilemenu` y `kdock-calendar` linkean
+  `translations.cpp` (lo necesita `DockConfig`) pero **no instancian `Translations`**, así que
+  sus propias cadenas siguen en capabase. Alcanza con crear el objeto en su `main.cpp` el día
+  que se quieran traducir.
+
 ## Code Conventions
 
 - **C++17**, Qt 6 (≥ 6.5).
@@ -1000,6 +1048,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `AppearanceControl` | `appearance.*` | `iconThemes()`, `colorSchemes()` (listas de mapas con id/name/current/**fav**, + bg/fg/sel en los esquemas, favoritos primero), `refreshIfStale()`, `applyIconTheme(id)`, `applyColorScheme(id)`, `isFavorite(kind,id)`/`setFavorite(kind,id,on)` (kind = `"icons"`/`"colors"`) + `currentIconTheme`/`currentColorScheme`, `keepPickerOpen` (lectura/escritura, compartida por todos los pickers) y las señales `changed`/`favoritesChanged`/`keepPickerOpenChanged` |
 | `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Negritas: `labelBold` (bool, todos los nombres del dock). Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
 | `Theme` | `theme.background`, `theme.foreground`, `theme.highlight`, `theme.revision` | Live-reloading color scheme |
+| `Translations` | (sin context property) | La capa de traducciones se sirve a QML a través del `QTranslator` instalado: los `qsTr()` no cambian. Lo único que QML ve del tema es `config.widgetName(token)` (ya traducido) y `config.widgetNamesRevision`, que se bumpea también al cambiar de idioma |
 | `DockModel` | `dockModel` (model) | `activate(row)`, `launch(row)`, `togglePinned(row)`, `closeAll(row)`, `windowList(row)`, `moveItem(from, to)`, `activateWindow(row, idx)`, `syncWindows()`, `sendToDesktop(row, position)` (mueve **todas** las ventanas del ícono a un escritorio 1-based, sin seguirlas) |
 | `DockWindow` | `dockWindow` | `setHidden(bool)`, `openSettings()`, `openSettingsToDock()`, `createEmptyDock()`, `deleteDock()`, `restart()`, `quit()` |
 | `VolumeControl` | `volume` | `available`, `volume`, `muted`, `iconName`, `setVolume(v)`, `toggleMute()`, `refresh()` (called on hover to avoid acting on a stale cache) |

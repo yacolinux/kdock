@@ -1,5 +1,7 @@
 #include "dockconfig.h"
 
+#include "translations.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -1675,54 +1677,81 @@ void DockConfig::setAutoShrinkMinIconSize(int px)
     emit autoShrinkMinIconSizeChanged();
 }
 
+// The capabase (native) label of a section. Deliberately *not* tr(): capabase
+// is the layer the translations are written against, so these strings must stay
+// exactly as they are here. What a translation file provides for the token is
+// applied one level up, in widgetName().
 QString DockConfig::defaultWidgetLabel(const QString &token)
 {
     static const QHash<QString, QString> labels = {
-        {QStringLiteral("menu"),          tr("Application menu")},
-        {QStringLiteral("tilemenu"),      tr("Menú de mosaicos")},
-        {QStringLiteral("apps"),          tr("Applications")},
-        {QStringLiteral("clipboard"),     tr("Clipboard")},
-        {QStringLiteral("disks"),         tr("Disks")},
-        {QStringLiteral("network"),       tr("Network")},
-        {QStringLiteral("iconthemes"),    tr("Icon theme")},
-        {QStringLiteral("colorschemes"),  tr("Color scheme")},
-        {QStringLiteral("volume"),        tr("Volume")},
-        {QStringLiteral("brightness"),    tr("Brightness")},
-        {QStringLiteral("battery"),       tr("Battery")},
-        {QStringLiteral("clock"),         tr("Clock")},
-        {QStringLiteral("clock2"),        tr("Clock 2")},
-        {QStringLiteral("overview"),      tr("Overview")},
-        {QStringLiteral("movetodesktop"), tr("Move to desktop")},
-        {QStringLiteral("movetoscreen"),  tr("Move to monitor")},
-        {QStringLiteral("maxmin"),        tr("MaxMin")},
-        {QStringLiteral("closewindow"),   tr("Close window")},
-        {QStringLiteral("nextwallpaper"), tr("Next wallpaper")},
-        {QStringLiteral("darkmode"),      tr("Modo oscuro")},
-        {QStringLiteral("pager"),         tr("Escritorios")},
-        {QStringLiteral("autohide"),      tr("Auto-hide toggle")},
-        {QStringLiteral("showdesktop"),   tr("Show desktop")},
-        {QStringLiteral("systray"),       tr("System tray")},
-        {QStringLiteral("relanzadores"),  tr("Relanzadores")},
-        {QStringLiteral("scriptrunners"), tr("Script Runner")},
-        {QStringLiteral("session"),       tr("Session / power")},
-        {QStringLiteral("settings"),      tr("Settings button")},
-        {QStringLiteral("spring"),        tr("Dynamic separator")},
-        {QStringLiteral("sep"),           tr("Static separator")},
+        {QStringLiteral("menu"),          QStringLiteral("Application menu")},
+        {QStringLiteral("tilemenu"),      QStringLiteral("Menú de mosaicos")},
+        {QStringLiteral("apps"),          QStringLiteral("Applications")},
+        {QStringLiteral("clipboard"),     QStringLiteral("Clipboard")},
+        {QStringLiteral("disks"),         QStringLiteral("Disks")},
+        {QStringLiteral("network"),       QStringLiteral("Network")},
+        {QStringLiteral("iconthemes"),    QStringLiteral("Icon theme")},
+        {QStringLiteral("colorschemes"),  QStringLiteral("Color scheme")},
+        {QStringLiteral("volume"),        QStringLiteral("Volume")},
+        {QStringLiteral("brightness"),    QStringLiteral("Brightness")},
+        {QStringLiteral("battery"),       QStringLiteral("Battery")},
+        {QStringLiteral("clock"),         QStringLiteral("Clock")},
+        {QStringLiteral("clock2"),        QStringLiteral("Clock 2")},
+        {QStringLiteral("overview"),      QStringLiteral("Overview")},
+        {QStringLiteral("movetodesktop"), QStringLiteral("Move to desktop")},
+        {QStringLiteral("movetoscreen"),  QStringLiteral("Move to monitor")},
+        {QStringLiteral("maxmin"),        QStringLiteral("MaxMin")},
+        {QStringLiteral("closewindow"),   QStringLiteral("Close window")},
+        {QStringLiteral("nextwallpaper"), QStringLiteral("Next wallpaper")},
+        {QStringLiteral("darkmode"),      QStringLiteral("Modo oscuro")},
+        {QStringLiteral("pager"),         QStringLiteral("Escritorios")},
+        {QStringLiteral("autohide"),      QStringLiteral("Auto-hide toggle")},
+        {QStringLiteral("showdesktop"),   QStringLiteral("Show desktop")},
+        {QStringLiteral("systray"),       QStringLiteral("System tray")},
+        {QStringLiteral("relanzadores"),  QStringLiteral("Relanzadores")},
+        {QStringLiteral("scriptrunners"), QStringLiteral("Script Runner")},
+        {QStringLiteral("session"),       QStringLiteral("Session / power")},
+        {QStringLiteral("settings"),      QStringLiteral("Settings button")},
+        {QStringLiteral("spring"),        QStringLiteral("Dynamic separator")},
+        {QStringLiteral("sep"),           QStringLiteral("Static separator")},
     };
     return labels.value(token, token);
 }
 
+// Precedence: the user's own rename, then the active translation layer, then
+// capabase. A rename is an explicit decision, so it survives a language change.
 QString DockConfig::widgetName(const QString &token) const
 {
     const QString custom = m_widgetNames.value(token);
-    return custom.isEmpty() ? defaultWidgetLabel(token) : custom;
+    if (!custom.isEmpty())
+        return custom;
+    return translatedWidgetLabel(token);
+}
+
+QString DockConfig::translatedWidgetLabel(const QString &token)
+{
+    if (Translations *layer = Translations::instance()) {
+        const QString translated = layer->widget(token);
+        if (!translated.isEmpty())
+            return translated;
+    }
+    return defaultWidgetLabel(token);
+}
+
+void DockConfig::retranslate()
+{
+    for (DockConfig *config : std::as_const(s_instances)) {
+        ++config->m_widgetNamesRevision;
+        emit config->widgetNamesChanged();
+    }
 }
 
 void DockConfig::setWidgetName(const QString &token, const QString &name)
 {
     const QString trimmed = name.trimmed();
-    // Storing the default name would only make a later default change invisible.
-    const QString value = (trimmed == defaultWidgetLabel(token)) ? QString() : trimmed;
+    // Storing the default name would only make a later default change invisible
+    // — and the default here is what the dock *shows*, i.e. the translated one.
+    const QString value = (trimmed == translatedWidgetLabel(token)) ? QString() : trimmed;
     if (m_widgetNames.value(token) == value)
         return;
     const QString key = QStringLiteral("widgetNames/") + token;

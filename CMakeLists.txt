@@ -67,6 +67,7 @@ qt_add_executable(kdock
     src/routesdialog.cpp        src/routesdialog.h
     src/appearancecontrol.cpp   src/appearancecontrol.h
     src/darkmodeappearance.cpp  src/darkmodeappearance.h
+    src/translations.cpp        src/translations.h
     src/previewslauncher.cpp    src/previewslauncher.h
     src/tilemenulauncher.cpp    src/tilemenulauncher.h
 )
@@ -85,6 +86,14 @@ qt_generate_wayland_protocol_client_sources(kdock FILES
 qt_add_resources(kdock "qml"
     PREFIX "/"
     FILES qml/Dock.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+)
+
+# Shipped translation layers. They are copied to
+# ~/.local/share/kdock/translations on first run (Translations::seedFiles) and
+# edited there; regenerate capabase.md with tools/gen-capabase.py.
+qt_add_resources(kdock "translations"
+    PREFIX "/"
+    FILES translations/capabase.md translations/english.md translations/spanish.md
 )
 
 # The in-tree layer-shell integration is built as a static Qt plugin

@@ -57,6 +57,9 @@ public:
     // Same for the Docks tab, also selecting the row of the given dockId
     // (used by the dock's right-click → Dock → Nombre).
     void showMonitorsTab(const QString &dockId);
+    // Same for the Traducciones tab. A language change rebuilds the dialog
+    // (see DockWindow::retranslate), which reopens it here.
+    void showTranslationsTab();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -129,6 +132,11 @@ private:
     // Toggle + "Configurar" for the accessory previews binary. Only added when
     // kdock-previews is actually installed (see PreviewsLauncher).
     QWidget *createPreviewsTab();
+    // Language of the whole interface: lists the .md translation layers found in
+    // ~/.local/share/kdock/translations and edits them with the default editor.
+    // Not per-dock — the setting lives in the shared kdock.conf.
+    QWidget *createTranslationsTab();
+    void reloadTranslationsList();
     // (Re)populate the tabs for the currently selected monitor's config.
     void buildTabs();
     // Tint every tab so they can be told apart at a glance. The colors are the
@@ -231,6 +239,8 @@ private:
     // volume slider is being dragged so the handle doesn't jump.
     int m_audioTabIndex = -1;
     int m_networkTabIndex = -1;
+    int m_translationsTabIndex = -1;
+    QListWidget *m_translationsList = nullptr;
     int m_monitorsTabIndex = -1;
     QGroupBox *m_audioOutGroup = nullptr;
     QGroupBox *m_audioInGroup = nullptr;

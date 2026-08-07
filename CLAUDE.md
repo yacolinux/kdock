@@ -526,6 +526,46 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   mismo `env -u CC -u CXX` que el del proyecto: si no, falla en el AutoMoc (*"AutoMoc subprocess
   error"*), que tampoco menciona a ccache.
 
+## Traducciones (`translations/*.md`)
+
+Los textos del código son la capa nativa **capabase**; encima va un `.md` por idioma. El
+detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber para tocar código:
+
+- **Toda cadena nueva en `tr()`/`qsTr()` queda fuera de las traducciones hasta que
+  regeneres el catálogo.** No falla ni avisa: simplemente sale en capabase. Después de
+  agregar textos:
+
+  ```bash
+  python3 tools/gen-capabase.py        # relee el código con lupdate -> capabase.md
+  python3 tools/sync-translations.py   # propaga las claves nuevas a english/spanish
+  ```
+
+  El segundo **conserva** lo ya traducido y te dice cuántas entradas siguen iguales a
+  capabase (o sea, cuánto falta traducir). Las dos herramientas son idempotentes.
+- **`defaultWidgetLabel()` no lleva `tr()`** a propósito: esa tabla *es* capabase, y las
+  traducciones se indexan por token en la sección `Widgets`. Si le ponés `tr()`, el nombre del
+  widget queda traducido dos veces por dos caminos distintos.
+- **Los tres `.md` están en el qrc** (`qt_add_resources(kdock "translations")`): un archivo
+  nuevo hay que agregarlo ahí, igual que un `.qml`.
+- **`Translations` se instancia primero en `main.cpp`**, antes que cualquier otro singleton:
+  instala el `QTranslator`, y lo que se haya construido antes ya tiene sus cadenas en capabase.
+- **Probar un idioma no necesita GUI**: sembrá `language=spanish` en el `kdock.conf` de
+  prueba y corré el arnés de Xvfb; para el diálogo, la sonda que linkea los `.o` imprime los
+  títulos de las solapas en cada idioma (`capabase` → "Layout", `spanish` → "Diseño"), que es
+  la prueba de que el `QTranslator` llega a Qt Widgets. Para el QML, el clic derecho con
+  `xdotool` sobre un ícono muestra el menú traducido.
+
+**Dos trampas que aparecieron traduciendo, las dos son de layout y estaban latentes:**
+
+- **`TextMetrics.width` puede quedar 1-2 px por debajo de `Text.implicitWidth`** para la misma
+  cadena y la misma fuente, así que una caja de nombre construida con ese valor **elide un
+  nombre que entra** ("Reloj" dibujado como "Re…", medido 2026-08-07). Con `advanceWidth` los
+  dos números coinciden exacto. `Dock.qml` mide **siempre** con `advanceWidth` (los dos
+  `labelW` y las dos sondas de `measureLabels()`); si agregás otra medición de texto, copiá eso.
+- **El `+ 16` de la fórmula `width: Math.max(implicitWidth + 16, N)` de los `Menu` no alcanza**
+  cuando la etiqueta se alarga al traducirla: en español seguía cortando la última letra. Ahora
+  todos los menús del dock usan **`+ 64`**, medido. Un menú nuevo va con esa holgura.
+
 ## Convenciones
 
 - C++17, Qt 6 (≥ 6.5), `#pragma once`, `QStringLiteral`, `connect` con punteros a miembro,
@@ -634,6 +674,9 @@ Cinco trampas, las cinco mordieron (2026-07-31):
   gating no siempre se hereda del vecino: el ancho y el tamaño de fuente del nombre se apagan
   si no hay ninguna etiqueta encendida, pero el casillero de negritas **queda activo siempre**,
   porque también pinta la fecha del reloj, que es texto fijo.
+- **Un texto nuevo del diálogo o del QML no se traduce solo**: hay que regenerar el catálogo
+  (`tools/gen-capabase.py` + `tools/sync-translations.py`, ver *Traducciones* arriba). No hay
+  error ni advertencia — la cadena sale en capabase en todos los idiomas.
 - **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **tres** listas: la
   del `CMakeLists.txt` de arriba (para `qml/`), la de `previews/CMakeLists.txt` (para
   `previews/qml/`) y la de `tilemenu/CMakeLists.txt` (para `tilemenu/qml/`). Esta última tiene

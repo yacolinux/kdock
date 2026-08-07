@@ -424,11 +424,18 @@ public:
     bool autoShrinkIcons() const { return m_autoShrinkIcons; }
     int autoShrinkMinIconSize() const { return m_autoShrinkMinIconSize; }
     int widgetNamesRevision() const { return m_widgetNamesRevision; }
-    // Name drawn for a section: the user's rename if there is one, otherwise
-    // defaultWidgetLabel(). Q_INVOKABLE because QML asks per token.
+    // Name drawn for a section: the user's rename if there is one, otherwise the
+    // active translation, otherwise defaultWidgetLabel(). Q_INVOKABLE because
+    // QML asks per token.
     Q_INVOKABLE QString widgetName(const QString &token) const;
     // Empty (or equal to the default) clears the rename.
     Q_INVOKABLE void setWidgetName(const QString &token, const QString &name);
+    // The name a section would get without any rename: translation, else
+    // capabase. Used by the dialog to show what "empty = default" means.
+    static QString translatedWidgetLabel(const QString &token);
+    // Language changed: every live config re-emits widgetNamesChanged so the
+    // QML bindings that read widgetName() are evaluated again.
+    static void retranslate();
     // Cross-axis extent (px) of one app cell, label included; == iconSize in
     // IconOnly mode.
     int appCellThickness() const;
