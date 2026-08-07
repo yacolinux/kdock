@@ -150,21 +150,23 @@ HEADER_NOTE = {
 }
 
 
-def build(name, widgets, note):
-    lines = (ROOT / 'english.md').read_text(encoding='utf-8').split('\n')
+def build(base, name, widgets, note):
+    # base es la traducción de la que se copia todo salvo Widgets y Apps: los
+    # apodos son nombres propios, así que son los mismos en los seis archivos.
+    lines = (ROOT / (base + '.md')).read_text(encoding='utf-8').split('\n')
     lines[0] = '# ' + name
     out, section = [], None
     for line in lines:
         t = line.strip()
         if t.startswith('<!-- Traducción'):
-            out.append('<!-- kdock ALT layer: english.md con los nombres de widgets y de apps')
+            out.append('<!-- kdock ALT layer: ' + base + '.md con los nombres de widgets y de apps')
             out.append('     cambiados por apodos. ' + note)
             out.append('     Apps: personajes y sistemas de IA de novelas de ciencia ficción,')
             out.append('     y herramientas de hackeo ficticias. Lo que no esté acá cae a')
             out.append('     capabase (o al Name= del .desktop, para las apps).')
             continue
         if t.startswith('de la capa nativa (capabase.md)'):
-            continue  # segunda línea del encabezado de english.md, ya reemplazada
+            continue  # segunda línea del encabezado de la base, ya reemplazada
         if t.startswith('##'):
             section = t[2:].strip().lower()
             out.append(line)
@@ -194,8 +196,10 @@ if __name__ == '__main__':
         for k in APPS:
             if k not in installed:
                 print('  ! id sin .desktop instalado:', k)
-    for name, widgets in (('english-ALT-startrek', STARTREK),
-                          ('english-ALT-hacker', HACKER),
-                          ('english-ALT-starwars', STARWARS)):
-        w, a = build(name, widgets, HEADER_NOTE[name.split('-')[-1]])
-        print(f'{name}.md: {w} widgets, {a} apps')
+    for base in ('english', 'spanish'):
+        for theme, widgets in (('startrek', STARTREK),
+                               ('hacker', HACKER),
+                               ('starwars', STARWARS)):
+            name = f'{base}-ALT-{theme}'
+            w, a = build(base, name, widgets, HEADER_NOTE[theme])
+            print(f'{name}.md: {w} widgets, {a} apps')
