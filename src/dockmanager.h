@@ -159,6 +159,13 @@ public:
     // both host a tray.
     bool canCoexist(const QString &dockIdA, const QString &dockIdB);
 
+    // Create a dock with the factory defaults in the first free slot of a
+    // monitor and enable it (right-click → Dock → Crear dock vacío). Unlike
+    // duplicateDockForDesktop() nothing is copied: any config file left over
+    // from a removed dock at that slot is deleted first. Returns the new
+    // dockId, or an empty string (with *error set) when the monitor is full.
+    QString createEmptyDock(const QString &screenName, QString *error = nullptr);
+
     // Clone srcDockId into a free slot on its own monitor, bound to the given
     // 1-based desktop, and enable it. Returns the new dockId, or an empty
     // string (with *error set) when the monitor is out of slots.

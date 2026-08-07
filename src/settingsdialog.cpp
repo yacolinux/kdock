@@ -30,6 +30,7 @@
 #include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QFont>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -114,7 +115,13 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
         m_monitorSelector = new QComboBox(this);
         for (const QString &name : m_manager->connectedScreens())
             m_monitorSelector->addItem(name, name);
-        const int idx = m_monitorSelector->findData(screen);
+        int idx = m_monitorSelector->findData(screen);
+        if (idx < 0 && !screen.isEmpty()) {
+            // Same as in selectDock(): a dock whose monitor is unplugged still
+            // has to be named correctly by the bar.
+            m_monitorSelector->addItem(tr("%1 (desconectado)").arg(screen), screen);
+            idx = m_monitorSelector->count() - 1;
+        }
         if (idx >= 0)
             m_monitorSelector->setCurrentIndex(idx);
         bar->addWidget(m_monitorSelector, 1);
@@ -129,6 +136,49 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
         m_enabledCheck = new QCheckBox(tr("Show dock here"), this);
         bar->addWidget(m_enabledCheck);
         mainLayout->addLayout(bar);
+
+        // Second row: which virtual desktop this dock belongs to, plus its name
+        // from the Docks tab. Monitor + slot alone don't say which of several
+        // per-desktop copies is being edited, which is the whole point of
+        // opening the dialog from a right-click on one particular dock.
+        auto *deskBar = new QHBoxLayout;
+        deskBar->addWidget(new QLabel(tr("Escritorio:"), this));
+        m_desktopSelector = new QComboBox(this);
+        m_desktopSelector->setToolTip(
+            tr("Escritorios virtuales a los que pertenece el dock que se está "
+               "editando. Elegí otro para saltar al dock de ese escritorio en "
+               "este monitor (se asigna en la solapa Docks)."));
+        deskBar->addWidget(m_desktopSelector, 1);
+        deskBar->addWidget(new QLabel(tr("Nombre:"), this));
+        m_dockNameLabel = new QLabel(this);
+        QFont nameFont = m_dockNameLabel->font();
+        nameFont.setBold(true);
+        m_dockNameLabel->setFont(nameFont);
+        deskBar->addWidget(m_dockNameLabel);
+        deskBar->addStretch();
+        mainLayout->addLayout(deskBar);
+
+        // "activated" and not currentIndexChanged: reloadDockHeader() rebuilds
+        // the combo on every dock switch, and that must not switch docks again.
+        connect(m_desktopSelector, &QComboBox::activated, this, [this](int) {
+            const QString want = m_desktopSelector->currentData().toString();
+            if (desktopBindingKey(m_manager->configFor(m_dockId)->dockDesktops()) == want)
+                return; // the dock on screen already belongs to that desktop
+            const QString screen = DockConfig::screenOfDockId(m_dockId);
+            for (const QString &id : m_manager->configuredDocks()) {
+                if (DockConfig::screenOfDockId(id) != screen)
+                    continue;
+                if (desktopBindingKey(m_manager->configFor(id)->dockDesktops()) != want)
+                    continue;
+                {
+                    const QSignalBlocker block(m_slotSelector);
+                    m_slotSelector->setCurrentIndex(DockConfig::slotOfDockId(id));
+                }
+                selectDock(id);
+                return;
+            }
+            reloadDockHeader(); // nothing there: snap back to the current dock
+        });
 
         connect(m_monitorSelector, &QComboBox::currentIndexChanged, this,
                 &SettingsDialog::selectFromCombos);
@@ -156,6 +206,7 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
 
     buildTabs();
     updateEnabledCheck();
+    reloadDockHeader();
 
     // Keep the dialog within the screen so the bottom buttons are always visible
     // (tabs scroll internally for overflow).
@@ -213,7 +264,7 @@ void SettingsDialog::buildTabs()
     addTab(createBackupTab(), tr("Backup"));
     m_monitorsTabIndex = -1;
     if (m_manager) {
-        addTab(createMonitorsTab(), tr("Monitores"));
+        addTab(createMonitorsTab(), tr("Docks"));
         m_monitorsTabIndex = m_tabWidget->count() - 1;
     }
     // Not a per-dock setting either: it drives the whole session's wallpapers.
@@ -308,10 +359,28 @@ void SettingsDialog::selectDock(const QString &dockId)
         return;
     m_dockId = dockId;
     m_config = m_manager->configFor(dockId); // same object the live dock uses
+    // The two selectors are the caller when this comes from selectFromCombos(),
+    // but not when it comes from the desktop selector or showMonitorsTab().
+    if (m_monitorSelector && m_slotSelector) {
+        const QSignalBlocker blockMon(m_monitorSelector);
+        const QSignalBlocker blockSlot(m_slotSelector);
+        const QString screen = DockConfig::screenOfDockId(dockId);
+        int monIdx = m_monitorSelector->findData(screen);
+        if (monIdx < 0 && !screen.isEmpty()) {
+            // The combo only lists connected monitors; a dock on an unplugged
+            // one still has to be selectable, or the bar would name another.
+            m_monitorSelector->addItem(tr("%1 (desconectado)").arg(screen), screen);
+            monIdx = m_monitorSelector->count() - 1;
+        }
+        if (monIdx >= 0)
+            m_monitorSelector->setCurrentIndex(monIdx);
+        m_slotSelector->setCurrentIndex(DockConfig::slotOfDockId(dockId));
+    }
     m_relanzadores = m_manager->relanzadores();
     m_scriptRunners = m_manager->scriptRunners();
     buildTabs();
     updateEnabledCheck();
+    reloadDockHeader();
 }
 
 void SettingsDialog::updateEnabledCheck()
@@ -320,6 +389,59 @@ void SettingsDialog::updateEnabledCheck()
         return;
     const QSignalBlocker block(m_enabledCheck);
     m_enabledCheck->setChecked(m_manager->isDockEnabled(m_dockId));
+}
+
+QString SettingsDialog::desktopBindingKey(const QList<int> &desktops)
+{
+    QStringList parts;
+    for (int position : desktops)
+        parts << QString::number(position);
+    return parts.join(QLatin1Char(','));
+}
+
+QString SettingsDialog::desktopBindingLabel(const QList<int> &desktops) const
+{
+    if (desktops.isEmpty())
+        return tr("Todos (dock base)");
+    const QStringList names = m_manager ? m_manager->desktopNamesForUi() : QStringList();
+    QStringList parts;
+    for (int position : desktops)
+        parts << (position <= names.size() ? names.at(position - 1)
+                                           : tr("Escritorio %1").arg(position));
+    return parts.join(QStringLiteral(" / "));
+}
+
+void SettingsDialog::reloadDockHeader()
+{
+    if (!m_manager || !m_desktopSelector)
+        return;
+    const QSignalBlocker block(m_desktopSelector);
+    m_desktopSelector->clear();
+
+    // One entry per distinct desktop binding among the docks of this monitor,
+    // so picking one always lands somewhere. "Base" is always offered, and so
+    // is the current dock's own binding even when it is the only dock with it
+    // (a slot that has no dock yet counts as base).
+    const QString screen = DockConfig::screenOfDockId(m_dockId);
+    const QList<int> mine = m_manager->configFor(m_dockId)->dockDesktops();
+    QList<QList<int>> groups;
+    groups << QList<int>();
+    for (const QString &id : m_manager->configuredDocks()) {
+        if (DockConfig::screenOfDockId(id) != screen)
+            continue;
+        const QList<int> desktops = m_manager->configFor(id)->dockDesktops();
+        if (!groups.contains(desktops))
+            groups << desktops;
+    }
+    if (!groups.contains(mine))
+        groups << mine;
+    for (const QList<int> &group : std::as_const(groups))
+        m_desktopSelector->addItem(desktopBindingLabel(group), desktopBindingKey(group));
+    m_desktopSelector->setCurrentIndex(
+        qMax(0, m_desktopSelector->findData(desktopBindingKey(mine))));
+
+    if (m_dockNameLabel)
+        m_dockNameLabel->setText(dockLabel(m_dockId));
 }
 
 QWidget *SettingsDialog::createGeneralTab()
@@ -1963,7 +2085,12 @@ void SettingsDialog::showNetworkTab()
 
 void SettingsDialog::showMonitorsTab(const QString &dockId)
 {
-    // Switch to the Monitores tab and select the requested dock row, so the
+    // Edit that dock, not whichever one the dialog was left on: the whole point
+    // of arriving here is that the user pointed at one (right-click → Dock →
+    // Nombre, or a freshly created empty dock). No-op when it is the current
+    // one; otherwise it rebuilds the tabs, so the row is selected afterwards.
+    selectDock(dockId);
+    // Switch to the Docks tab and select the requested dock row, so the
     // user lands on the exact line they asked for (right-click → Dock → Nombre).
     if (m_monitorsTabIndex >= 0 && m_monitorsTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_monitorsTabIndex);
@@ -1991,21 +2118,31 @@ QString SettingsDialog::sectionLabel(const QString &token)
     return DockConfig::defaultWidgetLabel(token);
 }
 
+bool SettingsDialog::hideOfflinePref(const char *key)
+{
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    return s.value(QLatin1String(key), true).toBool(); // hidden by default
+}
+
+void SettingsDialog::setHideOfflinePref(const char *key, bool on)
+{
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QLatin1String(key), on);
+}
+
 QString SettingsDialog::dockLabel(const QString &dockId)
 {
     // The alias, when set, replaces the default "<screen> — Dock <n>" name.
-    QString name;
-    {
-        QSettings s(DockConfig::instanceSettingsFilePath(dockId), QSettings::IniFormat);
-        const QString alias = s.value(QStringLiteral("alias")).toString().trimmed();
-        if (!alias.isEmpty())
-            name = alias;
-    }
-    if (name.isEmpty())
-        name = tr("%1 — Dock %2")
-            .arg(DockConfig::screenOfDockId(dockId))
-            .arg(DockConfig::slotOfDockId(dockId) + 1);
-    return name;
+    const QString base = tr("%1 — Dock %2")
+                             .arg(DockConfig::screenOfDockId(dockId))
+                             .arg(DockConfig::slotOfDockId(dockId) + 1);
+    QSettings s(DockConfig::instanceSettingsFilePath(dockId), QSettings::IniFormat);
+    const QString alias = s.value(QStringLiteral("alias")).toString().trimmed();
+    // The alias is added to the automatic name, not swapped for it: naming a
+    // dock used to drop the monitor it lives on, which is the one thing the
+    // list needs to tell docks apart. Renaming is not destructive, so every
+    // already-renamed dock gets its monitor back with no migration.
+    return alias.isEmpty() ? base : tr("%1: %2").arg(base, alias);
 }
 
 std::function<void()> SettingsDialog::makeColorButton(QPushButton *btn, QColor (*get)(),
@@ -3720,6 +3857,16 @@ QWidget *SettingsDialog::createMonitorsTab()
 
     // Top: every configured dock, plus a "remove from list" button.
     layout->addWidget(new QLabel(tr("Docks (Doble-click renombra):"), tab));
+    // A laptop that has been docked to several setups accumulates docks on
+    // outputs that are not plugged in right now; hiding them by default keeps
+    // the list about the monitors the user actually has.
+    m_hideOfflineDocks = new QCheckBox(tr("Ocultar los docks de monitores desconectados"), tab);
+    m_hideOfflineDocks->setChecked(hideOfflinePref(kHideOfflineDocksKey));
+    layout->addWidget(m_hideOfflineDocks);
+    connect(m_hideOfflineDocks, &QCheckBox::toggled, this, [this](bool on) {
+        setHideOfflinePref(kHideOfflineDocksKey, on);
+        reloadDocksList();
+    });
     m_docksList = new QListWidget(tab);
     // The tab stacks three lists (docks, monitors, desktops). Left to expand,
     // the first two fill the dialog and push the third below the fold, where
@@ -3745,6 +3892,15 @@ QWidget *SettingsDialog::createMonitorsTab()
         tr("Monitores (marcá otro monitor para ver una vista previa del dock; "
            "\"Aplicar\" crea la copia definitiva):"),
         tab));
+    // Same idea as the docks list above. The dock's own monitor is never
+    // hidden: its row is the dock's "show here" checkbox.
+    m_hideOfflineMonitors = new QCheckBox(tr("Ocultar monitores desconectados"), tab);
+    m_hideOfflineMonitors->setChecked(hideOfflinePref(kHideOfflineMonitorsKey));
+    layout->addWidget(m_hideOfflineMonitors);
+    connect(m_hideOfflineMonitors, &QCheckBox::toggled, this, [this](bool on) {
+        setHideOfflinePref(kHideOfflineMonitorsKey, on);
+        reloadMonitorsForSelectedDock();
+    });
     m_monitorsList = new QListWidget(tab);
     m_monitorsList->setEnabled(false);
     m_monitorsList->setMaximumHeight(120);
@@ -3859,9 +4015,8 @@ QWidget *SettingsDialog::createMonitorsTab()
         bool ok = false;
         const QString text = QInputDialog::getText(
             this, tr("Nombre del dock"),
-            tr("Alias para \"%1\" (vacío = volver a \"Dock %2\"):")
-                .arg(dockLabel(dockId))
-                .arg(DockConfig::slotOfDockId(dockId) + 1),
+            tr("Alias para \"%1\" (vacío = dejar solo el monitor y el número):")
+                .arg(dockLabel(dockId)),
             QLineEdit::Normal, current, &ok);
         if (ok)
             cfg->setAlias(text);
@@ -3934,7 +4089,17 @@ void SettingsDialog::reloadDocksList()
     m_docksList->clear();
     int selectRow = -1;
     const QString thisScreen = DockConfig::screenOfDockId(m_dockId);
-    const QStringList docks = m_manager->configuredDocks();
+    const QStringList connected = m_manager->connectedScreens();
+    const bool hideOffline = m_hideOfflineDocks && m_hideOfflineDocks->isChecked();
+    QStringList docks;
+    for (const QString &id : m_manager->configuredDocks()) {
+        // The dock the dialog is editing always shows, even on an unplugged
+        // monitor: it is the one the user came here for.
+        if (hideOffline && !connected.contains(DockConfig::screenOfDockId(id))
+            && id != m_dockId && id != previous)
+            continue;
+        docks << id;
+    }
     for (int i = 0; i < docks.size(); ++i) {
         const QString &id = docks.at(i);
         QString label = dockLabel(id);
@@ -3976,6 +4141,9 @@ void SettingsDialog::reloadDocksList()
         m_docksList->setCurrentRow(selectRow);
     else
         m_selectedTabDockId.clear();
+    // The alias and the desktop bindings are edited here, and both show in the
+    // top bar.
+    reloadDockHeader();
     reloadMonitorsForSelectedDock();
 }
 
@@ -3995,7 +4163,10 @@ void SettingsDialog::reloadMonitorsForSelectedDock()
     const QString ownScreen = DockConfig::screenOfDockId(m_selectedTabDockId);
     const QStringList connected = m_manager->connectedScreens();
     const bool enabled = m_manager->isDockEnabled(m_selectedTabDockId);
+    const bool hideOffline = m_hideOfflineMonitors && m_hideOfflineMonitors->isChecked();
     for (const QString &screen : m_manager->knownScreensForUi()) {
+        if (hideOffline && !connected.contains(screen) && screen != ownScreen)
+            continue;
         QString label = screen;
         if (!connected.contains(screen))
             label += tr("  (desconectado)");

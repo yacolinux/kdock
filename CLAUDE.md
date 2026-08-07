@@ -407,7 +407,7 @@ de la feature. Silencio ahí prueba que **no rompiste lo viejo**, nada más.
 Pero ojo con la otra mitad: un proceso bajo Xvfb **sí llega al bus de sesión del usuario**
 (los escritorios virtuales salen de D-Bus, no de Wayland). O sea que una sonda del diálogo
 corriendo en Xvfb ve los tres escritorios reales con sus nombres, y la lista de *Escritorios
-virtuales* de la solapa Monitores se puede manejar desde código con `setCheckState()` y
+virtuales* de la solapa Docks se puede manejar desde código con `setCheckState()` y
 verificar releyendo el `.conf`. Eso cubre la UI entera sin tocar la sesión.
 
 Lo que **solo** se puede probar en la sesión real es el ciclo de vida (crear diferido,
@@ -462,6 +462,23 @@ plasma-window en X11, `WindowMonitor::create()` devuelve nullptr), así que todo
 `enabled: delegateRoot.windowCount > 0` sale gris y parece roto. Para verlo, abrí la reja a
 propósito (`enabled: true`), capturá, y **revertí** — control positivo barato, y el `grep -c
 TEMP` te avisa si te olvidaste de volver atrás.
+
+**Una sonda que construye un `DockManager` con el `Shared` vacío se cae si el dock que crea
+cae en un monitor CONECTADO.** `sync()` arma un `DockWindow` de verdad con todos los servicios
+en `nullptr` y el proceso se va en segmentation fault, que parece un bug del código que estás
+probando. Dos rejas, las dos hacen falta: sembrá el `kdock.conf` con `enabledScreens=` de una
+pantalla **que no existe** (si no, `migrateFirstRun()` habilita la primaria y la sonda ni
+arranca) y usá nombres de monitor inventados (`VIRT-1`, `VIRT-9`) para todo lo que la sonda
+cree. Con eso se ejercita `DockManager` entero —crear, duplicar, atar a escritorios, la solapa
+Docks— sin instanciar una sola ventana. Y si además le pasás un `VirtualDesktops` en el
+`Shared`, la sonda ve los escritorios **reales** por D-Bus (`currentDesktop()` devuelve el del
+usuario), así que se puede probar la lógica que depende del escritorio actual sin tocar la
+sesión.
+
+**Y ojo con el `XDG_DATA_HOME` descartable entre corridas de la misma sonda**: los docks que
+creó la corrida anterior siguen ahí, así que la siguiente empieza en otro slot y cualquier
+`assert` sobre "Dock 2" falla por una razón que no tiene nada que ver. `rm -rf` del directorio
+en cada corrida (me pasó, 2026-08-06).
 
 ### Manejar el diálogo desde código encuentra lo que la captura no muestra
 

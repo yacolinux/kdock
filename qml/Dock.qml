@@ -926,6 +926,8 @@ Item {
                         Menu {
                             id: sectionMenu
                             popupType: Popup.Window
+                            // A Menu doesn't size itself to its widest item.
+                            width: Math.max(implicitWidth + 16, 220)
                             onAboutToShow: root.menuOpen = true
                             onClosed: root.menuOpen = false
                             IconMenuItem {
@@ -961,6 +963,11 @@ Item {
                                 text: qsTr("Dock settings…")
                                 iconName: "configure"
                                 onTriggered: dockWindow.openSettings()
+                            }
+                            IconMenuItem {
+                                text: qsTr("Crear dock vacío")
+                                iconName: "list-add"
+                                onTriggered: dockWindow.createEmptyDock()
                             }
                             MenuSeparator {}
                             IconMenuItem {
@@ -1469,6 +1476,10 @@ Item {
                                 id: dockMenu
                                 title: qsTr("Dock")
                                 popupType: Popup.Window
+                                // A Menu doesn't size itself to its widest item,
+                                // so "Crear dock vacío" would lose its last
+                                // letter to the popup border.
+                                width: Math.max(implicitWidth + 16, 200)
                                 IconMenuItem {
                                     text: qsTr("Nombre…")
                                     iconName: "edit-rename"
@@ -1478,6 +1489,11 @@ Item {
                                     text: qsTr("Dock settings…")
                                     iconName: "configure"
                                     onTriggered: dockWindow.openSettings()
+                                }
+                                IconMenuItem {
+                                    text: qsTr("Crear dock vacío")
+                                    iconName: "list-add"
+                                    onTriggered: dockWindow.createEmptyDock()
                                 }
                                 MenuSeparator {}
                                 IconMenuItem {

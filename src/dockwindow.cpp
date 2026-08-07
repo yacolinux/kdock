@@ -401,6 +401,23 @@ void DockWindow::deleteDock()
     });
 }
 
+void DockWindow::createEmptyDock()
+{
+    if (!m_manager)
+        return;
+    QString err;
+    const QString created = m_manager->createEmptyDock(m_config->screenName(), &err);
+    if (created.isEmpty()) {
+        QMessageBox::warning(nullptr, tr("Crear dock vacío"), err);
+        return;
+    }
+    // Land on the new dock's row: it is born unnamed and on a free edge, so the
+    // first thing to do with it is name it / move it.
+    openSettings();
+    if (m_dialog)
+        m_dialog->showMonitorsTab(created);
+}
+
 void DockWindow::openAudioSettings()
 {
     openSettings();

@@ -54,7 +54,7 @@ public:
     void showAudioTab();
     // Same for the Redes tab (network widget's right-click).
     void showNetworkTab();
-    // Same for the Monitores tab, also selecting the row of the given dockId
+    // Same for the Docks tab, also selecting the row of the given dockId
     // (used by the dock's right-click → Dock → Nombre).
     void showMonitorsTab(const QString &dockId);
 
@@ -142,6 +142,16 @@ private:
     // Recompute the current dockId from the monitor + slot combos and select it.
     void selectFromCombos();
     void updateEnabledCheck();
+    // Second row of the top bar: which virtual desktop the dock being edited
+    // belongs to, and its name from the Docks tab. Both only tell the user
+    // *which* dock this is — the bindings themselves are edited in that tab —
+    // so this has to be re-run whenever the selected dock, its alias or its
+    // desktops change.
+    void reloadDockHeader();
+    // The desktop binding of a dock as one combo entry: its label and the
+    // (opaque) key that identifies the group of docks sharing it.
+    QString desktopBindingLabel(const QList<int> &desktops) const;
+    static QString desktopBindingKey(const QList<int> &desktops);
     void reloadLayoutList();
     // Second list of the Layout tab: the pinned launchers with the two static
     // separators of the apps block (separator1/separator2) drawn where they
@@ -151,9 +161,17 @@ private:
     int appSeparatorPos(int which) const;
     void setAppSeparatorPos(int which, int pos);
     static QString sectionLabel(const QString &token);
-    // How a dock is named to the user: "<monitor> — Dock <n>". Shared by the
-    // Monitors tab list and the systray "already taken by" note.
+    // How a dock is named to the user: "<monitor> — Dock <n>", plus ": <alias>"
+    // when it has one. Shared by the Docks tab list, the top bar and the
+    // systray "already taken by" note.
     static QString dockLabel(const QString &dockId);
+    // The two "hide what is not plugged in" checkboxes of the Docks tab,
+    // persisted in the shared kdock.conf (both default to hiding). Kept out of
+    // DockConfig on purpose: they are a property of the dialog, not of a dock.
+    static constexpr const char *kHideOfflineDocksKey = "ui/hideOfflineDocks";
+    static constexpr const char *kHideOfflineMonitorsKey = "ui/hideOfflineMonitors";
+    static bool hideOfflinePref(const char *key);
+    static void setHideOfflinePref(const char *key, bool on);
     void reloadPinnedList();
     void savePinnedList();
     void addPinnedApp();
@@ -178,6 +196,8 @@ private:
     QString m_dockId;                       // dock currently being edited
     QComboBox *m_monitorSelector = nullptr;
     QComboBox *m_slotSelector = nullptr;
+    QComboBox *m_desktopSelector = nullptr;
+    QLabel *m_dockNameLabel = nullptr;
     QCheckBox *m_enabledCheck = nullptr;
     QComboBox *m_edge;
     QComboBox *m_alignment;
@@ -223,7 +243,9 @@ private:
     QString m_selectedRelanzadorId;
     QString m_selectedScriptRunnerId;
     QListWidget *m_docksList = nullptr;
+    QCheckBox *m_hideOfflineDocks = nullptr;
     QListWidget *m_monitorsList = nullptr;
+    QCheckBox *m_hideOfflineMonitors = nullptr;
     // Virtual desktops the selected dock is bound to (no box checked = base
     // dock, shown wherever its monitor has no desktop-specific dock).
     QListWidget *m_desktopsList = nullptr;

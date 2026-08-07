@@ -167,6 +167,47 @@ bool DockManager::canCoexist(const QString &dockIdA, const QString &dockIdB)
     return false;
 }
 
+QString DockManager::createEmptyDock(const QString &screenName, QString *error)
+{
+    const QString screen = screenName.isEmpty() ? primaryScreenName() : screenName;
+    const int slot = firstFreeSlotWithPreviews(screen);
+    if (slot < 0) {
+        if (error)
+            *error = tr("El monitor %1 ya tiene el máximo de docks (%2).")
+                         .arg(screen)
+                         .arg(DockConfig::kMaxDocksPerScreen);
+        return {};
+    }
+    const QString dockId = DockConfig::makeDockId(screen, slot);
+
+    // The slot is free, so a file at its path is a leftover from a removed dock
+    // — and "empty" means the defaults, not those settings resurrected.
+    if (DockConfig *cfg = m_configs.take(dockId))
+        delete cfg;
+    QFile::remove(DockConfig::instanceSettingsFilePath(dockId));
+
+    // A brand-new dock is a base dock, and on a monitor whose current desktop
+    // already has docks of its own that means **invisible** (wantedDocks: the
+    // desktop's own docks win) — which reads as "the command failed". So bind
+    // it to the current desktop, but only in that case: when the monitor has no
+    // dock bound to this desktop, a base dock is already visible here, and
+    // binding one would instead *hide* the monitor's base docks.
+    const int current = currentDesktop();
+    if (current > 0) {
+        for (const QString &id : enabledDocksForScreen(screen)) {
+            if (!configFor(id)->dockDesktops().contains(current))
+                continue;
+            configFor(dockId)->setDockDesktops({current});
+            break;
+        }
+    }
+
+    // Seeds a free screen edge for slot > 0, persists and syncs, which is what
+    // puts the new dock on screen.
+    setDockEnabled(dockId, true);
+    return dockId;
+}
+
 QString DockManager::duplicateDockForDesktop(const QString &srcDockId, int desktop,
                                              QString *error)
 {

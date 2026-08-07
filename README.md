@@ -51,8 +51,13 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   escritorio que tiene docks propios se ven **esos y solo esos**, y un monitor sin docks
   propios sigue mostrando los de siempre. O sea que mientras no ates ninguno, nada cambia:
   los docks actuales se ven en todos los escritorios, como hasta ahora. Se configura en
-  *Monitores*, marcando escritorios o con **Duplicar para el escritorio…**, que clona el dock
-  en el mismo monitor para empezar a diferenciarlo. Los docks de un escritorio **no se
+  *Docks*, marcando escritorios o con **Duplicar para el escritorio…**, que clona el dock
+  en el mismo monitor para empezar a diferenciarlo. Y desde el clic derecho, **Dock → Crear
+  dock vacío** agrega uno con los valores por defecto en el mismo monitor: si el escritorio
+  en el que estás ya tiene docks propios, el nuevo se ata a él para que aparezca en el acto.
+  Arriba del diálogo, un selector de **escritorio** y el **nombre** del dock dicen en todo
+  momento cuál de todos estás editando; abrir Configuración desde un dock preselecciona el
+  suyo. Los docks de un escritorio **no se
   construyen hasta la primera vez que entrás ahí** —así no se paga la memoria de un dock que
   nunca vas a ver— y a partir de entonces cambiar de escritorio solo los muestra y los
   esconde.
@@ -110,7 +115,11 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
   de lo que le queda.
 - **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un
-  color distinto para ubicarse de un vistazo (es lo que se ve en la captura de arriba).
+  color distinto para ubicarse de un vistazo (es lo que se ve en la captura de arriba). La solapa
+  *Docks* lista todos los que tenés configurados —cada uno con su monitor, su borde y sus
+  escritorios— y deja renombrarlos con doble clic; el alias se agrega al nombre automático,
+  así que el monitor nunca se pierde. Por defecto esconde los docks y los monitores que no
+  están conectados, con un casillero para volver a verlos.
 - **Menú de aplicaciones** estilo Kickoff: categorías XDG, búsqueda, favoritos y pie de
   sesión. Muestra además los **submenús propios**: los que se arman con el editor de menús
   de KDE y los que crean los navegadores para sus web apps — declarados en los archivos
