@@ -165,14 +165,15 @@ la propia: eso es todo lo que hace falta para agregar un idioma, sin recompilar.
 Para el chino hace falta una fuente CJK instalada (Noto Sans CJK o WenQuanYi); sin ella el
 sistema dibuja cuadraditos, y no es algo que kdock pueda resolver.
 
-Vienen además seis capas **ALT**, con los nombres cambiados por apodos: tres juegos —
+Vienen además nueve capas **ALT**, con los nombres cambiados por apodos: tres juegos —
 `*-ALT-startrek` (naves de Star Trek), `*-ALT-hacker` (apodos de hacker) y `*-ALT-starwars`
-(hardware de Star Wars) para los widgets— por dos idiomas de base, `english-` y `spanish-`.
-Las seis comparten la misma sección `Apps`: inteligencias artificiales de novelas de ciencia
-ficción y herramientas de hackeo ficticias. Los apodos son nombres propios, así que no
-cambian entre las dos bases; lo que cambia es el idioma del resto de la interfaz. Son medio
-en broma, pero sirven de ejemplo completo de las cuatro secciones — sobre todo de `Apps`, que
-es la única que se llena con ids de `.desktop` reales.
+(hardware de Star Wars) para los widgets— por tres idiomas de base, `english-`, `spanish-` y
+`zh-CN-`. Las nueve comparten el mismo reparto de la sección `Apps`: inteligencias
+artificiales de novelas de ciencia ficción y herramientas de hackeo ficticias. En inglés y en
+español los apodos son nombres propios y quedan igual; **en chino se traducen también**
+(冬寂 Wintermute, 企业号 Enterprise, 匡氏十一型 Kuang Mark Eleven), que es la forma de que la
+broma se lea en el idioma de la interfaz. Sirven además de ejemplo completo de las cuatro
+secciones — sobre todo de `Apps`, que es la única que se llena con ids de `.desktop` reales.
 
 ### Widgets
 

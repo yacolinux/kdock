@@ -902,14 +902,16 @@ que haya en el `.cpp`/`.qml`). Encima se carga **una traducción**, un `.md` de 
   predeterminado), *Usar este idioma*, *Actualizar apps* (agrega al archivo los `id = Name` de
   todas las apps instaladas que falten, idempotente), *Recargar* y *Nueva…* (duplica la
   seleccionada).
-- **Capas ALT** (2026-08-07): seis archivos, `{english,spanish}-ALT-{startrek,hacker,starwars}`,
-  cada uno es su base (`english.md` / `spanish.md`) con la sección `Widgets` cambiada por
+- **Capas ALT** (2026-08-07): nueve archivos, `{english,spanish,zh-CN}-ALT-{startrek,hacker,starwars}`,
+  cada uno es su base (`english.md` / `spanish.md` / `zh-CN.md`) con la sección `Widgets` cambiada por
   apodos (naves de Star Trek / apodos de hacker / hardware de Star Wars) y una sección `Apps`
   compartida de 82 entradas — IA de novelas de ciencia ficción y herramientas de hackeo ficticias — armada
   contra los `.desktop` realmente instalados. Además de ser un chiste, son el **único ejemplo
   con la sección `Apps` llena** que se entrega, que es la que no se puede generar desde el
-  código. Los apodos son nombres propios: son **los mismos en las seis**, y lo único que
-  distingue una base de la otra es el idioma de `Configuracion`/`UIdock`. Se regeneran con
+  código. El **reparto** (qué apodo le toca a cada token y a cada id) es uno solo para las
+  nueve; en inglés y en español los apodos van tal cual, y para el chino hay una tabla más,
+  `ZH_NAMES`, que traduce el apodo — o sea que el chino es una capa de traducción sobre los
+  apodos, no otro reparto. Se regeneran con
   `python3 tools/gen-alt-layers.py` (las tablas de apodos están
   adentro; con `APPS_CHECK=<volcado de ids>` avisa de los ids que no tengan `.desktop`); si
   cambian las cadenas de `english.md`, `tools/sync-translations.py` las mantiene al día como

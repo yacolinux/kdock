@@ -101,6 +101,9 @@ qt_add_resources(kdock "translations"
           translations/spanish-ALT-startrek.md
           translations/spanish-ALT-hacker.md
           translations/spanish-ALT-starwars.md
+          translations/zh-CN-ALT-startrek.md
+          translations/zh-CN-ALT-hacker.md
+          translations/zh-CN-ALT-starwars.md
 )
 
 # The in-tree layer-shell integration is built as a static Qt plugin

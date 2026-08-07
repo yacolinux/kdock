@@ -143,6 +143,72 @@ APPS = {
  'crystal-dock': 'Dock Impostor',
 }
 
+# ---- Los mismos apodos, en chino ------------------------------------------
+# La asignación (qué apodo le toca a cada widget y a cada app) es una sola: esta
+# tabla solo traduce el apodo, igual que cualquier otra capa traduce un texto.
+# Los nombres con traducción establecida en chino la usan (Wintermute 冬寂,
+# Enterprise 企业号); el resto se traduce por sentido, no por transliteración.
+ZH_NAMES = {
+ # 1) naves de Star Trek
+ 'Enterprise': '企业号',        'Discovery': '发现号',      'Voyager': '航海家号',
+ 'Defiant': '挑衅号',           'Reliant': '可靠号',        'Excelsior': '卓越号',
+ 'Stargazer': '观星者号',       'Cerritos': '塞里托斯号',    'Intrepid': '无惧号',
+ 'Prometheus': '普罗米修斯号',   'Titan': '泰坦号',          'Bozeman': '博兹曼号',
+ 'Phoenix': '凤凰号',           'Yorktown': '约克城号',      'Pegasus': '飞马号',
+ 'Shenzhou': '神舟号',          'Sutherland': '萨瑟兰号',    'Grissom': '格里索姆号',
+ 'Farragut': '法拉格特号',       'Equinox': '春分号',        'Constellation': '星座号',
+ 'Saratoga': '萨拉托加号',       'Hood': '胡德号',           'Yamato': '大和号',
+ 'Odyssey': '奥德赛号',         'Franklin': '富兰克林号',    'Kelvin': '开尔文号',
+ 'Lexington': '列克星敦号',      'Protostar': '原恒星号',     'Aventine': '阿文丁号',
+ # 2) apodos de hacker
+ 'Zero Cool': '零度酷客',       'Acid Burn': '酸蚀',        'Crash Override': '崩溃覆写',
+ 'Cereal Killer': '麦片杀手',    'Phantom Phreak': '幽灵飞客','Phiber Optik': '光纤客',
+ 'Lord Nikon': '尼康大人',       'Razor': '剃刀',            'Blade': '利刃',
+ 'Neon': '霓虹',                'Voltage': '电压',          'Whistler': '吹哨人',
+ 'Chronos': '时序者',           'The Plague': '瘟疫',       'Mendax': '门达克斯',
+ 'Dark Dante': '黑暗但丁',       'Bishop': '主教',           'Reaper': '收割者',
+ 'Kaleido': '万花筒',           'Nightfall': '夜幕',        'Cosmo': '科斯莫',
+ 'Ghost': '幽灵',               'Sneakers': '潜行者',        'Condor': '秃鹰',
+ 'Data Thief': '数据窃贼',       'Script Kitty': '脚本小猫',  'Knight Lightning': '闪电骑士',
+ 'Root': '根权限',              'Slack Space': '残留空间',   'Null Byte': '空字节',
+ # 3) hardware de Star Wars
+ 'Holocron': '全息档案',        'Datapad': '数据板',         'Hangar Bay': '机库',
+ 'Data Cache': '数据缓存',       'Astromech': '宇航技工机',   'Comlink': '通讯器',
+ 'Holoprojector': '全息投影仪',  'Kyber Crystal': '凯波水晶',  'Sonic Emitter': '声波发射器',
+ 'Glowrod': '光棒',             'Power Cell': '能量电池',    'Chrono': '计时器',
+ 'Ship Chrono': '舰载计时器',    'Sensor Dish': '传感天线',   'Hyperdrive': '超空间引擎',
+ 'Tractor Beam': '牵引光束',     'Repulsorlift': '斥力升降器','Ion Cannon': '离子炮',
+ 'Vaporator': '集水器',         'Carbonite': '碳素冷冻',     'Nav Computer': '导航电脑',
+ 'Cloaking Device': '隐形装置',  'Blast Door': '防爆门',      'Droid Socket': '机器人接口',
+ 'Gonk Droid': '冈克机器人',     'Power Converter': '能量转换器','Reactor Core': '反应堆核心',
+ 'Diagnostic Port': '诊断端口',  'Deflector Shield': '偏导护盾','Bulkhead': '隔舱壁',
+ # 4) IA de novelas de ciencia ficción
+ 'Wintermute': '冬寂',          'Neuromancer': '神经漫游者',  'Mycroft Holmes': '迈克罗夫特',
+ 'Giskard': '吉斯卡特',         'Daneel': '丹尼尔',          'Multivac': '穆提瓦克',
+ 'Golem XIV': '高莱姆十四',      'Deep Thought': '深思',      'Marvin': '马文',
+ 'Jane': '简',                  'HAL 9000': '哈尔9000',      'AM': '联合主机 AM',  # Allied Mastercomputer
+ 'Colossus': '巨神',            'Erasmus': '伊拉斯谟',        'Omnius': '奥姆尼乌斯',
+ 'Hex': '赫克斯',               'Aineko': '艾内可',          'Ummon': '云门',
+ 'Solace': '慰藉',              'Sleeper Service': '沉睡者号', 'Grey Area': '灰色地带',
+ 'Prime Intelligence': '至高智能','The Library of Babel': '巴别图书馆',
+ # 5) herramientas de hackeo ficticias
+ 'Kuang Mark Eleven': '匡氏十一型','Black ICE': '黑冰',        'Icebreaker': '破冰器',
+ 'The Gibson': '吉布森主机',     'Screamer': '尖啸者',        'Packet Ripper': '数据包撕裂者',
+ 'Process Wraith': '进程幽灵',   'Daemon Watch': '守护进程监视','Route Spoofer': '路由伪装器',
+ 'Sector Zero': '零号扇区',      'Deep Scan': '深度扫描',     'Payload Depot': '载荷仓库',
+ 'Patch Runner': '补丁信使',     'Exploit Market': '漏洞市集', 'Sandbox Rig': '沙箱机架',
+ 'Ghost Session': '幽灵会话',    'Puppet Strings': '提线木偶', 'Silicon Probe': '硅探针',
+ 'Registry Pick': '注册表撬锁',  'Dead Drop': '情报暗桩',     'Mail Relay Exploit': '邮件中继漏洞',
+ 'Chatterbox Relay': '闲话中继', 'Whisper Node': '低语节点',   'Signal Sniffer': '信号嗅探器',
+ 'Feedback Loop': '反馈回路',    'Zero Day Feed': '零日情报流','Compression Vault': '压缩保险库',
+ 'Document Sifter': '文档筛析器','Image Forensics': '图像取证','Screen Grabber': '屏幕抓取器',
+ 'Pixel Forge': '像素锻造',      'Blueprint Leak': '蓝图泄露', 'Voice Print': '声纹',
+ 'Signal Shaper': '信号整形器',  'Siren Feed': '塞壬信息流',   'Bureaucratic Engine': '官僚引擎',
+ 'Ghostwriter': '影子写手',      'Ledger Cracker': '账本破解器','Persuasion Deck': '说服幻灯',
+ 'Tethered Mind': '系连之心',    'Glyph Injector': '字形注入器','Dock Impostor': '冒牌 Dock',
+ 'Nullpointer': '空指针',        'Cipherbreak': '密文破译',    'PhantomShell': '幽灵终端',
+}
+
 HEADER_NOTE = {
  'startrek': 'Nombres de widgets: naves de Star Trek.',
  'hacker': 'Nombres de widgets: apodos de hacker.',
@@ -150,7 +216,9 @@ HEADER_NOTE = {
 }
 
 
-def build(base, name, widgets, note):
+def build(base, name, widgets, note, names=None):
+    # names: traduce el apodo (mismo reparto, otro idioma).
+    tr = (lambda v: names.get(v, v)) if names else (lambda v: v)
     # base es la traducción de la que se copia todo salvo Widgets y Apps: los
     # apodos son nombres propios, así que son los mismos en los seis archivos.
     lines = (ROOT / (base + '.md')).read_text(encoding='utf-8').split('\n')
@@ -173,7 +241,7 @@ def build(base, name, widgets, note):
             continue
         if section == 'widgets' and SEP in line:
             key = line.split(SEP, 1)[0]
-            out.append(key + SEP + widgets.get(key, line.split(SEP, 1)[1]))
+            out.append(key + SEP + tr(widgets.get(key, line.split(SEP, 1)[1])))
             continue
         if section == 'apps':
             continue  # rebuilt below
@@ -181,7 +249,7 @@ def build(base, name, widgets, note):
     while out and not out[-1].strip():
         out.pop()
     for key in sorted(APPS, key=str.lower):
-        out.append(key + SEP + APPS[key])
+        out.append(key + SEP + tr(APPS[key]))
     (ROOT / (name + '.md')).write_text('\n'.join(out) + '\n', encoding='utf-8')
     return len(widgets), len(APPS)
 
@@ -196,10 +264,11 @@ if __name__ == '__main__':
         for k in APPS:
             if k not in installed:
                 print('  ! id sin .desktop instalado:', k)
-    for base in ('english', 'spanish'):
+    for base in ('english', 'spanish', 'zh-CN'):
+        names = ZH_NAMES if base == 'zh-CN' else None
         for theme, widgets in (('startrek', STARTREK),
                                ('hacker', HACKER),
                                ('starwars', STARWARS)):
             name = f'{base}-ALT-{theme}'
-            w, a = build(base, name, widgets, HEADER_NOTE[theme])
+            w, a = build(base, name, widgets, HEADER_NOTE[theme], names)
             print(f'{name}.md: {w} widgets, {a} apps')
