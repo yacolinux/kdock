@@ -84,6 +84,11 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Etiquetas de íconos** en seis disposiciones (debajo, al costado, solo nombre…) con
   medición del nombre más largo para que el dock no desperdicie grosor. Opcionalmente en
   **negrita**, con re-medición para que el nombre más ancho siga entrando.
+- **Nombres en dos renglones** (opcional): un nombre más largo que su caja se **envuelve** en
+  vez de cortarse con puntos suspensivos, así se lee entero — *Nombre Ficticio de Aplicación*
+  en lugar de *Nombre Ficticio de A…*. Vale para los nombres de apps y de widgets a la vez, y
+  el grosor del dock sigue el cambio: la caja pasa a medir dos alturas de línea y la *zona
+  exclusiva* de layer-shell se recalcula, así que las ventanas maximizadas no quedan tapadas.
 - **Modo oscuro** conmutable por dock, o para todos de una con lista de excepciones: fondo
   oscuro, un único color de resaltado para los nombres y para las apps corriendo, e íconos
   de widgets resueltos contra el set oscuro. Es un **override**, no una reescritura: el
@@ -174,6 +179,18 @@ español los apodos son nombres propios y quedan igual; **en chino se traducen t
 (冬寂 Wintermute, 企业号 Enterprise, 匡氏十一型 Kuang Mark Eleven), que es la forma de que la
 broma se lea en el idioma de la interfaz. Sirven además de ejemplo completo de las cuatro
 secciones — sobre todo de `Apps`, que es la única que se llena con ids de `.desktop` reales.
+
+| | Star Trek | Hacker | Star Wars |
+|---|---|---|---|
+| Discos | Reliant · 可靠号 | Phantom Phreak · 幽灵飞客 | Astromech · 宇航技工机 |
+| Red | Excelsior · 卓越号 | Phiber Optik · 光纤客 | Comlink · 通讯器 |
+| Volumen | Intrepid · 无惧号 | Blade · 利刃 | Sonic Emitter · 声波发射器 |
+| Modo oscuro | Equinox · 春分号 | Nightfall · 夜幕 | Carbonite · 碳素冷冻 |
+
+Y en la sección `Apps`, las mismas en las nueve: Dolphin es *Wintermute* (冬寂), Konsole
+*Mycroft Holmes* (迈克罗夫特), Edge *Kuang Mark Eleven* (匡氏十一型) — el icebreaker de
+*Neuromante* —, Wireshark *Packet Ripper* (数据包撕裂者). En total se entregan **trece
+capas**: capabase, los tres idiomas y las nueve ALT.
 
 ### Widgets
 
@@ -433,7 +450,7 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
 | `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | Las capas de traducción (`capabase.md` + un `.md` por idioma). Se copian al home en el primer arranque y se editan ahí |
-| `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código) y `sync-translations.py` (propaga las claves nuevas a los demás idiomas) |
+| `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código), `sync-translations.py` (propaga las claves nuevas a los demás idiomas) y `gen-alt-layers.py` (regenera las nueve capas ALT) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |
 | `CLAUDE.md` | Cómo compilar, probar e instalar; arneses de prueba sin GUI |
