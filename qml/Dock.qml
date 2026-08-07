@@ -794,12 +794,14 @@ Item {
 
                         readonly property int sectionIndex: sec.index
 
-                        // Attached ToolTip: shares one instance per dock window,
-                        // instead of creating one Popup.Window per section row.
-                        ToolTip.text: root.sectionTooltip(sec.token)
-                        ToolTip.visible: secMouse.containsMouse && sec.draggable
-                                         && !secMouse.drag.active && sec.token !== "clock2"
-                        ToolTip.delay: 400
+                        ToolTip {
+                            popupType: Popup.Window
+                            visible: config.showTooltips && secMouse.containsMouse
+                                     && sec.draggable && !secMouse.drag.active
+                                     && sec.token !== "clock2"
+                            delay: 400
+                            text: root.sectionTooltip(sec.token)
+                        }
 
 
                         Drag.active: secMouse.drag.active
@@ -1100,11 +1102,13 @@ Item {
 
                         readonly property int itemIndex: delegateRoot.index
 
-                        // Attached ToolTip: one instance per dock window.
-                        ToolTip.text: delegateRoot.title || delegateRoot.name
-                        ToolTip.visible: mouseArea.containsMouse && !contextMenu.visible
-                                         && !mouseArea.drag.active
-                        ToolTip.delay: 600
+                        ToolTip {
+                            popupType: Popup.Window
+                            visible: config.showTooltips && mouseArea.containsMouse
+                                     && !contextMenu.visible && !mouseArea.drag.active
+                            delay: 600
+                            text: delegateRoot.title || delegateRoot.name
+                        }
 
                         Drag.active: mouseArea.drag.active
                         Drag.source: content
@@ -1667,9 +1671,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: qsTr("Session")
-            ToolTip.visible: sessionMouse.containsMouse && !sessionMenu.visible
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && sessionMouse.containsMouse
+                         && !sessionMenu.visible
+                delay: 400
+                text: qsTr("Session")
+            }
             Image {
                 id: sessionIcon
                 anchors.centerIn: parent
@@ -1732,9 +1740,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: battery.tooltipText
-            ToolTip.visible: batteryMouse.containsMouse && !profileMenu.visible
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && batteryMouse.containsMouse
+                         && !profileMenu.visible
+                delay: 400
+                text: battery.tooltipText
+            }
 
             function profileIcon(p) {
                 if (p === "power-saver") return "power-profile-power-saver"
@@ -1835,10 +1847,13 @@ Item {
             implicitWidth: root.appIconPx
             implicitHeight: root.appIconPx
 
-            ToolTip.text: qsTr("Applications")
-            ToolTip.visible: menuMouse.containsMouse
-                             && !(menuLoader.item && menuLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && menuMouse.containsMouse
+                         && !(menuLoader.item && menuLoader.item.visible)
+                delay: 400
+                text: qsTr("Applications")
+            }
 
             Image {
                 id: menuIcon
@@ -1942,9 +1957,12 @@ Item {
             implicitWidth: root.appIconPx
             implicitHeight: root.appIconPx
 
-            ToolTip.text: qsTr("Menú de mosaicos")
-            ToolTip.visible: tileMouse.containsMouse
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && tileMouse.containsMouse
+                delay: 400
+                text: qsTr("Menú de mosaicos")
+            }
 
             Image {
                 id: tileIcon
@@ -2005,10 +2023,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: qsTr("Portapapeles")
-            ToolTip.visible: clipMouse.containsMouse
-                             && !(clipLoader.item && clipLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && clipMouse.containsMouse
+                         && !(clipLoader.item && clipLoader.item.visible)
+                delay: 400
+                text: qsTr("Portapapeles")
+            }
 
             Image {
                 id: clipIcon
@@ -2118,10 +2139,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: qsTr("Dispositivos extraíbles")
-            ToolTip.visible: disksMouse.containsMouse
-                             && !(disksLoader.item && disksLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && disksMouse.containsMouse
+                         && !(disksLoader.item && disksLoader.item.visible)
+                delay: 400
+                text: qsTr("Dispositivos extraíbles")
+            }
 
             Image {
                 id: disksIcon
@@ -2196,9 +2220,13 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: network && network.primaryName ? network.primaryName : qsTr("Red")
-            ToolTip.visible: netMouse.containsMouse && !(netLoader.item && netLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && netMouse.containsMouse
+                         && !(netLoader.item && netLoader.item.visible)
+                delay: 400
+                text: network && network.primaryName ? network.primaryName : qsTr("Red")
+            }
 
             Image {
                 id: netIcon
@@ -2396,9 +2424,12 @@ Item {
                     width: root.systrayIconPx
                     height: root.systrayIconPx
 
-                    ToolTip.text: model.tooltip || model.service
-                    ToolTip.visible: systrayMouse.containsMouse
-                    ToolTip.delay: 400
+                    ToolTip {
+                        popupType: Popup.Window
+                        visible: config.showTooltips && systrayMouse.containsMouse
+                        delay: 400
+                        text: model.tooltip || model.service
+                    }
 
                     Image {
                         anchors.centerIn: parent
@@ -2525,12 +2556,15 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: appearance && appearance.currentIconTheme
-                          ? qsTr("Iconset: %1").arg(appearance.currentIconTheme)
-                          : qsTr("Iconset de KDE")
-            ToolTip.visible: itMouse.containsMouse
-                             && !(itLoader.item && itLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && itMouse.containsMouse
+                         && !(itLoader.item && itLoader.item.visible)
+                delay: 400
+                text: appearance && appearance.currentIconTheme
+                      ? qsTr("Iconset: %1").arg(appearance.currentIconTheme)
+                      : qsTr("Iconset de KDE")
+            }
 
             Image {
                 anchors.centerIn: parent
@@ -2604,12 +2638,15 @@ Item {
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
-            ToolTip.text: appearance && appearance.currentColorScheme
-                          ? qsTr("Colores: %1").arg(appearance.currentColorScheme)
-                          : qsTr("Esquema de color de KDE")
-            ToolTip.visible: csMouse.containsMouse
-                             && !(csLoader.item && csLoader.item.visible)
-            ToolTip.delay: 400
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && csMouse.containsMouse
+                         && !(csLoader.item && csLoader.item.visible)
+                delay: 400
+                text: appearance && appearance.currentColorScheme
+                      ? qsTr("Colores: %1").arg(appearance.currentColorScheme)
+                      : qsTr("Esquema de color de KDE")
+            }
 
             Image {
                 anchors.centerIn: parent
@@ -2958,7 +2995,7 @@ Item {
             }
             ToolTip {
                 popupType: Popup.Window
-                visible: parent.hovered
+                visible: config.showTooltips && parent.hovered
                 delay: 400
                 contentItem: Rectangle {
                     color: "#404040"

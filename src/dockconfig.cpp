@@ -183,6 +183,24 @@ void DockConfig::setMaximizeWindowsOnDesktop(bool on)
     s.setValue(QStringLiteral("maximizeWindowsOnDesktop"), on);
 }
 
+bool DockConfig::showTooltips()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("showTooltips"), true).toBool();
+}
+
+void DockConfig::setShowTooltips(bool on)
+{
+    if (showTooltips() == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("showTooltips"), on);
+    // Shared setting, but every live dock's QML reads it as a property of its
+    // own config; ping them all so the ToolTip bindings re-evaluate live.
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->showTooltipsChanged();
+}
+
 bool DockConfig::darkModeAllDocks()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

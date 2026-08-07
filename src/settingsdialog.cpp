@@ -793,6 +793,19 @@ QWidget *SettingsDialog::createGeneralTab()
         form->addRow(tr("Maximize windows:"), cb);
     }
 
+    // Master switch for the dock's tooltips. Shared, not per dock: turning it
+    // off hides every ToolTip on every dock at once.
+    {
+        auto *cb = new QCheckBox(tr("Mostrar Tooltips"), tab);
+        cb->setChecked(DockConfig::showTooltips());
+        cb->setToolTip(tr("Muestra la descripción al pasar el mouse por los elementos "
+                          "del dock. Desactivar oculta todos los tooltips de todos "
+                          "los docks."));
+        connect(cb, &QCheckBox::toggled, this,
+                [](bool on) { DockConfig::setShowTooltips(on); });
+        form->addRow(tr("Tooltips:"), cb);
+    }
+
     // Separators (both kinds) and their size live in the Layout tab: they are
     // part of the section order, not a numeric setting.
 

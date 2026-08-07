@@ -1,4 +1,4 @@
-# kdock  ·  RELEASE 0.1.1
+# kdock  ·  RELEASE 0.1.2
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -117,6 +117,8 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
   un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
   de lo que le queda.
+- **Tooltips globales**: un casillero en *General* prende o apaga todos los tooltips de todos
+  los docks a la vez, para no pagar sus ventanas si no los querés.
 - **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un
   color distinto para ubicarse de un vistazo (es lo que se ve en la captura de arriba). La solapa
   *Docks* lista todos los que tenés configurados —cada uno con su monitor, su borde y sus
@@ -362,17 +364,18 @@ contexto GL. QtQuick.Controls no los suelta después de cerrarlos, así que en u
 varias horas con media docena de docks el proceso acumulaba **68 hilos de render + 136 hilos
 Mesa** y un **heap de 571 MB**, sin techo. Desde esta versión:
 
-- Los **tooltips** usan las propiedades **adjuntas** de QtQuick (`ToolTip.text` /
-  `ToolTip.visible` / `ToolTip.delay`), que comparten **una sola instancia por ventana**
-  en vez de una por fila de la barra de tareas o del sistema. Patrón tomado de
-  `kdock-tilemenu`, donde bajó el RSS de 783 MB a 245 MB.
-
 - Los **popups de clic** (el menú de aplicaciones, el portapapeles, los discos, la red y los
   selectores de tema) se cargan bajo demanda con `Loader { active: false }` y se destruyen
-  automáticamente tras **30 segundos sin uso**, con el mismo patrón de `tilemenu/`.
+  automáticamente tras **30 segundos sin uso**, con el patrón medido en `tilemenu/`.
 
-El `ToolTip` del reloj mejorado mantiene su diseño personalizado como excepción (la API
-adjunta no admite `contentItem`).
+- Los **tooltips** son por elemento (comportamiento original): la API adjunta que los hacía
+  compartir una sola instancia por ventana se probó y se descartó, porque posiciona el tooltip
+  en el cursor (parpadea en docks horizontales) y sin parent adecuado cae detrás de las
+  maximizadas en docks verticales. A cambio, se agregó un **interruptor global de tooltips**
+  (*Configuración → General → Tooltips*) que los apaga por completo si molestan o si el
+  usuario prefiere no pagar la memoria.
+
+El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem propio).
 
 | | Antes (11 h / 6 docks) | Después |
 |---|---|---|

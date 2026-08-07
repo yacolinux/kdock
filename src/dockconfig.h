@@ -111,6 +111,7 @@ class DockConfig : public QObject
     Q_PROPERTY(QColor darkAccent READ darkAccent NOTIFY darkModeChanged)
     Q_PROPERTY(QColor darkBackground READ darkBackground NOTIFY darkModeChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
+    Q_PROPERTY(bool showTooltips READ showTooltipsProp NOTIFY showTooltipsChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
     Q_PROPERTY(QStringList widgetOrder READ widgetOrder WRITE setWidgetOrder NOTIFY widgetOrderChanged)
     Q_PROPERTY(int dockLength READ dockLength WRITE setDockLength NOTIFY dockLengthChanged)
@@ -256,6 +257,11 @@ public:
     // ON. Disable with KDOCK_NO_WINDOW_ACTIONS=1 for test harnesses.
     static bool maximizeWindowsOnDesktop();
     static void setMaximizeWindowsOnDesktop(bool on);
+
+    // Master switch for the dock's tooltips (General tab): when off, no
+    // ToolTip shows on any element of any dock. Shared setting, not per dock.
+    static bool showTooltips();
+    static void setShowTooltips(bool on);
 
     // ---- Dark mode (app-wide part) ----------------------------------------
     // Breeze Dark's two colors, copied into the app on purpose: the dark scheme
@@ -544,6 +550,10 @@ public:
     QColor darkAccent() const { return darkAccentColor(); }
     QColor darkBackground() const { return darkBackgroundColor(); }
     bool groupWindows() const { return m_groupWindows; }
+    // QML-facing getter: the static setting lives in the shared config file,
+    // but QML reads it as a per-instance property so the ToolTip bindings
+    // (`config.showTooltips`) re-evaluate when the dialog flips the checkbox.
+    bool showTooltipsProp() const { return showTooltips(); }
     QStringList menuFavorites() const { return m_menuFavorites; }
     int separator1() const { return m_separator1; }
     int separator2() const { return m_separator2; }
@@ -681,6 +691,7 @@ signals:
     void screenNameChanged();
     void aliasChanged();
     void dockDesktopsChanged();
+    void showTooltipsChanged();
     void panelModeChanged();
     void compactChanged();
     void alignmentChanged();
