@@ -560,6 +560,24 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   traducción recién agregada "no aparece" y parece un bug del código. `rm -rf
   <XDG_DATA_HOME>/kdock/translations` entre corridas (me pasó, 2026-08-07: las categorías del
   menú salían en inglés con `language=spanish` y estaban perfectamente traducidas en el repo).
+- **Y esa misma trampa mordía de verdad, no solo al arnés: un `.md` de usuario sembrado ANTES
+  de una feature nueva se queda sin sus claves para siempre.** `seedFiles()` copia del qrc
+  "solo lo que falta" a nivel de *archivo completo* — si `english.md` ya existe, ni una línea
+  nueva entra, aunque el catálogo del binario haya crecido. Costó un bug real (2026-08-07,
+  reportado por el usuario): los paneles de `kdock-previews` y `kdock-tilemenu` no traducían
+  nada, pese a que el catálogo del repo sí tenía sus cadenas — el `.md` de
+  `~/.local/share/kdock/translations/` databa de antes de que existieran esos paneles y nunca
+  se actualizó. Arreglado agregando un merge por clave (`mergeSection()`, en
+  `src/translations.cpp`): en cada arranque, para cada archivo que YA existe, copia adentro
+  las entradas de `Configuracion`/`UIdock`/`Widgets` que el qrc tiene y el archivo no —
+  dejando intacto todo lo demás (`Apps` no se toca ahí, es dominio de *Actualizar apps*). O
+  sea que a partir de ahora un catálogo de usuario se pone al día solo, sin perder ediciones.
+  De paso: el mismo patrón (`QDialogButtonBox::Close` sin `setText()`) que el diálogo
+  principal ya sorteaba (`src/settingsdialog.cpp`, comentario ahí) estaba sin aplicar en
+  `previews/src/previewsettingsdialog.cpp` y `tilemenu/src/tilesettingsdialog.cpp`: el botón
+  *Cerrar* salía en el locale del sistema en vez de en el idioma elegido, aun con el catálogo
+  al día. Un `QDialogButtonBox` con botones estándar SIEMPRE necesita ese `setText(tr(...))`
+  por cada instancia — no es algo que se herede.
 - **Probar un idioma no necesita GUI**: sembrá `language=spanish` en el `kdock.conf` de
   prueba y corré el arnés de Xvfb; para el diálogo, la sonda que linkea los `.o` imprime los
   títulos de las solapas en cada idioma (`capabase` → "Layout", `spanish` → "Diseño"), que es

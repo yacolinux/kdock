@@ -469,8 +469,9 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
   6 onward kdock leaves everything untouched. And when you return to Desktop 1, if you had a
   slideshow, it comes back with its configuration intact but **showing the next image** —
   reloading it advances it, and a slideshow advances on its own anyway.
-- **Translations**: for now only the dock and its settings panel. The three companion
-  binaries (`kdock-previews`, `kdock-tilemenu`, `kdock-calendar`) remain in capabase.
+- **Translations**: the dock, its settings panel, and the `kdock-previews` and
+  `kdock-tilemenu` panels all follow the chosen language. `kdock-calendar` is the exception:
+  being self-contained (no files from `src/`), it stays in capabase.
 - The layer-shell integration uses **private** QtWaylandClient headers (same as
   layer-shell-qt): a new major Qt version may require adjustments.
 

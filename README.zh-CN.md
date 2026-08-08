@@ -421,8 +421,9 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 - **按桌面设置壁纸**：可配置的是桌面 2 到 5（桌面 1 归 KDE 管理）；从桌面 6 开始 kdock
   不做任何处理。回到桌面 1 时，如果之前设置了幻灯片放映，它会带着原有配置恢复，但
   **会显示下一张图片**——重新加载会使其前进一张，而幻灯片放映本身也会自行前进。
-- **翻译**：目前只有 Dock 本体和它的配置面板支持翻译。三个配套二进制文件
-  （`kdock-previews`、`kdock-tilemenu`、`kdock-calendar`）仍然停留在 capabase。
+- **翻译**：Dock 本体、它的配置面板，以及 `kdock-previews` 和 `kdock-tilemenu` 的面板都会
+  跟随所选语言。`kdock-calendar` 是例外：由于它完全自包含（不使用 `src/` 中的任何文件），
+  仍然停留在 capabase。
 - layer-shell 集成使用了 QtWaylandClient 的**私有**头文件（与 layer-shell-qt 相同）：
   Qt 的新大版本可能需要相应调整。
 

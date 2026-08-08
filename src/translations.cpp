@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QPair>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -130,6 +131,83 @@ ParsedFile parseFile(const QString &path)
     return parsed;
 }
 
+QStringList readLines(const QString &path)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    return QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+}
+
+// [start, end) of the body of "## <header>" in `lines`, or {-1, -1} if absent.
+QPair<int, int> sectionBounds(const QStringList &lines, const QString &header)
+{
+    int start = -1;
+    for (int i = 0; i < lines.size(); ++i) {
+        const QString t = lines.at(i).trimmed();
+        if (t.startsWith(QLatin1String("##"))
+            && t.mid(2).trimmed().compare(header, Qt::CaseInsensitive) == 0) {
+            start = i;
+            break;
+        }
+    }
+    if (start < 0)
+        return {-1, -1};
+    int end = lines.size();
+    for (int i = start + 1; i < lines.size(); ++i) {
+        if (lines.at(i).trimmed().startsWith(QLatin1String("##"))) {
+            end = i;
+            break;
+        }
+    }
+    return {start, end};
+}
+
+// Copies "key = value" lines that exist under "## <header>" in the bundled
+// catalog but are missing from the same section of the user's file, in place.
+// This is how a translation seeded by an older kdock keeps gaining the
+// strings later releases add (a new widget, a new dialog tab…) instead of
+// silently falling back to capabase for them forever — seedFiles() below
+// never overwrites an existing file wholesale, so without this a stale file
+// on disk stays stale. Returns how many lines were added.
+int mergeSection(QStringList &lines, const QStringList &bundledLines, const QString &header)
+{
+    const QPair<int, int> bundledRange = sectionBounds(bundledLines, header);
+    if (bundledRange.first < 0)
+        return 0;
+
+    QPair<int, int> userRange = sectionBounds(lines, header);
+    if (userRange.first < 0) {
+        lines << QString() << (QStringLiteral("## ") + header);
+        userRange = {lines.size() - 1, lines.size()};
+    }
+
+    QSet<QString> present;
+    for (int i = userRange.first + 1; i < userRange.second; ++i) {
+        QString key, value;
+        if (splitEntry(lines.at(i), &key, &value))
+            present.insert(key);
+    }
+
+    QStringList added;
+    for (int i = bundledRange.first + 1; i < bundledRange.second; ++i) {
+        QString key, value;
+        if (!splitEntry(bundledLines.at(i), &key, &value) || present.contains(key))
+            continue;
+        present.insert(key);
+        added << bundledLines.at(i);
+    }
+    if (added.isEmpty())
+        return 0;
+
+    int at = userRange.second;
+    while (at > userRange.first + 1 && lines.at(at - 1).trimmed().isEmpty())
+        --at;
+    for (int i = 0; i < added.size(); ++i)
+        lines.insert(at + i, added.at(i));
+    return added.size();
+}
+
 QString languageSetting()
 {
     QSettings settings(DockConfig::settingsFilePath(), QSettings::IniFormat);
@@ -228,16 +306,37 @@ QString Translations::filePathFor(const QString &name)
 
 void Translations::seedFiles()
 {
-    // The three shipped files live in the binary; on disk they are the user's,
-    // so an existing one is never overwritten.
+    // The shipped files live in the binary; on disk they are the user's, so an
+    // existing one is never overwritten wholesale. But it IS topped up with any
+    // Configuracion/UIdock/Widgets key the binary knows about and the file
+    // doesn't (see mergeSection() above) — that is what makes a translation
+    // seeded by an older kdock pick up the strings a newer release adds (e.g.
+    // a previews/tilemenu dialog string) instead of falling back to capabase
+    // for them forever. "Apps" is deliberately left out: that section is
+    // populated by the user via the "Actualizar apps" button, not shipped.
+    static const QStringList kMergedHeaders = { QStringLiteral("Configuracion"),
+                                                  QStringLiteral("UIdock"),
+                                                  QStringLiteral("Widgets") };
     const QDir bundled(QStringLiteral(":/translations"));
     for (const QFileInfo &info : bundled.entryInfoList({QStringLiteral("*.md")}, QDir::Files)) {
         const QString target = filePathFor(info.completeBaseName());
-        if (QFileInfo::exists(target))
+        if (!QFileInfo::exists(target)) {
+            if (QFile::copy(info.absoluteFilePath(), target))
+                QFile::setPermissions(target, QFile::ReadOwner | QFile::WriteOwner
+                                              | QFile::ReadGroup | QFile::ReadOther);
             continue;
-        if (QFile::copy(info.absoluteFilePath(), target))
-            QFile::setPermissions(target, QFile::ReadOwner | QFile::WriteOwner
-                                          | QFile::ReadGroup | QFile::ReadOther);
+        }
+
+        const QStringList bundledLines = readLines(info.absoluteFilePath());
+        QStringList lines = readLines(target);
+        int added = 0;
+        for (const QString &header : kMergedHeaders)
+            added += mergeSection(lines, bundledLines, header);
+        if (added > 0) {
+            QFile file(target);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+                file.write(lines.join(QLatin1Char('\n')).toUtf8());
+        }
     }
 }
 

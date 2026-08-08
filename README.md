@@ -475,8 +475,9 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
   del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y
   un slideshow avanza solo de todas formas.
-- **Traducciones**: por ahora solo el dock y su panel de configuración. Los tres binarios
-  accesorios (`kdock-previews`, `kdock-tilemenu`, `kdock-calendar`) siguen en capabase.
+- **Traducciones**: el dock, su panel de configuración y los paneles de `kdock-previews` y
+  `kdock-tilemenu` siguen el idioma elegido. `kdock-calendar` es la excepción: al ser
+  autocontenido (sin archivos de `src/`), sigue en capabase.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que
   layer-shell-qt): una versión mayor nueva de Qt puede pedir ajustes.
 

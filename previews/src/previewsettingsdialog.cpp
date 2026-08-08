@@ -67,6 +67,10 @@ PreviewSettingsDialog::PreviewSettingsDialog(PreviewManager *manager, QWidget *p
     buildControls();
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
+    // Qt labels its standard buttons from *its own* catalogs, i.e. in the system
+    // locale, which would leave a Spanish "Cerrar" in a dialog the user asked to
+    // see in another language. Setting the text puts it back on our layer.
+    buttons->button(QDialogButtonBox::Close)->setText(tr("Close"));
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
     layout->addWidget(buttons);
 
