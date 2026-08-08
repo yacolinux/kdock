@@ -3,7 +3,9 @@
 // compat CLI (pactl), and drives per-device / per-app volume, mute and
 // default-device selection. pactl is invoked with LC_ALL=C so the parsed
 // field labels ("Name:", "Description:", "Mute:", "Volume:") stay stable.
-// Live change notifications come from a long-running `pactl subscribe`.
+// Live change notifications come from a long-running `pactl subscribe`, which
+// is restarted with a backoff when the audio server drops it (see
+// launchSubscriber).
 //
 // This is deliberately separate from VolumeControl, which stays a tiny
 // default-sink indicator for the dock widget. The single shared preference the
@@ -11,6 +13,7 @@
 
 #pragma once
 
+#include <QElapsedTimer>
 #include <QHash>
 #include <QObject>
 #include <QProcess>
@@ -67,6 +70,7 @@ signals:
 private:
     void scheduleRefresh();
     void startSubscriber();
+    void launchSubscriber();
     QString runSync(const QStringList &args) const;
     QVector<Device> parseDevices(DeviceType type, const QString &text) const;
     QString setVolumeVerb(DeviceType type) const;
@@ -82,4 +86,6 @@ private:
     QString m_defaultSource;
     QProcess m_subscriber;
     QTimer m_refreshDebounce;
+    QElapsedTimer m_subscriberUptime;
+    int m_subscriberBackoffMs = 1000;
 };

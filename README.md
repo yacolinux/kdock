@@ -1,6 +1,6 @@
 **Español** | [English](README.en.md) | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.2
+# kdock  ·  RELEASE 0.1.3
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 

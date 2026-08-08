@@ -1,6 +1,7 @@
 #include "volumecontrol.h"
 
 #include "audiocontrol.h"
+#include "childprocess.h"
 
 #include <QStandardPaths>
 
@@ -75,8 +76,8 @@ void VolumeControl::scheduleRefresh()
 
 void VolumeControl::startSubscriber()
 {
-    const QString pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
-    if (pactl.isEmpty()) {
+    m_pactl = QStandardPaths::findExecutable(QStringLiteral("pactl"));
+    if (m_pactl.isEmpty()) {
         // No event source: poll
         auto *poll = new QTimer(this);
         poll->setInterval(3000);
@@ -90,7 +91,37 @@ void VolumeControl::startSubscriber()
         if (out.contains("sink") || out.contains("server"))
             scheduleRefresh();
     });
-    m_subscriber.start(pactl, {QStringLiteral("subscribe")});
+    // pactl exits when the audio server drops the connection (an audio device
+    // being re-plugged is enough). Nothing restarted it, so from then on the
+    // widget only ever showed what its optimistic writes had guessed.
+    connect(&m_subscriber, &QProcess::finished, this, [this] {
+        // A subscriber that ran for a while means the server is healthy: reset
+        // the backoff so the next real outage reconnects immediately. A short
+        // life means pactl cannot connect at all — back off up to 30 s so a
+        // dead server does not turn into a fork loop.
+        if (m_subscriberUptime.isValid() && m_subscriberUptime.elapsed() > 10000)
+            m_subscriberBackoffMs = 1000;
+        else
+            m_subscriberBackoffMs = qMin(m_subscriberBackoffMs * 2, 30000);
+        QTimer::singleShot(m_subscriberBackoffMs, this, [this] { launchSubscriber(); });
+    });
+    kdock::tieToParent(m_subscriber);
+    launchSubscriber();
+}
+
+void VolumeControl::launchSubscriber()
+{
+    if (m_subscriber.state() != QProcess::NotRunning)
+        return;
+    m_subscriberUptime.start();
+    m_subscriber.start(m_pactl, {QStringLiteral("subscribe")});
+    // Whatever changed while we had no subscription is invisible to us, so
+    // resync — but only once the subscriber proves it survived, or a server
+    // that is down turns every retry into a full pactl query round.
+    QTimer::singleShot(500, this, [this] {
+        if (m_subscriber.state() == QProcess::Running)
+            scheduleRefresh();
+    });
 }
 
 void VolumeControl::setVolume(qreal volume)

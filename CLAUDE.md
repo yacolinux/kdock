@@ -789,6 +789,25 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   (que está vacío), `spectacle-custom -b -n -f -o …` entre paso y paso, y **volver al
   original**. Sin eso no se puede distinguir "escribió bien la config" de "repintó", que son
   dos cosas distintas — la config se verifica leyendo `evaluateScript`, el repintado no.
+- **Un `QProcess` de larga vida sobrevive al `::_exit(0)` del SIGTERM.** El handler de cierre
+  sale sin desenrollar a propósito (ver arriba), así que el destructor de `QProcess` —lo único
+  que mata al hijo— nunca corre: cada logout o `kill` dejaba dos `pactl subscribe` huérfanos,
+  reparentados a systemd y vivos para siempre (44 acumulados, reportado 2026-08-08). Y no se
+  mueren solos: el dock ignora `SIGPIPE` process-wide por el portapapeles y las disposiciones
+  se heredan por `exec` (aunque en este caso da igual, `pactl` ya lo ignora por su cuenta).
+  Todo hijo que tenga que vivir mientras vive el dock va con **`kdock::tieToParent()`**
+  (`src/childprocess.h`, `PR_SET_PDEATHSIG`), que también cubre el `SIGKILL` y el crash.
+  Se comprueba en el arnés en diez segundos: `ps --ppid <pid>` antes, `kill -TERM`, `pgrep -a
+  pactl` después.
+- **Y el reflejo simétrico: un hijo de larga vida que se muere no se reintenta solo.**
+  `pactl subscribe` sale cuando el servidor de audio lo suelta (reconectar una placa de audio
+  alcanza) y el widget se queda sordo **sin avisar** —sigue mostrando lo que adivinaron sus
+  escrituras optimistas—, que es justo el bug que parece "el volumen a veces no se actualiza".
+  El relanzamiento va con backoff (1 s → 30 s, reseteado si el anterior duró más de 10 s) o un
+  servidor caído te deja un fork loop, y el resync posterior va **condicionado a que el hijo
+  siga vivo**: un `refresh()` son media docena de `pactl`. Para probar el peor caso, un `pactl`
+  falso de dos líneas en el `PATH` que loguee y salga con 1 (receta de las herramientas falsas,
+  más arriba): los timestamps muestran el backoff y el conteo muestra la amplificación.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú

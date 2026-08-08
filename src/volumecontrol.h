@@ -1,10 +1,13 @@
 // Default-sink volume via WirePlumber's CLI (wpctl), the stock PipeWire
 // session manager on Plasma 6 — no libpulse/KDE linkage, just QProcess.
 // Change notifications come from a long-running `pactl subscribe`; if pactl
-// is missing we fall back to polling.
+// is missing we fall back to polling. That subscriber dies whenever the audio
+// server goes away (unplugging a dock/USB interface restarts pipewire-pulse),
+// so it is restarted with a backoff instead of leaving the widget deaf.
 
 #pragma once
 
+#include <QElapsedTimer>
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
@@ -37,11 +40,15 @@ signals:
 private:
     void scheduleRefresh();
     void startSubscriber();
+    void launchSubscriber();
 
     QString m_wpctl;
+    QString m_pactl;
     bool m_available = false;
     qreal m_volume = 0.0;
     bool m_muted = false;
     QProcess m_subscriber;
     QTimer m_refreshDebounce;
+    QElapsedTimer m_subscriberUptime;
+    int m_subscriberBackoffMs = 1000;
 };

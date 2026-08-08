@@ -1,5 +1,7 @@
 #include "audiocontrol.h"
 
+#include "childprocess.h"
+
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QSettings>
@@ -269,5 +271,29 @@ void AudioControl::startSubscriber()
         if (out.contains("sink") || out.contains("source") || out.contains("server"))
             scheduleRefresh();
     });
+    // Same reconnect policy as VolumeControl: pactl dies with the audio server,
+    // and without this the mixer went stale until the dock was restarted.
+    connect(&m_subscriber, &QProcess::finished, this, [this] {
+        if (m_subscriberUptime.isValid() && m_subscriberUptime.elapsed() > 10000)
+            m_subscriberBackoffMs = 1000;
+        else
+            m_subscriberBackoffMs = qMin(m_subscriberBackoffMs * 2, 30000);
+        QTimer::singleShot(m_subscriberBackoffMs, this, [this] { launchSubscriber(); });
+    });
+    kdock::tieToParent(m_subscriber);
+    launchSubscriber();
+}
+
+void AudioControl::launchSubscriber()
+{
+    if (m_subscriber.state() != QProcess::NotRunning)
+        return;
+    m_subscriberUptime.start();
     m_subscriber.start(m_pactl, {QStringLiteral("subscribe")});
+    // Resync only if the subscriber stayed up: refresh() is half a dozen pactl
+    // calls, and a dead server would otherwise pay them on every retry.
+    QTimer::singleShot(500, this, [this] {
+        if (m_subscriber.state() == QProcess::Running)
+            scheduleRefresh();
+    });
 }
