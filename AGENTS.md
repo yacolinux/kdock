@@ -191,6 +191,14 @@ el dock se lee como dos.
   el de siempre (radio 0 y sin borde en modo panel); con uno o más, **cada tramo se redondea
   por su cuenta**, así que quedan dos píldoras y no un panel mordido. La imagen de fondo
   opcional se dibuja por tramo (el mosaico reinicia en cada uno).
+- **Un tramo vacío no se dibuja** (2026-08-07): si entre dos huecos —o entre un hueco y el
+  borde— no hay ninguna sección *visible*, el tramo se descarta. Sin eso, un separador puesto
+  al lado de un widget apagado (el menú de aplicaciones, por ejemplo) dejaba una astilla de
+  panel pegada al borde de la pantalla, con solo el padding adentro, y se leía como *"el dock
+  perdió su punta izquierda"*. `computeGapRuns()` junta también los rectángulos de las
+  secciones visibles y se queda con los tramos que alguna interseca.
+- **La región de entrada es el complemento de lo pintado**, no la lista de huecos: un tramo
+  descartado también es transparente, así que también tiene que dejar pasar los clics.
 - **`root.computeGapRuns()`** saca la geometría iterando `sectionRepeater.itemAt(i)` y
   mapeando con `mapToItem(slider, …)`: los ids de adentro del delegate no se ven desde la raíz
   (misma razón por la que existe `labelStrings()`). Calcula el **complemento** de los huecos y

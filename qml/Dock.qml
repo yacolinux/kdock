@@ -162,18 +162,30 @@ Item {
     function computeGapRuns() {
         const total = root.horizontal ? slider.width : slider.height
         let holes = []
+        let content = []
         for (let i = 0; i < sectionRepeater.count; ++i) {
             const sec = sectionRepeater.itemAt(i)
-            if (!sec || !sec.isGap || !sec.visible)
+            if (!sec || !sec.visible)
                 continue
             const p = sec.mapToItem(slider, 0, 0)
-            const pos = root.horizontal ? p.x : p.y
-            const size = root.horizontal ? sec.width : sec.height
-            if (size > 0)
-                holes.push({ pos: Math.round(pos), size: Math.round(size) })
+            const pos = Math.round(root.horizontal ? p.x : p.y)
+            const size = Math.round(root.horizontal ? sec.width : sec.height)
+            if (size <= 0)
+                continue
+            if (sec.isGap)
+                holes.push({ pos: pos, size: size })
+            else
+                content.push({ pos: pos, size: size })
+        }
+        if (holes.length === 0) {
+            // No transparent separator: one run, no mask. Same dock as always.
+            root.gapRuns = [{ pos: 0, size: total }]
+            dockWindow.setGapRects([])
+            return
         }
         holes.sort((a, b) => a.pos - b.pos)
-        // Complement of the holes inside [0, total): what actually gets painted.
+
+        // Complement of the holes inside [0, total): the candidate runs.
         let runs = []
         let at = 0
         for (let h = 0; h < holes.length; ++h) {
@@ -184,13 +196,38 @@ Item {
         }
         if (at < total)
             runs.push({ pos: at, size: total - at })
-        root.gapRuns = runs.length > 0 ? runs : [{ pos: 0, size: total }]
-        // The input region follows the same rectangles, in surface coordinates.
+
+        // A run with nothing in it is not drawn. Without this, a separator next
+        // to a switched-off widget (the app menu, say) leaves a sliver of dock
+        // painted against the screen edge with no icon in it, which reads as
+        // "the dock lost its left end" (bug 2026-08-07). Only the padding lives
+        // there, so there is nothing to show.
+        let painted = []
+        for (let r = 0; r < runs.length; ++r) {
+            const from = runs[r].pos, to = runs[r].pos + runs[r].size
+            for (let c = 0; c < content.length; ++c) {
+                if (content[c].pos < to && content[c].pos + content[c].size > from) {
+                    painted.push(runs[r])
+                    break
+                }
+            }
+        }
+        root.gapRuns = painted
+
+        // The input region is the complement of what is painted, not just the
+        // separators: a dropped run is see-through too, so it has to let the
+        // clicks through as well.
         let rects = []
-        for (let g = 0; g < holes.length; ++g) {
-            rects.push(root.horizontal
-                       ? { x: holes[g].pos, y: 0, width: holes[g].size, height: root.height }
-                       : { x: 0, y: holes[g].pos, width: root.width, height: holes[g].size })
+        let cursor = 0
+        for (let k = 0; k <= painted.length; ++k) {
+            const next = k < painted.length ? painted[k].pos : total
+            if (next > cursor) {
+                rects.push(root.horizontal
+                           ? { x: cursor, y: 0, width: next - cursor, height: root.height }
+                           : { x: 0, y: cursor, width: root.width, height: next - cursor })
+            }
+            if (k < painted.length)
+                cursor = painted[k].pos + painted[k].size
         }
         dockWindow.setGapRects(rects)
     }
