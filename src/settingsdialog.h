@@ -168,6 +168,9 @@ private:
     // Position of separator <which> (1 or 2), or -1 when it is off.
     int appSeparatorPos(int which) const;
     void setAppSeparatorPos(int which, int pos);
+    // Whether separator <which> keeps its room but draws no line.
+    bool appSeparatorTransparent(int which) const;
+    void setAppSeparatorTransparent(int which, bool on);
     static QString sectionLabel(const QString &token);
     // How a dock is named to the user: "<monitor> — Dock <n>", plus ": <alias>"
     // when it has one. Shared by the Docks tab list, the top bar and the
@@ -225,6 +228,7 @@ private:
     // on changes as it moves, so the selection is tracked by separator instead
     // of by row: without this Up/Down deselect what they just moved.
     int m_appSepSelected = 0;
+    QCheckBox *m_appSepTransparent = nullptr;
     QListWidget *m_relanzadoresList;
     QListWidget *m_relanzadorAppsList;
     QListWidget *m_scriptRunnersList = nullptr;

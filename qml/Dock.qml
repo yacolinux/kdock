@@ -867,6 +867,13 @@ Item {
                     TextMetrics {
                         id: secLabelMetrics
                         font.pixelSize: root.labelFontPx
+                        // Must match the Text below, which draws with
+                        // config.labelBold: measuring regular while drawing bold
+                        // makes the box a few px too narrow, and the last letter
+                        // wraps onto the second line ("Blad/e") or gets elided.
+                        // The apps delegate dodges this by measuring always bold;
+                        // here the setting is the only weight there is.
+                        font.bold: config.labelBold
                         text: sec.label
                     }
                     // Capped to the configured box on a horizontal dock (each
@@ -1084,6 +1091,10 @@ Item {
                         Menu {
                             id: sectionMenu
                             popupType: Popup.Window
+                            // The rows that open the submenus below are built
+                            // from this delegate, not declared by us: without it
+                            // they are the only iconless entries of the menu.
+                            delegate: SubMenuDelegate {}
                             // A Menu doesn't size itself to its widest item.
                             width: Math.max(implicitWidth + 64, 220)
                             onAboutToShow: root.menuOpen = true
@@ -1184,6 +1195,7 @@ Item {
                     required property bool active
                     required property bool minimized
                     required property bool isSeparator
+                    required property bool separatorTransparent
                     required property string title
 
                     // ---- Cell geometry (icon + optional name label) --------
@@ -1235,7 +1247,10 @@ Item {
                     height: delegateRoot.isSeparator ? (root.horizontal ? root.appIconPx : config.separatorSize) : cellH
 
                     Rectangle {
-                        visible: delegateRoot.isSeparator
+                        // A transparent separator is this line turned off: the
+                        // room it takes comes from the delegate's own size
+                        // above, so hiding the line changes nothing else.
+                        visible: delegateRoot.isSeparator && !delegateRoot.separatorTransparent
                         anchors.centerIn: parent
                         width: root.horizontal ? 2 : parent.width * 0.6
                         height: root.horizontal ? parent.height * 0.6 : 2
@@ -1501,6 +1516,10 @@ Item {
                         Menu {
                             id: contextMenu
                             popupType: Popup.Window
+                            // The rows that open the submenus below are built
+                            // from this delegate, not declared by us: without it
+                            // they are the only iconless entries of the menu.
+                            delegate: SubMenuDelegate {}
                             // A translated label can be noticeably longer than the capabase one, and a
                             // QtQuick Menu does not size itself to its widest item: without this the
                             // last letters are clipped by the popup border (see CLAUDE.md). The 64 px
@@ -1553,6 +1572,8 @@ Item {
                             Menu {
                                 id: desktopMenu
                                 title: qsTr("Escritorio")
+                                // Read by SubMenuDelegate (see sectionMenu).
+                                property string menuIcon: "virtual-desktops"
                                 popupType: Popup.Window
                                 // A Menu does not size itself to its widest
                                 // item; without this the last letter is clipped
@@ -1631,6 +1652,8 @@ Item {
                             Menu {
                                 id: locationMenu
                                 title: qsTr("Ubicación")
+                                // Read by SubMenuDelegate (see sectionMenu).
+                                property string menuIcon: "transform-move"
                                 popupType: Popup.Window
                                 IconMenuItem {
                                     text: qsTr("Arriba")
@@ -1660,6 +1683,8 @@ Item {
                             Menu {
                                 id: dockMenu
                                 title: qsTr("Dock")
+                                // Read by SubMenuDelegate (see sectionMenu).
+                                property string menuIcon: "application-menu"
                                 popupType: Popup.Window
                                 // A Menu doesn't size itself to its widest item,
                                 // so "Crear dock vacío" would lose its last

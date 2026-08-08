@@ -623,6 +623,7 @@ System tray: = Bandeja del sistema:
 Systray icon scale: = Escala de los íconos de la bandeja:
 Tamaño de celda: = Tamaño de celda:
 Tamaño mínimo de tarjeta: = Tamaño mínimo de tarjeta:
+The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = El separador sigue ocupando su tamaño dentro del bloque de aplicaciones, pero no se dibuja ninguna línea. A diferencia de una sección separador transparente, el fondo del dock sigue pintado detrás.
 Theme default = Predeterminado del tema
 This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue? = Esto reemplaza tu configuración actual de kdock y reinicia el programa. Se guarda una copia de respaldo de la configuración actual.\n\n¿Seguir?
 Tipo: %1 = Tipo: %1
@@ -634,6 +635,7 @@ Toggle mute = Silenciar / dejar de silenciar
 Tooltips: = Tooltips:
 Top = Arriba
 Traducciones = Traducciones
+Transparent separator (no line) = Separador transparente (sin línea)
 Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel. = Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel.
 Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado. = Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado.
 Una captura por ventana (al pasar a primer plano) = Una captura por ventana (al pasar a primer plano)
@@ -683,6 +685,7 @@ Zip archives (*.zip) = Archivos zip (*.zip)
 Íconos de widgets = Íconos de widgets
 Íconos: = Íconos:
 Índice A-Z: = Índice A-Z:
+── Separator %1 (transparent) ── = ── Separador %1 (transparente) ──
 ── Separator %1 ── = ── Separador %1 ──
 
 ## UIdock

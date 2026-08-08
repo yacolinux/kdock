@@ -62,6 +62,13 @@ class DockConfig : public QObject
     Q_PROPERTY(int separatorSize READ separatorSize WRITE setSeparatorSize NOTIFY separatorSizeChanged)
     Q_PROPERTY(int separator1 READ separator1 WRITE setSeparator1 NOTIFY separator1Changed)
     Q_PROPERTY(int separator2 READ separator2 WRITE setSeparator2 NOTIFY separator2Changed)
+    // A transparent separator keeps its separatorSize px of room between two app
+    // icons but draws no line. Unlike the "gap" section token, it does not punch
+    // a hole in the panel: the background stays painted behind it.
+    Q_PROPERTY(bool separator1Transparent READ separator1Transparent
+               WRITE setSeparator1Transparent NOTIFY separator1TransparentChanged)
+    Q_PROPERTY(bool separator2Transparent READ separator2Transparent
+               WRITE setSeparator2Transparent NOTIFY separator2TransparentChanged)
     Q_PROPERTY(bool showClock READ showClock WRITE setShowClock NOTIFY showClockChanged)
     Q_PROPERTY(bool clockFormat24h READ clockFormat24h WRITE setClockFormat24h NOTIFY clockFormat24hChanged)
     Q_PROPERTY(bool clockShowDate READ clockShowDate WRITE setClockShowDate NOTIFY clockShowDateChanged)
@@ -582,6 +589,8 @@ public:
     QStringList menuFavorites() const { return m_menuFavorites; }
     int separator1() const { return m_separator1; }
     int separator2() const { return m_separator2; }
+    bool separator1Transparent() const { return m_separator1Transparent; }
+    bool separator2Transparent() const { return m_separator2Transparent; }
     int separatorSize() const { return m_separatorSize; }
     QStringList widgetOrder() const { return m_widgetOrder; }
     int dockLength() const { return m_dockLength; }   // 0 = auto, 1-100 = % of edge
@@ -679,6 +688,8 @@ public:
     void setMenuFavorites(const QStringList &favorites);
     void setSeparator1(int pos);
     void setSeparator2(int pos);
+    void setSeparator1Transparent(bool on);
+    void setSeparator2Transparent(bool on);
     void setSeparatorSize(int size);
     void setWidgetOrder(const QStringList &order);
     void setDockLength(int percent);
@@ -787,6 +798,8 @@ signals:
     void menuFavoritesChanged();
     void separator1Changed();
     void separator2Changed();
+    void separator1TransparentChanged();
+    void separator2TransparentChanged();
     void separatorSizeChanged();
     void widgetOrderChanged();
     void dockLengthChanged();
@@ -913,6 +926,8 @@ private:
     QStringList m_menuFavorites;
     int m_separator1 = -1;
     int m_separator2 = -1;
+    bool m_separator1Transparent = false;
+    bool m_separator2Transparent = false;
     int m_separatorSize = 16;
     QStringList m_widgetOrder;
     int m_dockLength = 0; // 0 = auto, 1-100 = % of the screen edge

@@ -38,6 +38,8 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
     });
     connect(m_config, &DockConfig::separator1Changed, this, &DockModel::rebuild);
     connect(m_config, &DockConfig::separator2Changed, this, &DockModel::rebuild);
+    connect(m_config, &DockConfig::separator1TransparentChanged, this, &DockModel::rebuild);
+    connect(m_config, &DockConfig::separator2TransparentChanged, this, &DockModel::rebuild);
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
     // App names come from the translation layer (see Item::displayName), so a
     // language change is a rename of every row at once.
@@ -92,6 +94,8 @@ QVariant DockModel::data(const QModelIndex &index, int role) const
         return true;
     case IsSeparatorRole:
         return item.isSeparator;
+    case SeparatorTransparentRole:
+        return item.separatorTransparent;
     case TitleRole:
         return item.windows.size() == 1 ? item.windows.first()->title : QString();
     }
@@ -109,6 +113,7 @@ QHash<int, QByteArray> DockModel::roleNames() const
         {MinimizedRole, "minimized"},
         {IsSeparatorRole, "isSeparator"},
         {TitleRole, "title"},
+        {SeparatorTransparentRole, "separatorTransparent"},
     };
 }
 
@@ -191,7 +196,10 @@ void DockModel::rebuild()
             continue;
         Item sep;
         sep.isSeparator = true;
-        sep.separatorIndex = (pos == m_config->separator1() ? 1 : 2);
+        const bool first = pos == m_config->separator1();
+        sep.separatorIndex = first ? 1 : 2;
+        sep.separatorTransparent = first ? m_config->separator1Transparent()
+                                         : m_config->separator2Transparent();
         m_items.insert(pos, sep);
     }
 

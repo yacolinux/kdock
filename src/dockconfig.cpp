@@ -763,6 +763,10 @@ void DockConfig::load()
         m_menuFavorites = sharedFavorites();
     m_separator1 = m_settings.value(QStringLiteral("separator1"), -1).toInt();
     m_separator2 = m_settings.value(QStringLiteral("separator2"), -1).toInt();
+    m_separator1Transparent =
+        m_settings.value(QStringLiteral("separator1Transparent"), false).toBool();
+    m_separator2Transparent =
+        m_settings.value(QStringLiteral("separator2Transparent"), false).toBool();
     m_separatorSize = m_settings.value(QStringLiteral("separatorSize"), 16).toInt();
     m_widgetOrder = m_settings.value(QStringLiteral("widgetOrder"), knownWidgetTokens()).toStringList();
     m_dockLength = m_settings.value(QStringLiteral("dockLength"), 0).toInt();
@@ -1410,6 +1414,24 @@ void DockConfig::setSeparator2(int pos)
     m_separator2 = pos;
     m_settings.setValue(QStringLiteral("separator2"), pos);
     emit separator2Changed();
+}
+
+void DockConfig::setSeparator1Transparent(bool on)
+{
+    if (m_separator1Transparent == on)
+        return;
+    m_separator1Transparent = on;
+    m_settings.setValue(QStringLiteral("separator1Transparent"), on);
+    emit separator1TransparentChanged();
+}
+
+void DockConfig::setSeparator2Transparent(bool on)
+{
+    if (m_separator2Transparent == on)
+        return;
+    m_separator2Transparent = on;
+    m_settings.setValue(QStringLiteral("separator2Transparent"), on);
+    emit separator2TransparentChanged();
 }
 
 void DockConfig::setSeparatorSize(int size)

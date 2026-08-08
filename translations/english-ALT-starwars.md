@@ -626,6 +626,7 @@ System tray: = System tray:
 Systray icon scale: = Systray icon scale:
 Tamaño de celda: = Cell size:
 Tamaño mínimo de tarjeta: = Minimum card size:
+The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it.
 Theme default = Theme default
 This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue? = This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue?
 Tipo: %1 = Type: %1
@@ -637,6 +638,7 @@ Toggle mute = Toggle mute
 Tooltips: = Tooltips:
 Top = Top
 Traducciones = Translations
+Transparent separator (no line) = Transparent separator (no line)
 Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel. = An application menu that fills the whole free desktop (everything but the visible docks and panels), with the icons in a grid you can rearrange by dragging them. It is a separate binary, kdock-tilemenu, with its own configuration: the button below opens its panel.
 Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado. = One number per KWin virtual desktop; clicking switches to that desktop. The current one is highlighted.
 Una captura por ventana (al pasar a primer plano) = One capture per window (when it comes to the front)
@@ -686,6 +688,7 @@ Zip archives (*.zip) = Zip archives (*.zip)
 Íconos de widgets = Widget icons
 Íconos: = Icons:
 Índice A-Z: = A-Z index:
+── Separator %1 (transparent) ── = ── Separator %1 (transparent) ──
 ── Separator %1 ── = ── Separator %1 ──
 
 ## UIdock

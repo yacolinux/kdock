@@ -623,6 +623,7 @@ System tray: = 系统托盘：
 Systray icon scale: = 托盘图标缩放：
 Tamaño de celda: = 单元格大小：
 Tamaño mínimo de tarjeta: = 卡片最小尺寸：
+The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = 分隔符依然在应用程序区域中占据它的尺寸，只是不绘制线条。与透明分隔符区段不同，Dock 的背景仍会绘制在它后面。
 Theme default = 主题默认
 This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue? = 这会替换你当前的 kdock 配置并重启 kdock。当前配置会保留一份备份。\n\n是否继续？
 Tipo: %1 = 类型：%1
@@ -634,6 +635,7 @@ Toggle mute = 静音开关
 Tooltips: = 工具提示：
 Top = 上
 Traducciones = 翻译
+Transparent separator (no line) = 透明分隔符 (无线条)
 Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel. = 一个占满整个可用桌面 (除可见的 Dock 和面板之外的全部区域) 的应用程序菜单，图标排成网格，可以拖动重新摆放。它是一个独立程序 kdock-tilemenu，有自己的配置：下面的按钮会打开它的面板。
 Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado. = KWin 的每个虚拟桌面显示一个数字；点击即可切换到该桌面。当前桌面会高亮显示。
 Una captura por ventana (al pasar a primer plano) = 每个窗口截一次图 (在它进入前台时)
@@ -683,6 +685,7 @@ Zip archives (*.zip) = Zip 压缩包 (*.zip)
 Íconos de widgets = 小部件图标
 Íconos: = 图标：
 Índice A-Z: = A-Z 索引：
+── Separator %1 (transparent) ── = ── 分隔符 %1 (透明) ──
 ── Separator %1 ── = ── 分隔符 %1 ──
 
 ## UIdock

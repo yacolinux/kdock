@@ -101,8 +101,15 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   no se puede "dejar de aplicar", cada opción guarda el valor de los dos modos.
 - **Auto-encogido**: cuando no entran todos los íconos, el dock reduce escala y fuente en vez
   de recortar.
-- **Drag & drop** para reordenar íconos y secciones enteras, con separadores dinámicos
-  (*springs*) que empujan el resto hacia el otro extremo.
+- **Drag & drop** para reordenar íconos y secciones enteras.
+- **Cinco clases de separador**, y ninguna se dibuja igual. Entre secciones, desde el clic
+  derecho de cualquier widget: el **dinámico** (*spring*), que se estira y empuja el resto
+  hacia el otro extremo; el **estático**, un hueco fijo con una línea fina; y el
+  **transparente**, que además recorta el fondo del dock y su región de entrada — se ve el
+  escritorio por el medio y los clics pasan, así que un dock se lee como dos. Y **dentro del
+  bloque de aplicaciones**, hasta dos separadores más (solapa *Layout*), que dividen los
+  lanzadores anclados entre sí y del resto de las ventanas: cada uno puede ser una línea o
+  **transparente**, o sea espacio en blanco sin línea, con el fondo del dock intacto detrás.
 - **Mandar ventanas a otro escritorio virtual** desde el clic derecho de un ícono de
   aplicación: *Escritorio → Ventana aquí* la trae al escritorio actual, y *Enviar a…* la manda
   a otro **sin seguirla** — vos te quedás donde estás. Mueve todas las ventanas de esa app,
@@ -387,7 +394,9 @@ kdock
 - **Clic izquierdo** — lanzar / enfocar / minimizar / ciclar entre ventanas.
 - **Clic medio** — nueva instancia.
 - **Clic derecho** — menú contextual: lista de ventanas, anclar/desanclar, cerrar, etiquetas,
-  color de fondo, agregar separador, configuración.
+  color de fondo, agregar separador, configuración. Cada entrada lleva su ícono, **incluidas
+  las cabeceras de los submenús** (*Escritorio*, *Ubicación*, *Color de fondo*, *Modo*,
+  *Texto App*, *Texto Widget*, *Dock*).
 - **Arrastrar** — reordenar íconos y secciones.
 
 En los widgets el clic derecho abre ese mismo menú, salvo en los que lo usan para una

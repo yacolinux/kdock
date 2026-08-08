@@ -10,6 +10,8 @@ import QtQuick.Controls.Basic
 Menu {
     id: bgMenu
     title: qsTr("Color de fondo")
+    // Read by SubMenuDelegate to draw the row that opens this submenu.
+    property string menuIcon: "color-management"
     popupType: Popup.Window
 
     // One swatch per entry of config.panelPresetColors.

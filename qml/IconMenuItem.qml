@@ -21,6 +21,15 @@ MenuItem {
 
     contentItem: Row {
         spacing: control.spacing
+        // MenuItem draws its check indicator at leftPadding, which is where our
+        // icon starts: without reserving its room the tick lands on top of the
+        // icon and both read as a smudge. The stock IconLabel does this through
+        // its own indicatorPadding; a spacer is the equivalent for a Row.
+        Item {
+            visible: control.checkable
+            width: visible && control.indicator ? control.indicator.width : 0
+            height: 1
+        }
         Image {
             visible: control._source !== ""
             source: control._source

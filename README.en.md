@@ -100,8 +100,15 @@ The dock, across different edges and label layouts:
   option stores the value for both modes.
 - **Auto-shrink**: when not all icons fit, the dock reduces scale and font instead of
   clipping.
-- **Drag & drop** to reorder icons and whole sections, with dynamic separators
-  (*springs*) that push the rest toward the other end.
+- **Drag & drop** to reorder icons and whole sections.
+- **Five kinds of separator**, and no two are drawn alike. Between sections, from any widget's
+  right-click menu: the **dynamic** one (*spring*), which stretches and pushes the rest toward
+  the other end; the **static** one, a fixed gap with a thin line; and the **transparent** one,
+  which also cuts the dock background and its input region — the desktop shows through and
+  clicks pass, so one dock reads as two. And **inside the applications block**, up to two more
+  (*Layout* tab), splitting the pinned launchers from each other and from the merely running
+  windows: each one can be a line or **transparent**, i.e. blank room with no line, the dock
+  background left painted behind it.
 - **Sending windows to another virtual desktop** from an app icon's right-click menu:
   *Desktop → Window here* brings it to the current desktop, and *Send to…* sends it to
   another one **without following it** — you stay where you are. It moves all of that app's
@@ -382,7 +389,8 @@ kdock
 - **Left click** — launch / focus / minimize / cycle through windows.
 - **Middle click** — new instance.
 - **Right click** — context menu: window list, pin/unpin, close, labels, background color,
-  add separator, settings.
+  add separator, settings. Every entry carries its icon, **submenu headers included**
+  (*Desktop*, *Location*, *Background color*, *Mode*, *App text*, *Widget text*, *Dock*).
 - **Drag** — reorder icons and sections.
 
 On widgets, right click opens that same menu, except for the ones that use it for a second

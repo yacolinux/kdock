@@ -12,6 +12,8 @@ import QtQuick.Controls.Basic
 
 Menu {
     title: qsTr("Modo")
+    // Read by SubMenuDelegate to draw the row that opens this submenu.
+    property string menuIcon: "contrast"
     popupType: Popup.Window
 
     IconMenuItem {

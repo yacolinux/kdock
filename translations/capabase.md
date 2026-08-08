@@ -622,6 +622,7 @@ System tray: = System tray:
 Systray icon scale: = Systray icon scale:
 Tamaño de celda: = Tamaño de celda:
 Tamaño mínimo de tarjeta: = Tamaño mínimo de tarjeta:
+The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it.
 Theme default = Theme default
 This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue? = This will replace your current kdock configuration and restart kdock. A backup of the current configuration is kept.\n\nContinue?
 Tipo: %1 = Tipo: %1
@@ -633,6 +634,7 @@ Toggle mute = Toggle mute
 Tooltips: = Tooltips:
 Top = Top
 Traducciones = Traducciones
+Transparent separator (no line) = Transparent separator (no line)
 Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel. = Un menú de aplicaciones que ocupa todo el escritorio libre (todo menos los docks y paneles visibles), con los íconos en una grilla que podés reacomodar arrastrándolos. Es un binario aparte, kdock-tilemenu, con su propia configuración: el botón de abajo abre su panel.
 Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado. = Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El actual va resaltado.
 Una captura por ventana (al pasar a primer plano) = Una captura por ventana (al pasar a primer plano)
@@ -682,6 +684,7 @@ Zip archives (*.zip) = Zip archives (*.zip)
 Íconos de widgets = Íconos de widgets
 Íconos: = Íconos:
 Índice A-Z: = Índice A-Z:
+── Separator %1 (transparent) ── = ── Separator %1 (transparent) ──
 ── Separator %1 ── = ── Separator %1 ──
 
 ## UIdock

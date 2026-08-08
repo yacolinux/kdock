@@ -26,6 +26,8 @@ public:
         MinimizedRole,
         IsSeparatorRole,
         TitleRole,
+        // Appended, not slotted in: the values above are what QML already binds.
+        SeparatorTransparentRole,
     };
 
     DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
@@ -63,6 +65,7 @@ private:
         QList<AbstractWindow *> windows;
         bool isSeparator = false;
         int separatorIndex = 0; // 1 or 2
+        bool separatorTransparent = false; // takes the room, draws no line
 
         QString displayName() const;
         QString iconName() const;

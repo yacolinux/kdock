@@ -9,6 +9,8 @@ import QtQuick.Controls.Basic
 Menu {
     id: labelMenu
     title: qsTr("Texto App")
+    // Read by SubMenuDelegate to draw the row that opens this submenu.
+    property string menuIcon: "view-list-details"
     popupType: Popup.Window
 
     IconMenuItem {

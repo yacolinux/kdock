@@ -2709,6 +2709,15 @@ QWidget *SettingsDialog::createLayoutTab()
     sepButtons->addWidget(sepDown);
     layout->addLayout(sepButtons);
 
+    // Acts on the selected separator, like Remove/Up/Down: the two slots are
+    // independent, so one can be a line and the other just room.
+    m_appSepTransparent = new QCheckBox(tr("Transparent separator (no line)"), tab);
+    m_appSepTransparent->setToolTip(
+        tr("The separator still takes its size in the applications block, but no "
+           "line is drawn. Unlike a transparent separator section, the dock "
+           "background stays painted behind it."));
+    layout->addWidget(m_appSepTransparent);
+
     auto updateAppSepButtons = [this, addAppSep, removeAppSep, sepUp, sepDown] {
         const bool room = appSeparatorPos(1) < 0 || appSeparatorPos(2) < 0;
         const bool onSep = m_appSepSelected != 0;
@@ -2716,7 +2725,17 @@ QWidget *SettingsDialog::createLayoutTab()
         removeAppSep->setEnabled(onSep);
         sepUp->setEnabled(onSep);
         sepDown->setEnabled(onSep);
+        m_appSepTransparent->setEnabled(onSep);
+        // Reflects the selected separator, so the box never shows the state of
+        // the one the buttons no longer act on. Blocked: setChecked() would
+        // otherwise write that state onto the newly selected separator.
+        QSignalBlocker blocker(m_appSepTransparent);
+        m_appSepTransparent->setChecked(onSep && appSeparatorTransparent(m_appSepSelected));
     };
+    connect(m_appSepTransparent, &QCheckBox::toggled, this, [this](bool on) {
+        if (const int which = m_appSepSelected)
+            setAppSeparatorTransparent(which, on);
+    });
     connect(m_appSepList, &QListWidget::currentRowChanged, this,
             [this, updateAppSepButtons](int row) {
                 QListWidgetItem *it = row >= 0 ? m_appSepList->item(row) : nullptr;
@@ -2772,6 +2791,8 @@ QWidget *SettingsDialog::createLayoutTab()
     layout->addLayout(sizeForm);
 
     for (auto signal : {&DockConfig::separator1Changed, &DockConfig::separator2Changed,
+                        &DockConfig::separator1TransparentChanged,
+                        &DockConfig::separator2TransparentChanged,
                         &DockConfig::pinnedChanged}) {
         connect(m_config, signal, this, [this, updateAppSepButtons] {
             reloadAppSeparatorList();
@@ -2797,6 +2818,19 @@ void SettingsDialog::setAppSeparatorPos(int which, int pos)
         m_config->setSeparator2(pos);
 }
 
+bool SettingsDialog::appSeparatorTransparent(int which) const
+{
+    return which == 1 ? m_config->separator1Transparent() : m_config->separator2Transparent();
+}
+
+void SettingsDialog::setAppSeparatorTransparent(int which, bool on)
+{
+    if (which == 1)
+        m_config->setSeparator1Transparent(on);
+    else
+        m_config->setSeparator2Transparent(on);
+}
+
 void SettingsDialog::reloadAppSeparatorList()
 {
     // Keep the selection on the same separator across the rebuild. Snapshot it
@@ -2810,9 +2844,14 @@ void SettingsDialog::reloadAppSeparatorList()
         for (int which = 1; which <= 2; ++which) {
             if (appSeparatorPos(which) != pos)
                 continue;
+            // Two icons, so the kind is readable without selecting the row.
+            const bool clear = appSeparatorTransparent(which);
             auto *item = new QListWidgetItem(
-                QIcon::fromTheme(QStringLiteral("distribute-vertical-margin")),
-                tr("── Separator %1 ──").arg(which), m_appSepList);
+                QIcon::fromTheme(clear ? QStringLiteral("distribute-vertical-page")
+                                       : QStringLiteral("distribute-vertical-margin")),
+                clear ? tr("── Separator %1 (transparent) ──").arg(which)
+                      : tr("── Separator %1 ──").arg(which),
+                m_appSepList);
             item->setData(Qt::UserRole, which);
             item->setData(Qt::UserRole + 1, pos);
             if (which == selected)

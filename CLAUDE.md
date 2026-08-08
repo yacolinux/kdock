@@ -636,6 +636,17 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   (2026-08-05): `appNameProbe` ya medía en negrita —mide siempre con el peso de la app
   activa—, así que el que faltaba era `secNameProbe`. Se verifica bajo Xvfb midiendo el
   grosor de un dock vertical antes y después de prender la opción (95 → 101 px).
+  **Y son CUATRO puntas, no dos: cada delegate mide de nuevo, con su propio `TextMetrics`.**
+  Las dos sondas del tope solo alimentan el grosor en C++; el **ancho de la caja de cada
+  nombre** sale de `labelMetrics` (apps) y `secLabelMetrics` (widgets), dentro de los
+  delegates. `labelBold` llegó a `secNameProbe` y no a `secLabelMetrics`, así que el nombre de
+  un widget se **medía en redonda y se dibujaba en negrita**: con *Dos renglones* prendido la
+  última letra se iba al segundo renglón ("Blade" dibujado como "Blad/e", "Config" como
+  "Confi/g") y con un renglón se elidía. Los nombres de apps no se veían afectados porque
+  `labelMetrics` mide **siempre** en negrita. Reportado por el usuario el 2026-08-08 con una
+  captura; el grosor del dock no cambia, así que medirlo no lo encuentra — se ve en una captura
+  o comparando `advanceWidth` con las dos fuentes. Si agregás otra opción de fuente, tocá las
+  **cuatro**.
 - **Leer una propiedad D-Bus que es un struct: dos trampas, la segunda te tira el proceso.**
   Las dos mordieron el 2026-08-01 leyendo `desktops` (a(iss)) de
   `org.kde.KWin /VirtualDesktopManager` para el widget `closewindow`:
@@ -780,6 +791,32 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   dos cosas distintas — la config se verifica leyendo `evaluateScript`, el repintado no.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
+- **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú
+  padre.** Por eso las cabeceras de submenú eran las únicas sin ícono mientras todas las hojas
+  ya eran `IconMenuItem`. Se arregla con `delegate: SubMenuDelegate {}` en el menú padre, y el
+  nombre del ícono viaja en un `property string menuIcon` del propio submenú, que el delegate
+  lee por su property `subMenu` (que existe en `T.MenuItem`, no hace falta nada privado).
+  Tres trampas, las tres del 2026-08-08:
+  - **Un ítem creado por un `delegate` no resuelve las context properties desde el archivo del
+    tipo base.** `theme` se ve desde `SubMenuDelegate.qml` pero **no** desde
+    `IconMenuItem.qml`, así que dejar que la URL se arme allá (es lo que hace `iconName`, que
+    le pega `theme.revision`) escupe *"Cannot read property 'revision' of undefined"* **una vez
+    por fila** — 112 líneas en una config normal, y los íconos igual se dibujan, así que el
+    arnés es lo único que lo ve. Armá la URL en el propio archivo y pasala por `iconSource`.
+  - **La primera evaluación corre con la fila desprendida**, con *todas* las context properties
+    en undefined (`console` incluido, que es lo que delata el diagnóstico). De ahí el guard
+    `theme ? theme.revision : 0` más un flag `_ready` que se prende en `Component.onCompleted`:
+    cuando se prende, el binding se re-evalúa con `theme` vivo y el cache-busting sigue andando.
+  - **Reservá el lugar de la flecha** (`rightPadding`) y **el del tilde**: el `contentItem` de
+    `IconMenuItem` es un `Row` que no sabe de `arrow` ni de `indicator` como sí sabe el
+    `IconLabel` de Qt, así que la etiqueta más ancha se mete debajo de la flecha y **el tilde de
+    un ítem *checkable* se dibuja encima del ícono** (se lee como un ícono mal renderizado, no
+    como un layout mal hecho). Lo segundo estaba latente desde antes en `ModeMenu` y compañía.
+  Para elegir los nombres de ícono, **iterá contra el dock renderizado, no contra el disco**:
+  `find` en `/usr/share/icons/breeze*` dice que existen y no dice cómo se ven en el iconset que
+  el dock realmente usa. `preferences-desktop-color` salió un garabato verde y
+  `applications-system` un círculo rojo; los buenos fueron `color-management`, `contrast` y
+  `application-menu`.
 - **QML no concatena literales adyacentes como C++.** Un `qsTr("primera parte "` seguido de
   `"segunda parte")` en la línea siguiente —el reflejo de cualquiera que venga del `.cpp`— es
   un **error de sintaxis** (*"Unexpected token `string literal`"*) que tira la carga del
