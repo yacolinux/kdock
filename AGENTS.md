@@ -948,7 +948,10 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   Los tamaños por defecto nacen **chicos a propósito desde 2026-08-09** (2×2, wallpaper 1×1):
   los 3×2/4×2 originales llenaban una fila de 6 columnas con dos tarjetas y la grilla se leía
   como "solo 2 columnas". Una disposición guardada conserva sus tamaños hasta que el usuario
-  la resetea — cambiar un default acá no re-dimensiona las tarjetas ya colocadas.
+  la resetea — cambiar un default acá no re-dimensiona las tarjetas ya colocadas. Ojo con la
+  lectura del usuario: **"columnas" en la UI es el número de celdas, no de tarjetas por
+  fila** — con tarjetas de 2 celdas, `columns=6` da 3 por fila y un número impar de columnas
+  no cambia nada en pantalla (reportado como "no se puede configurar", 2026-08-09).
 - **Una sola componente por sección, en dos tamaños.** `CmSectionView.qml` mapea id → archivo
   y le pasa `compact`: la tarjeta de Principal y la solapa completa son **el mismo** `.qml`.
   Por eso cada `cards/*.qml` tiene dos bloques (`visible: card.compact` / `visible:
@@ -1050,14 +1053,18 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   `pitchW`/`pitchH` (canvas, `rowAtY`/`colAtX`, ghost del drop y las bindings de `CmCard`);
   `CmLayout` trabaja en celdas, así que el motor no se toca.
 - **Redimensionar el panel arrastrando las esquinas** (`CmCornerGrip.qml` +
-  `CmWindow::setPanelSize`, 2026-08-08): la layer-shell no tiene resize del compositor, así
-  que el agarre lo hace todo el cliente — tres líneas diagonales en la esquina, el delta del
-  puntero mapea a ancho/alto con el signo de cada esquina (`win.setPanelSize`). Clamp
-  320×240..pantalla, y un arrastre **limpia los porcentajes** (escribe píxeles: los
-  spinboxes de px del diálogo se re-habilitan solos por `windowChanged`, y los de % se
-  re-sincronizan). Hay agarres en inferior-derecha, inferior-izquierda y superior-izquierda
-  (este último solo con solapas abajo — con las solapas arriba la esquina es del primer tab);
-  la superior-derecha es de los controles de pin/✕.
+   `CmWindow::setPanelSize`, 2026-08-08): la layer-shell no tiene resize del compositor, así
+   que el agarre lo hace todo el cliente — tres líneas diagonales en la esquina, el delta del
+   puntero mapea a ancho/alto con el signo de cada esquina (`win.setPanelSize`). Clamp
+   320×240..pantalla, y un arrastre **limpia los porcentajes** (escribe píxeles: los
+   spinboxes de px del diálogo se re-habilitan solos por `windowChanged`, y los de % se
+   re-sincronizan). Hay agarres en inferior-derecha, inferior-izquierda y superior-izquierda
+   (este último solo con solapas abajo — con las solapas arriba la esquina es del primer tab);
+   la superior-derecha es de los controles de pin/✕.
+   **Sus propiedades se llaman `isLeft`/`isTop`, nunca `left`/`top`**: son FINAL en `Item`
+   (las anchor lines) y redefinirlas hace fallar la carga de TODO el panel — la superficie
+   quedaba en blanco y el diálogo de configuración, abierto debajo, inalcanzable (mordió
+   2026-08-09, y `qmllint` no lo reporta).
 - **Fuente única para todo el panel** (`cmConfig.fontSize`, 2026-08-08): un spinbox en
   **Apariencia** ("Tamaño de fuente:", 0 = Predeterminado, 12 px efectivos) del que cuelga el
   `fontScale` read-only (`fontSize/12`, 1.0 con 0). **Cada** `font.pixelSize` del QML del

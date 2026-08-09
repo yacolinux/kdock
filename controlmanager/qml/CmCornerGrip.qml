@@ -22,8 +22,12 @@ Item {
     height: 18
     z: 60
 
-    readonly property bool left: corner === 1 || corner === 2
-    readonly property bool top: corner === 2
+    // Not named left/top: those are Item's FINAL anchor-line properties and
+    // overriding them fails the whole component load (mordió 2026-08-09: el
+    // panel quedó en blanco y el diálogo de configuración inalcanzable debajo
+    // de la superficie vacía).
+    readonly property bool isLeft: corner === 1 || corner === 2
+    readonly property bool isTop: corner === 2
 
     Canvas {
         id: gripCanvas
@@ -39,10 +43,10 @@ Item {
             for (let i = 0; i < 3; ++i) {
                 // Three short parallel lines fanning from the corner.
                 const o = 4 + i * 4
-                const x1 = grip.left ? o : width - o
-                const y1 = grip.top ? 0 : height
-                const x2 = grip.left ? 0 : width
-                const y2 = grip.top ? o : height - o
+                const x1 = grip.isLeft ? o : width - o
+                const y1 = grip.isTop ? 0 : height
+                const x2 = grip.isLeft ? 0 : width
+                const y2 = grip.isTop ? o : height - o
                 c.moveTo(x1, y1)
                 c.lineTo(x2, y2)
             }
@@ -58,7 +62,7 @@ Item {
         id: gripMouse
         anchors.fill: parent
         hoverEnabled: true
-        cursorShape: grip.left === grip.top ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
+        cursorShape: grip.isLeft === grip.isTop ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
 
         property int startW: 0
         property int startH: 0

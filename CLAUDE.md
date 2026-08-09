@@ -711,6 +711,14 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 
 ## Trampas que muerden
 
+- **`left`/`top`/`right`/`bottom` son propiedades FINAL de `Item`** (2026-08-09): declarar
+  `property bool left` en un componente QML propio es *"Cannot override FINAL property"* y
+  **la carga de TODO el archivo falla** — `CmCornerGrip` tenía `left`/`top` y el panel de
+  Control Manager quedó en blanco, con el diálogo de configuración abierto debajo de la
+  superficie vacía (layer top), inalcanzable: parecía un cuelgue total de la app y era el QML
+  que no cargaba. **`qmllint` no lo reporta** (es un chequeo en runtime del motor); la única
+  reja es el log del proceso (`qrc:/qml/...: Type X unavailable` + `Cannot override FINAL
+  property`). Nombrar `isLeft`/`isTop` y seguir.
 - **KWin no deduce el borde exclusivo de un ancla de esquina** (2026-08-08): `LayerSurfaceV1Interface::exclusiveEdge()` (kwin `src/wayland/layershell_v1.cpp`, verificado en 6.6.6) solo devuelve un borde para ancla de **un solo borde** o de **un borde + las dos esquinas**. Una superficie anclada a un borde más UNA esquina (el caso de `dockLength>0` con alineación Start/End, y el flotante alineado a una esquina) no tiene strut: las ventanas maximizadas pasan por debajo del dock. kdock lo arregla por dos puntas: `applyLayerProperties()` ancla el **lado completo** cuando el dock cubre el borde entero (`dockLength==100` o panel 100%), y la integración envía el request v5 `set_exclusive_edge` (protocolo vendored actualizado a v5, versión del template a 5) para los docks parciales con esquina. Sin v5 (sway) los parciales con esquina siguen sin strut — por diseño, no es un bug de kdock. Diagnóstico: `qdbus6 org.kde.KWin /VirtualDesktopManager ...` + `kdock-previews --dump-captures` para leer la geometría de las maximizadas (la del dock derecho salía 1848x1080+72+0, la del superior pasaba por y=0).
 - **Grosor del dock**: hay una sola fórmula, `DockConfig::dockThickness()`. `Dock.qml`
   la lee (`config.dockThickness`) y `DockWindow::thickness()` la devuelve para la
