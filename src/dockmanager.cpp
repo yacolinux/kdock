@@ -714,6 +714,25 @@ DockModel *DockManager::modelFor(const QString &dockId) const
     return it == m_instances.constEnd() ? nullptr : it.value().model;
 }
 
+DockWindow *DockManager::windowFor(const QString &dockId) const
+{
+    const QString wanted = dockId.isEmpty() ? primaryDockId() : dockId;
+    const auto it = m_instances.constFind(wanted);
+    if (it != m_instances.constEnd() && it.value().window)
+        return it.value().window;
+    // Asked for the primary and it is not built (a virtual desktop that does not
+    // want it, or a session with no dock on the primary monitor): any dock can
+    // open the settings dialog, so answer with whichever exists rather than
+    // nothing at all.
+    if (dockId.isEmpty()) {
+        for (const Instance &inst : m_instances) {
+            if (inst.window)
+                return inst.window;
+        }
+    }
+    return nullptr;
+}
+
 void DockManager::destroyInstance(const QString &dockId)
 {
     auto it = m_instances.find(dockId);

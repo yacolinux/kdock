@@ -36,6 +36,7 @@ class NetworkControl;
 class AppearanceControl;
 class WindowMonitor;
 class TileMenuLauncher;
+class ControlManagerLauncher;
 class VirtualDesktops;
 
 class DockWindow : public QQuickView
@@ -152,6 +153,8 @@ private:
     // Drives the separate kdock-tilemenu process (context property
     // "tileLauncher"); owned by this window.
     TileMenuLauncher *m_tileLauncher = nullptr;
+    // Same, for kdock-controlmanager (context property "cmLauncher").
+    ControlManagerLauncher *m_cmLauncher = nullptr;
     bool m_hidden = false;
     QList<QRect> m_gapRects; // transparent separators, see setGapRects()
     bool m_primary = false;

@@ -1,0 +1,172 @@
+// The four configuration panels, the restarts, and the session row.
+//
+// Two of the four (kdock itself and its own settings dialog) are only reachable
+// through org.kdock.Dock: kdock's dialog opens from its own menu and nowhere
+// else. The other two are ordinary launches of the accessory binaries with
+// --settings, which their single-instance guard forwards to whatever instance
+// is already running.
+
+import QtQuick
+import QtQuick.Controls.Basic
+import ".."
+
+Item {
+    id: card
+
+    property bool compact: false
+    readonly property bool haveDock: dock && dock.available
+
+    Flickable {
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: col.height
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: ScrollBar {}
+
+        Column {
+            id: col
+            width: parent.width
+            spacing: card.compact ? 6 : 10
+
+            // --- the four settings panels ---
+            Text {
+                visible: !card.compact
+                text: qsTr("Configuración")
+                color: theme.foreground
+                opacity: 0.6
+                font.pixelSize: 11
+                font.bold: true
+            }
+
+            Flow {
+                width: parent.width
+                spacing: 6
+
+                CmButton {
+                    compact: card.compact
+                    icon: "preferences-system"
+                    label: qsTr("KDE")
+                    tip: qsTr("Preferencias del sistema")
+                    onClicked: win.runCommand("systemsettings")
+                }
+                CmButton {
+                    compact: card.compact
+                    icon: "configure"
+                    label: qsTr("kdock")
+                    enabled: card.haveDock
+                    tip: card.haveDock ? qsTr("Configuración del dock")
+                                       : qsTr("kdock no está en el bus")
+                    onClicked: { dock.openSettings(""); win.hidePanel() }
+                }
+                CmButton {
+                    compact: card.compact
+                    icon: "view-list-icons"
+                    label: qsTr("Mosaicos")
+                    tip: qsTr("Configuración del menú de mosaicos")
+                    onClicked: { win.runCommand("kdock-tilemenu", ["--settings"]); win.hidePanel() }
+                }
+                CmButton {
+                    compact: card.compact
+                    icon: "view-preview"
+                    label: qsTr("Previews")
+                    tip: qsTr("Configuración de las vistas previas")
+                    onClicked: { win.runCommand("kdock-previews", ["--settings"]); win.hidePanel() }
+                }
+                CmButton {
+                    compact: card.compact
+                    icon: "preferences-system"
+                    label: qsTr("Este panel")
+                    tip: qsTr("Configuración de Control Manager")
+                    onClicked: win.openSettings()
+                }
+            }
+
+            // --- restarts ---
+            Text {
+                visible: !card.compact
+                text: qsTr("Reiniciar")
+                color: theme.foreground
+                opacity: 0.6
+                font.pixelSize: 11
+                font.bold: true
+            }
+
+            Flow {
+                width: parent.width
+                spacing: 6
+                visible: !card.compact
+
+                CmButton {
+                    icon: "view-refresh"
+                    label: qsTr("Dock")
+                    enabled: card.haveDock
+                    // kdock is one process drawing every dock, so this restarts
+                    // all of them — say so rather than surprise the user.
+                    tip: qsTr("Reinicia el proceso de kdock (todos sus docks)")
+                    onClicked: {
+                        if (win.confirm(qsTr("Reiniciar el dock"),
+                                        qsTr("kdock es un solo proceso: se reinician todos los "
+                                             + "docks a la vez. ¿Seguir?")))
+                            dock.restartDock()
+                    }
+                }
+                CmButton {
+                    icon: "view-refresh"
+                    label: qsTr("Mosaicos")
+                    tip: qsTr("Lo cierra; vuelve solo en el próximo clic del widget")
+                    onClicked: win.runCommand("qdbus6", ["org.kdock.TileMenu", "/TileMenu",
+                                                         "org.kdock.TileMenu.quit"])
+                }
+                CmButton {
+                    icon: "view-refresh"
+                    label: qsTr("Previews")
+                    tip: qsTr("Lo cierra; vuelve al prender su casilla")
+                    onClicked: win.runCommand("qdbus6", ["org.kdock.Previews", "/Previews",
+                                                         "org.kdock.Previews.quit"])
+                }
+                CmButton {
+                    icon: "view-refresh"
+                    label: qsTr("Este panel")
+                    onClicked: win.restartSelf()
+                }
+            }
+
+            // --- session ---
+            Text {
+                visible: !card.compact && power && power.available
+                text: qsTr("Sesión")
+                color: theme.foreground
+                opacity: 0.6
+                font.pixelSize: 11
+                font.bold: true
+            }
+
+            Flow {
+                width: parent.width
+                spacing: 6
+                visible: power && power.available
+
+                Repeater {
+                    model: [
+                        { ic: "system-lock-screen", act: "lock",     tip: qsTr("Bloquear") },
+                        { ic: "system-suspend",     act: "suspend",  tip: qsTr("Suspender") },
+                        { ic: "system-log-out",     act: "logout",   tip: qsTr("Cerrar sesión…") },
+                        { ic: "system-reboot",      act: "reboot",   tip: qsTr("Reiniciar…") },
+                        { ic: "system-shutdown",    act: "shutdown", tip: qsTr("Apagar…") }
+                    ]
+                    delegate: CmButton {
+                        required property var modelData
+                        compact: true
+                        icon: modelData.ic
+                        tip: modelData.tip
+                        onClicked: {
+                            win.hidePanel()
+                            power[modelData.act]()
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

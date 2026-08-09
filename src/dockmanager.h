@@ -200,6 +200,12 @@ public:
     // The settings dialog reads the app icon names out of it to tint its tabs.
     DockModel *modelFor(const QString &dockId) const;
 
+    // The window of a shown dock, or nullptr. An empty dockId asks for the
+    // primary one, and falls back to any instance that exists — which is what
+    // "open the settings dialog" means when the primary dock is currently
+    // hidden by the virtual-desktop rule. Used by DockService.
+    DockWindow *windowFor(const QString &dockId) const;
+
     // The DockConfig for a dock, created (and cached) on demand so the settings
     // dialog can edit a dock even before it is shown.
     DockConfig *configFor(const QString &dockId);

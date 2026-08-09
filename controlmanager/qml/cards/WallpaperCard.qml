@@ -1,0 +1,75 @@
+// Advance the KDE slideshow wallpaper: one button per connected monitor, plus
+// one for all of them.
+//
+// The per-monitor path is WallpaperControl, the same backend behind the dock's
+// `nextwallpaper` widget (the KDE global shortcut only ever advances the primary
+// screen — that is why the backend exists). "All monitors" runs the user's own
+// script, because that is the piece that already worked and is theirs to edit.
+
+import QtQuick
+import ".."
+
+Item {
+    id: card
+
+    property bool compact: false
+
+    // Qt.application.screens is a list of {name, ...}: exactly the connector
+    // names WallpaperControl expects.
+    readonly property var screenList: Qt.application.screens
+
+    Column {
+        anchors.fill: parent
+        anchors.margins: 2
+        spacing: 6
+
+        Text {
+            visible: !card.compact
+            text: qsTr("Siguiente imagen del fondo")
+            color: theme.foreground
+            opacity: 0.6
+            font.pixelSize: 11
+            font.bold: true
+        }
+
+        Flow {
+            width: parent.width
+            spacing: 6
+
+            Repeater {
+                model: card.screenList
+                delegate: CmButton {
+                    required property var modelData
+                    compact: card.compact
+                    icon: "preferences-desktop-wallpaper"
+                    label: modelData.name
+                    tip: qsTr("Avanza el fondo de %1").arg(modelData.name)
+                    enabled: wallpaperControl ? wallpaperControl.available : false
+                    onClicked: wallpaperControl.nextWallpaper(modelData.name)
+                }
+            }
+
+            CmButton {
+                compact: card.compact
+                icon: "view-refresh"
+                label: qsTr("Todos")
+                tip: cmConfig.wallpaperScript.length > 0
+                     ? qsTr("Corre %1").arg(cmConfig.wallpaperScript)
+                     : qsTr("Definí el script en la configuración")
+                enabled: cmConfig.wallpaperScript.length > 0
+                onClicked: win.runScript(cmConfig.wallpaperScript)
+            }
+        }
+
+        Text {
+            visible: !card.compact
+            width: parent.width
+            text: qsTr("«Todos» corre el script configurado; los demás usan el motor propio "
+                       + "del dock, que sabe apuntar a un monitor.")
+            color: theme.foreground
+            opacity: 0.45
+            wrapMode: Text.Wrap
+            font.pixelSize: 10
+        }
+    }
+}

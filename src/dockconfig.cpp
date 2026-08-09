@@ -705,6 +705,16 @@ void DockConfig::load()
     m_iconRunningDots = m_settings.value(QStringLiteral("iconRunningDots"),
                                          !m_iconRunningBackground).toBool();
     m_showMenuButton = m_settings.value(QStringLiteral("showMenuButton"), false).toBool();
+    m_showControlManager = m_settings.value(QStringLiteral("showControlManager"), false).toBool();
+    m_controlManagerIcon = m_settings.value(QStringLiteral("controlManagerIcon"),
+                                            QStringLiteral("preferences-system")).toString();
+    m_controlManagerDisplay = qBound(0, m_settings.value(QStringLiteral("controlManagerDisplay"),
+                                                         0).toInt(), 2);
+    m_controlManagerText = m_settings.value(QStringLiteral("controlManagerText")).toString();
+    m_controlManagerFormat = m_settings.value(QStringLiteral("controlManagerFormat"),
+                                              QStringLiteral("ddd d MMM  HH:mm")).toString();
+    m_controlManagerFontSize = qBound(0, m_settings.value(QStringLiteral("controlManagerFontSize"),
+                                                          0).toInt(), 96);
     m_showTileMenu = m_settings.value(QStringLiteral("showTileMenu"), false).toBool();
     m_tileMenuIcon = m_settings.value(QStringLiteral("tileMenuIcon"),
                                       QStringLiteral("view-list-icons")).toString();
@@ -777,6 +787,7 @@ QStringList DockConfig::knownWidgetTokens()
 {
     // Order here is also the default section order (menu, apps, then widgets).
     return {QStringLiteral("menu"),        QStringLiteral("tilemenu"),
+            QStringLiteral("controlmanager"),
             QStringLiteral("apps"),
             QStringLiteral("clipboard"),   QStringLiteral("disks"),
             QStringLiteral("network"),
@@ -1106,6 +1117,62 @@ void DockConfig::setTileMenuIcon(const QString &icon)
     m_tileMenuIcon = icon;
     m_settings.setValue(QStringLiteral("tileMenuIcon"), icon);
     emit tileMenuIconChanged();
+}
+
+void DockConfig::setShowControlManager(bool show)
+{
+    if (m_showControlManager == show)
+        return;
+    m_showControlManager = show;
+    m_settings.setValue(QStringLiteral("showControlManager"), show);
+    emit showControlManagerChanged();
+}
+
+void DockConfig::setControlManagerIcon(const QString &icon)
+{
+    if (m_controlManagerIcon == icon)
+        return;
+    m_controlManagerIcon = icon;
+    m_settings.setValue(QStringLiteral("controlManagerIcon"), icon);
+    emit controlManagerIconChanged();
+}
+
+void DockConfig::setControlManagerDisplay(int mode)
+{
+    mode = qBound(0, mode, 2);
+    if (m_controlManagerDisplay == mode)
+        return;
+    m_controlManagerDisplay = mode;
+    m_settings.setValue(QStringLiteral("controlManagerDisplay"), mode);
+    emit controlManagerDisplayChanged();
+}
+
+void DockConfig::setControlManagerText(const QString &text)
+{
+    if (m_controlManagerText == text)
+        return;
+    m_controlManagerText = text;
+    m_settings.setValue(QStringLiteral("controlManagerText"), text);
+    emit controlManagerTextChanged();
+}
+
+void DockConfig::setControlManagerFormat(const QString &format)
+{
+    if (m_controlManagerFormat == format)
+        return;
+    m_controlManagerFormat = format;
+    m_settings.setValue(QStringLiteral("controlManagerFormat"), format);
+    emit controlManagerFormatChanged();
+}
+
+void DockConfig::setControlManagerFontSize(int px)
+{
+    px = qBound(0, px, 96);
+    if (m_controlManagerFontSize == px)
+        return;
+    m_controlManagerFontSize = px;
+    m_settings.setValue(QStringLiteral("controlManagerFontSize"), px);
+    emit controlManagerFontSizeChanged();
 }
 
 void DockConfig::setShowSessionButton(bool show)
@@ -1730,6 +1797,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
     static const QHash<QString, QString> labels = {
         {QStringLiteral("menu"),          QStringLiteral("Application menu")},
         {QStringLiteral("tilemenu"),      QStringLiteral("Menú de mosaicos")},
+        {QStringLiteral("controlmanager"), QStringLiteral("Control Manager")},
         {QStringLiteral("apps"),          QStringLiteral("Applications")},
         {QStringLiteral("clipboard"),     QStringLiteral("Clipboard")},
         {QStringLiteral("disks"),         QStringLiteral("Disks")},

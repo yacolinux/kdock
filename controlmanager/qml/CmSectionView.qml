@@ -1,0 +1,34 @@
+// One section's content, at either size.
+//
+// This is the single place that maps a section id to its .qml, so a card on the
+// Principal grid and a whole tab are the same component with `compact` flipped.
+// Adding a section is a row in CmSections plus a case here.
+
+import QtQuick
+
+Loader {
+    id: view
+
+    property string sectionId: ""
+    property bool compact: false
+
+    asynchronous: false
+    source: {
+        switch (view.sectionId) {
+        case "clock":     return "cards/ClockCard.qml"
+        case "audio":     return "cards/AudioCard.qml"
+        case "video":     return "cards/VideoCard.qml"
+        case "calendar":  return "cards/CalendarCard.qml"
+        case "play":      return "cards/PlayCard.qml"
+        case "network":   return "cards/NetworkCard.qml"
+        case "wallpaper": return "cards/WallpaperCard.qml"
+        case "system":    return "cards/SystemCard.qml"
+        }
+        return ""
+    }
+
+    // `compact` is set on the loaded item rather than declared required on it,
+    // so a card can be instantiated by hand in a probe without a Loader.
+    onLoaded: if (item) item.compact = view.compact
+    onCompactChanged: if (item) item.compact = view.compact
+}

@@ -27,7 +27,8 @@ static const QStringList &configGlobs()
 {
     static const QStringList globs{QStringLiteral("kdock*.conf"),
                                    QStringLiteral("previews*.conf"),
-                                   QStringLiteral("tilemenu*.conf")};
+                                   QStringLiteral("tilemenu*.conf"),
+                                   QStringLiteral("controlmanager*.conf")};
     return globs;
 }
 

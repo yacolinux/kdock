@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(kdock VERSION 0.1.3 LANGUAGES C CXX)
+project(kdock VERSION 0.1.4 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -70,6 +70,9 @@ qt_add_executable(kdock
     src/translations.cpp        src/translations.h
     src/previewslauncher.cpp    src/previewslauncher.h
     src/tilemenulauncher.cpp    src/tilemenulauncher.h
+    src/controlmanagerlauncher.cpp src/controlmanagerlauncher.h
+    src/dockservice.cpp         src/dockservice.h
+    src/globalshortcut.cpp      src/globalshortcut.h
 )
 
 qt_generate_wayland_protocol_client_sources(kdock FILES
@@ -138,3 +141,4 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/kdock.desktop
 add_subdirectory(previews)
 add_subdirectory(tilemenu)
 add_subdirectory(calendar)
+add_subdirectory(controlmanager)

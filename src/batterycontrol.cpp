@@ -184,7 +184,12 @@ void BatteryControl::refreshProfiles()
         if (inner.canConvert<QDBusVariant>())
             inner = inner.value<QDBusVariant>().variant();
         if (inner.canConvert<QDBusArgument>()) {
-            QDBusArgument arg = inner.value<QDBusArgument>();
+            // **const**: beginArray()/atEnd()/operator>> have const (read) and
+            // non-const (write) overloads, and on a non-const object the
+            // compiler picks the writing ones. That printed "QDBusArgument:
+            // write from a read-only object" on every refresh and is one step
+            // away from libdbus aborting the process (see CLAUDE.md).
+            const QDBusArgument arg = inner.value<QDBusArgument>();
             arg.beginArray();
             while (!arg.atEnd()) {
                 QVariantMap entry;

@@ -23,6 +23,7 @@ class ColoredTabWidget;
 class IconColorProvider;
 class PreviewsLauncher;
 class TileMenuLauncher;
+class ControlManagerLauncher;
 class Theme;
 class ThemePickerButton;
 class QButtonGroup;
@@ -76,6 +77,9 @@ private:
     QWidget *createWidgetsTab();
     QWidget *createMenuTab();
     QWidget *createTileMenuGroup(QWidget *parent);
+    // Same shape, in the Widgets tab: kdock only owns the widget, everything
+    // about the panel lives in its own settings dialog.
+    QWidget *createControlManagerGroup(QWidget *parent);
     QWidget *createAudioTab();
     // Devices + connections editor for NetworkManager. Not per-dock: the
     // machine's networks look the same whichever dock is selected.
@@ -273,6 +277,7 @@ private:
     // them whenever another dock is selected).
     PreviewsLauncher *m_previewsLauncher = nullptr;
     TileMenuLauncher *m_tileLauncher = nullptr;
+    ControlManagerLauncher *m_cmLauncher = nullptr;
     QCheckBox *m_previewsEnabled = nullptr;
     QLabel *m_previewsStatus = nullptr;
 

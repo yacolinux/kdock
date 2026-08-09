@@ -28,6 +28,7 @@
 #include "settingsdialog.h"
 #include "systraymodel.h"
 #include "systrayimageprovider.h"
+#include "controlmanagerlauncher.h"
 #include "tilemenulauncher.h"
 #include "virtualdesktops.h"
 #include "theme.h"
@@ -157,6 +158,10 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                                       new AppMenu(m_apps, m_config, this));
     m_tileLauncher = new TileMenuLauncher(this);
     rootContext()->setContextProperty(QStringLiteral("tileLauncher"), m_tileLauncher);
+    // Same shape as the tile menu's: a thin, stateless launcher for another
+    // binary, so it is built here instead of travelling through Shared.
+    m_cmLauncher = new ControlManagerLauncher(this);
+    rootContext()->setContextProperty(QStringLiteral("cmLauncher"), m_cmLauncher);
 
     // The autohide mask is a rectangle derived from the surface size, so it goes
     // stale whenever the dock resizes (an icon-size change, or coming back from

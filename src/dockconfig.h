@@ -82,6 +82,18 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showMenuButton READ showMenuButton WRITE setShowMenuButton NOTIFY showMenuButtonChanged)
     Q_PROPERTY(bool showTileMenu READ showTileMenu WRITE setShowTileMenu NOTIFY showTileMenuChanged)
     Q_PROPERTY(QString tileMenuIcon READ tileMenuIcon WRITE setTileMenuIcon NOTIFY tileMenuIconChanged)
+    Q_PROPERTY(bool showControlManager READ showControlManager WRITE setShowControlManager NOTIFY showControlManagerChanged)
+    Q_PROPERTY(QString controlManagerIcon READ controlManagerIcon WRITE setControlManagerIcon NOTIFY controlManagerIconChanged)
+    // 0 icon only, 1 icon + text, 2 text only.
+    Q_PROPERTY(int controlManagerDisplay READ controlManagerDisplay WRITE setControlManagerDisplay NOTIFY controlManagerDisplayChanged)
+    Q_PROPERTY(QString controlManagerText READ controlManagerText WRITE setControlManagerText NOTIFY controlManagerTextChanged)
+    Q_PROPERTY(QString controlManagerFormat READ controlManagerFormat WRITE setControlManagerFormat NOTIFY controlManagerFormatChanged)
+    // Font of the Control Manager widget's own text, in px. 0 = automatic,
+    // which follows the clock font when that is set and the icon size
+    // otherwise. Independent from the app/widget names (whose font is
+    // iconLabelFontSize and only applies while some name is shown): the CM text
+    // is the one piece of dock text that exists without any label mode on.
+    Q_PROPERTY(int controlManagerFontSize READ controlManagerFontSize WRITE setControlManagerFontSize NOTIFY controlManagerFontSizeChanged)
     Q_PROPERTY(bool showSessionButton READ showSessionButton WRITE setShowSessionButton NOTIFY showSessionButtonChanged)
     Q_PROPERTY(bool showSettingsButton READ showSettingsButton WRITE setShowSettingsButton NOTIFY showSettingsButtonChanged)
     Q_PROPERTY(bool showMenuPower READ showMenuPower WRITE setShowMenuPower NOTIFY showMenuPowerChanged)
@@ -536,6 +548,15 @@ public:
     // these two are the only things about it the dock has to know.
     bool showTileMenu() const { return m_showTileMenu; }
     QString tileMenuIcon() const { return m_tileMenuIcon; }
+    // Same deal for the control panel (kdock-controlmanager). The three text
+    // keys are the widget's own label: an empty controlManagerText means "show
+    // the clock, formatted with controlManagerFormat".
+    bool showControlManager() const { return m_showControlManager; }
+    QString controlManagerIcon() const { return m_controlManagerIcon; }
+    int controlManagerDisplay() const { return m_controlManagerDisplay; }
+    QString controlManagerText() const { return m_controlManagerText; }
+    QString controlManagerFormat() const { return m_controlManagerFormat; }
+    int controlManagerFontSize() const { return m_controlManagerFontSize; }
     bool showSessionButton() const { return m_showSessionButton; }
     bool showSettingsButton() const { return m_showSettingsButton; }
     bool showMenuPower() const { return m_showMenuPower; }
@@ -653,6 +674,12 @@ public:
     void setShowMenuButton(bool show);
     void setShowTileMenu(bool show);
     void setTileMenuIcon(const QString &icon);
+    void setShowControlManager(bool show);
+    void setControlManagerIcon(const QString &icon);
+    void setControlManagerDisplay(int mode);
+    void setControlManagerText(const QString &text);
+    void setControlManagerFormat(const QString &format);
+    void setControlManagerFontSize(int px);
     void setShowSessionButton(bool show);
     void setShowSettingsButton(bool show);
     void setShowMenuPower(bool show);
@@ -764,6 +791,12 @@ signals:
     void showMenuButtonChanged();
     void showTileMenuChanged();
     void tileMenuIconChanged();
+    void showControlManagerChanged();
+    void controlManagerIconChanged();
+    void controlManagerDisplayChanged();
+    void controlManagerTextChanged();
+    void controlManagerFormatChanged();
+    void controlManagerFontSizeChanged();
     void showSessionButtonChanged();
     void showSettingsButtonChanged();
     void showMenuPowerChanged();
@@ -895,6 +928,12 @@ private:
     bool m_showMenuButton = false;
     bool m_showTileMenu = false;
     QString m_tileMenuIcon = QStringLiteral("view-list-icons");
+    bool m_showControlManager = false;
+    QString m_controlManagerIcon = QStringLiteral("preferences-system");
+    int m_controlManagerDisplay = 0;
+    QString m_controlManagerText;
+    QString m_controlManagerFormat = QStringLiteral("ddd d MMM  HH:mm");
+    int m_controlManagerFontSize = 0; // 0 = follows clock font / icon size
     bool m_showSessionButton = false;
     bool m_showSettingsButton = false;
     bool m_showMenuPower = true;

@@ -16,6 +16,7 @@
 #include "iconpickerdialog.h"
 #include "themepicker.h"
 #include "previewslauncher.h"
+#include "controlmanagerlauncher.h"
 #include "tilemenulauncher.h"
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
@@ -1130,6 +1131,31 @@ QWidget *SettingsDialog::createFuentesTab()
             [this, clockFont] { clockFont->setValue(m_config->clockFontSize()); });
     form->addRow(tr("Clock font size:"), clockFont);
 
+    // The Control Manager widget can draw text of its own (a fixed string, or a
+    // clock) that is neither an app name nor a widget-section name — so it gets a
+    // font of its own instead of reusing one gated on a label mode. Only
+    // meaningful while the widget is visible and actually draws text. Mirrored
+    // in the Widgets tab's Control Manager group, like the clock font above.
+    auto *cmFont = new QSpinBox(tab);
+    cmFont->setRange(0, 96);
+    cmFont->setSpecialValueText(tr("Automatic"));
+    cmFont->setSuffix(tr(" px"));
+    cmFont->setValue(m_config->controlManagerFontSize());
+    cmFont->setToolTip(tr("Font size of the text the Control Manager widget draws "
+                          "on the dock. Automatic follows the clock font and, with "
+                          "neither, a fraction of the icon size."));
+    connect(cmFont, &QSpinBox::valueChanged, m_config, &DockConfig::setControlManagerFontSize);
+    connect(m_config, &DockConfig::controlManagerFontSizeChanged, cmFont,
+            [this, cmFont] { cmFont->setValue(m_config->controlManagerFontSize()); });
+    const auto syncCmFontEnabled = [this, cmFont] {
+        cmFont->setEnabled(m_config->showControlManager()
+                           && m_config->controlManagerDisplay() != 0);
+    };
+    connect(m_config, &DockConfig::showControlManagerChanged, tab, syncCmFontEnabled);
+    connect(m_config, &DockConfig::controlManagerDisplayChanged, tab, syncCmFontEnabled);
+    syncCmFontEnabled();
+    form->addRow(tr("Control Manager text size:"), cmFont);
+
     // A separator before the name block, which only applies while some name is
     // shown (see the enable logic below).
     auto *nameHeader = new QLabel(tr("<b>Nombres de apps y widgets</b>"), tab);
@@ -1626,6 +1652,8 @@ QWidget *SettingsDialog::createWidgetsTab()
 
     layout->addLayout(form);
 
+    layout->addWidget(createControlManagerGroup(tab));
+
     // Pinned applications section
     layout->addWidget(new QLabel(tr("Pinned applications:"), tab));
     m_pinnedList = new QListWidget(tab);
@@ -1985,6 +2013,161 @@ QWidget *SettingsDialog::createTileMenuGroup(QWidget *parent)
         if (!m_tileLauncher)
             m_tileLauncher = new TileMenuLauncher(this);
         m_tileLauncher->openSettings();
+        QTimer::singleShot(600, this, refreshStatus);
+    });
+
+    // Bound to `box`, so the timer dies when buildTabs() deletes the tab.
+    auto *poll = new QTimer(box);
+    poll->setInterval(2000);
+    connect(poll, &QTimer::timeout, box, refreshStatus);
+    poll->start();
+
+    return box;
+}
+
+// The control panel's widget: shown or not, its icon, and what it draws beside
+// (or instead of) that icon. Everything about the panel itself lives in its own
+// settings dialog, which the button at the bottom opens — same split as the tile
+// menu group above and the Previews tab.
+QWidget *SettingsDialog::createControlManagerGroup(QWidget *parent)
+{
+    auto *box = new QGroupBox(tr("Control Manager (panel de control)"), parent);
+    auto *layout = new QVBoxLayout(box);
+
+    auto *info = new QLabel(
+        tr("Un panel anclado a un borde de la pantalla con solapas: audio, brillo de cada "
+           "monitor, perfil de energía, calendario, reproducción, red, fondo de escritorio y "
+           "sistema. Es un binario aparte, kdock-controlmanager, con su propia configuración: "
+           "el botón de abajo abre su panel."),
+        box);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    if (!ControlManagerLauncher::installed()) {
+        auto *missing = new QLabel(tr("kdock-controlmanager no está instalado."), box);
+        missing->setStyleSheet(QStringLiteral("color: gray;"));
+        layout->addWidget(missing);
+        return box;
+    }
+
+    auto *form = new QFormLayout;
+
+    auto *showCm = new QCheckBox(tr("Mostrar el botón en este dock"), box);
+    showCm->setChecked(m_config->showControlManager());
+    connect(showCm, &QCheckBox::toggled, m_config, &DockConfig::setShowControlManager);
+    connect(m_config, &DockConfig::showControlManagerChanged, showCm,
+            [this, showCm] { showCm->setChecked(m_config->showControlManager()); });
+    form->addRow(tr("Widget:"), showCm);
+
+    auto *iconBtn = new QPushButton(box);
+    iconBtn->setStyleSheet(QStringLiteral("text-align:left; padding:4px 8px;"));
+    const auto refreshIcon = [this, iconBtn] {
+        const QString n = m_config->controlManagerIcon();
+        iconBtn->setIcon(QIcon::fromTheme(n));
+        iconBtn->setText(QStringLiteral(" ") + n);
+    };
+    refreshIcon();
+    connect(iconBtn, &QPushButton::clicked, this, [this, refreshIcon] {
+        IconPickerDialog dlg(m_config->controlManagerIcon(), this);
+        if (dlg.exec() == QDialog::Accepted && !dlg.selectedIcon().isEmpty()) {
+            m_config->setControlManagerIcon(dlg.selectedIcon());
+            refreshIcon();
+        }
+    });
+    form->addRow(tr("Ícono del widget:"), iconBtn);
+
+    auto *display = new QComboBox(box);
+    display->addItem(tr("Solo el ícono"));
+    display->addItem(tr("Ícono y texto"));
+    display->addItem(tr("Solo el texto"));
+    display->setCurrentIndex(m_config->controlManagerDisplay());
+    connect(display, &QComboBox::currentIndexChanged, m_config,
+            &DockConfig::setControlManagerDisplay);
+    form->addRow(tr("Qué muestra:"), display);
+
+    auto *text = new QLineEdit(m_config->controlManagerText(), box);
+    // No " = " in the string: that is the separator of the translation
+    // catalogue's line format, so a string containing one is split into the
+    // wrong key/value pair (this one became key "vacío"). The dockLength
+    // tooltip above has the same shape and the same problem.
+    text->setPlaceholderText(tr("vacío: la fecha y la hora"));
+    text->setToolTip(tr("Una cadena corta propia, por ejemplo «Máquina de Pruebas». "
+                        "Dejalo vacío para que muestre el reloj."));
+    connect(text, &QLineEdit::textEdited, m_config, &DockConfig::setControlManagerText);
+    form->addRow(tr("Texto:"), text);
+
+    auto *format = new QLineEdit(m_config->controlManagerFormat(), box);
+    format->setToolTip(tr("Formato de fecha/hora de Qt: dddd, d MMMM yyyy, HH:mm:ss…"));
+    connect(format, &QLineEdit::textEdited, m_config, &DockConfig::setControlManagerFormat);
+    // Only meaningful while the text *is* the clock.
+    const auto syncFormatEnabled = [this, format, text, display] {
+        format->setEnabled(m_config->controlManagerDisplay() != 0
+                           && m_config->controlManagerText().isEmpty());
+        text->setEnabled(m_config->controlManagerDisplay() != 0);
+        Q_UNUSED(display);
+    };
+    syncFormatEnabled();
+    connect(m_config, &DockConfig::controlManagerTextChanged, format, syncFormatEnabled);
+    connect(m_config, &DockConfig::controlManagerDisplayChanged, format, syncFormatEnabled);
+    form->addRow(tr("Formato del reloj:"), format);
+
+    // The text's own font. Mirrored in the Fuentes tab (there it lives next to
+    // the clock font, which is what automatic follows); enabled only while the
+    // widget draws text.
+    auto *cmFont = new QSpinBox(box);
+    cmFont->setRange(0, 96);
+    cmFont->setSpecialValueText(tr("Automatic"));
+    cmFont->setSuffix(tr(" px"));
+    cmFont->setValue(m_config->controlManagerFontSize());
+    cmFont->setToolTip(tr("Tamaño de fuente del texto que dibuja este widget en el "
+                          "dock. Automático sigue la fuente del reloj y, si no, una "
+                          "fracción del tamaño del ícono."));
+    connect(cmFont, &QSpinBox::valueChanged, m_config, &DockConfig::setControlManagerFontSize);
+    connect(m_config, &DockConfig::controlManagerFontSizeChanged, cmFont,
+            [this, cmFont] { cmFont->setValue(m_config->controlManagerFontSize()); });
+    const auto syncCmFontEnabled = [this, cmFont] {
+        cmFont->setEnabled(m_config->showControlManager()
+                           && m_config->controlManagerDisplay() != 0);
+    };
+    syncCmFontEnabled();
+    connect(m_config, &DockConfig::showControlManagerChanged, box, syncCmFontEnabled);
+    connect(m_config, &DockConfig::controlManagerDisplayChanged, box, syncCmFontEnabled);
+    form->addRow(tr("Tamaño del texto:"), cmFont);
+
+    auto *preload = new QCheckBox(tr("Dejarlo cargado al iniciar kdock"), box);
+    preload->setChecked(ControlManagerLauncher::preload());
+    preload->setToolTip(tr("Sin esto, el proceso arranca en el primer clic (medio segundo) y "
+                           "queda residente: las aperturas siguientes son instantáneas."));
+    connect(preload, &QCheckBox::toggled, this, [](bool on) {
+        ControlManagerLauncher::setPreload(on);
+    });
+    form->addRow(tr("Precargar:"), preload);
+
+    layout->addLayout(form);
+
+    auto *row = new QHBoxLayout;
+    auto *configureBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("configure")),
+                                         tr("Configurar…"), box);
+    row->addWidget(configureBtn);
+    row->addStretch();
+    layout->addLayout(row);
+
+    auto *status = new QLabel(box);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+
+    const auto refreshStatus = [status] {
+        status->setText(ControlManagerLauncher::running()
+                            ? tr("Estado: en ejecución (%1)")
+                                  .arg(ControlManagerLauncher::binaryPath())
+                            : tr("Estado: detenido (%1)")
+                                  .arg(ControlManagerLauncher::binaryPath()));
+    };
+    refreshStatus();
+    connect(configureBtn, &QPushButton::clicked, this, [this, refreshStatus] {
+        if (!m_cmLauncher)
+            m_cmLauncher = new ControlManagerLauncher(this);
+        m_cmLauncher->openSettings();
         QTimer::singleShot(600, this, refreshStatus);
     });
 

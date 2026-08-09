@@ -1,0 +1,81 @@
+// A flat button with an optional icon, themed off `theme` like everything else
+// in the panel. Deliberately not QtQuick.Controls' Button: the Basic style paints
+// a light grey chrome that fights every dark panel background.
+
+import QtQuick
+import QtQuick.Controls.Basic
+
+Item {
+    id: button
+
+    property string icon: ""
+    property string label: ""
+    property bool enabled: true
+    property bool checked: false
+    property bool compact: false
+    property color accent: theme.highlight
+    // Tooltip text; empty = no tooltip.
+    property string tip: ""
+
+    signal clicked()
+
+    implicitWidth: Math.max(cmConfig ? cmConfig.buttonWidth : 0,
+                            compact ? 32 : 90,
+                            content.implicitWidth + (compact ? 12 : 20))
+    implicitHeight: Math.max(cmConfig ? cmConfig.buttonHeight : 0,
+                             compact ? 28 : 34)
+
+    Rectangle {
+        anchors.fill: parent
+        radius: 6
+        color: !button.enabled
+               ? Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.04)
+               : button.checked
+                 ? Qt.rgba(button.accent.r, button.accent.g, button.accent.b, 0.45)
+                 : mouse.containsMouse
+                   ? Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.16)
+                   : Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08)
+        border.width: button.checked ? 1 : 0
+        border.color: button.accent
+    }
+
+    Row {
+        id: content
+        anchors.centerIn: parent
+        spacing: button.label.length > 0 && button.icon.length > 0 ? 7 : 0
+
+        Image {
+            visible: button.icon.length > 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: button.compact ? 16 : 18
+            height: width
+            source: button.icon.length > 0
+                    ? "image://icon/" + button.icon + win.iconSuffix : ""
+            sourceSize: Qt.size(width * Screen.devicePixelRatio, height * Screen.devicePixelRatio)
+            opacity: button.enabled ? 1.0 : 0.4
+        }
+        Text {
+            visible: button.label.length > 0
+            anchors.verticalCenter: parent.verticalCenter
+            text: button.label
+            color: theme.foreground
+            opacity: button.enabled ? 1.0 : 0.4
+            font.pixelSize: button.compact ? 11 : 12
+            font.bold: cmConfig.labelBold
+        }
+    }
+
+    // The *attached* tooltip: it shares one instance per window instead of
+    // creating a popup per button (the trap the tile menu paid for).
+    ToolTip.text: button.tip
+    ToolTip.visible: button.tip.length > 0 && mouse.containsMouse
+    ToolTip.delay: 600
+
+    MouseArea {
+        id: mouse
+        anchors.fill: parent
+        hoverEnabled: true
+        enabled: button.enabled
+        onClicked: button.clicked()
+    }
+}

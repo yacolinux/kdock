@@ -15,7 +15,7 @@ cmake --build build -j
 `env -u CC -u CXX` es obligatorio: las variables apuntan a ccache y CMake falla si están
 seteadas.
 
-**Son cuatro binarios**, los cuatro los compila el mismo `cmake --build build`:
+**Son cinco binarios**, los cinco los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -27,6 +27,10 @@ seteadas.
 - `kdock-calendar` (`build/calendar/kdock-calendar`, árbol `calendar/`): calendario de mes
   standalone, autocontenido (Qt Widgets, sin archivos de `src/`). Se lanza desde el widget
   del reloj (o un Script Runner); el reloj no se toca. Detalles en `AGENTS.md` → *Calendario*.
+- `kdock-controlmanager` (`build/controlmanager/kdock-controlmanager`, árbol
+  `controlmanager/`): el panel de control con solapas (audio, brillo por monitor, energía,
+  calendario, reproducción, red, wallpaper, sistema) y su grilla de tarjetas. Lo prende el
+  widget `controlmanager` del dock. Detalles en `AGENTS.md` → *Control Manager*.
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -54,13 +58,15 @@ levantarse solo — el de previews al prender su casilla, el del menú de mosaic
 clic del widget. O sea que actualizar `kdock-tilemenu` es `install` + matarlo; no hace falta
 tocar el dock.
 
-El install escribe **ocho** cosas: los cuatro binarios y sus cuatro `.desktop`. Después de
+El install escribe **diez** cosas: los cinco binarios y sus cinco `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
-tarjetas caen a ícono). **`kdock-tilemenu` y `kdock-calendar` no necesitan el refresco** —no
-piden ningún privilegio, y su `.desktop` es solo para el nombre y el ícono del gestor de
-tareas—, así que si lo único que tocaste fue uno de esos dos, saltealo y evitás el riesgo de
-abajo. Y ojo:
+tarjetas caen a ícono). **`kdock-tilemenu`, `kdock-calendar` y `kdock-controlmanager` no
+necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos tres, saltealo
+y evitás el riesgo de abajo. (El panel de control **es** una superficie layer-shell, pero
+`zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier
+cliente, verificado con `wayland-info`.) Y ojo:
 **`kbuildsycoca6` a secas es peligroso en esta máquina** (ver abajo):
 
 ```bash
@@ -230,6 +236,93 @@ Cinco cosas de este arnés:
 y hace falta `enabled=true` en la compartida (el switch maestro), o no se crea ninguna tira
 y la corrida sale limpia sin haber cargado el QML. Las capturas **no** se pueden probar así
 (son un protocolo de Wayland + KWin): para eso está `--dump-captures`, abajo.
+
+### Arnés de `kdock-controlmanager`
+
+Dos herramientas, y conviene saber cuál contesta qué. **`--dump-sections` es la barata y la
+única inocua**: imprime la grilla resuelta en ASCII, la tabla de secciones, los monitores con
+brillo, los reproductores MPRIS y lo que contesta `org.kdock.Dock`, y sale sin abrir ninguna
+ventana. **Solo lee**, así que sirve con el panel corriendo y sobre la config del usuario.
+
+```bash
+./build/controlmanager/kdock-controlmanager --dump-sections
+XDG_DATA_HOME=/tmp/cm ./build/controlmanager/kdock-controlmanager --dump-sections   # la de prueba
+```
+
+Y el arnés de Xvfb, que sí carga el QML y se puede capturar. `--section <id>` abre derecho en
+esa solapa, que es lo que hace innecesario andar tirando clics para ver una sección:
+
+```bash
+rm -rf /tmp/cm && mkdir -p /tmp/cm/kdock
+ln -s ~/.local/share/applications /tmp/cm/applications
+ln -s ~/.local/share/icons        /tmp/cm/icons
+printf '[General]\nkeepOpen=true\npanelWidth=1000\npanelHeight=520\n' > /tmp/cm/kdock/controlmanager.conf
+xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- bash -c '
+  env -u WAYLAND_DISPLAY XDG_DATA_HOME=/tmp/cm QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+      PATH=/tmp/fakebin:$PATH ./build/controlmanager/kdock-controlmanager --show --section audio \
+      > /tmp/cm.log 2>&1 &
+  APP=$!; sleep 6; import -window root /tmp/cm.png; kill $APP'
+```
+
+Seis cosas de este arnés, todas costaron una corrida:
+
+- **`env -u WAYLAND_DISPLAY` es obligatorio.** Sin eso el proceso ve el Wayland del usuario,
+  se pone `QT_WAYLAND_SHELL_INTEGRATION=kdock-layershell` y **le abre el panel en la pantalla
+  de verdad** en vez de en el Xvfb.
+- **`dbus-run-session` para probar el QML**, igual que con el menú de mosaicos: el candado de
+  instancia única es el nombre en el bus, y `xvfb-run` hereda el del usuario. El precio es que
+  **los backends de D-Bus se quedan sin datos** (PowerDevil, MPRIS y `org.kdock.Dock` no están
+  en un bus propio), así que las secciones salen con sus mensajes de "no responde" — que es lo
+  correcto, no un bug. Para *ver* datos reales hay que correr **sin** `dbus-run-session`, y ahí
+  vale lo de siempre: que no haya otra instancia.
+- **Bajo X no hay layer-shell**: la ventana es un X normal, así que el arnés **no** prueba
+  anclaje, alineación, margen ni el ida y vuelta del teclado. Silencio ahí prueba que el QML
+  carga y que las tarjetas dibujan, nada más. Eso solo se prueba en la sesión Wayland real.
+- **El `PATH` falso importa más acá que en ningún otro arnés del proyecto.** Este binario
+  maneja brillo, volumen y modo oscuro; sin los scripts de `/tmp/fakebin` (receta de las
+  herramientas falsas, más abajo) una corrida **le cambia el brillo al usuario**. El brillo por
+  D-Bus tiene otra reja: `ScreenBrightness` solo escribe desde un clic.
+- **La captura es de la raíz de X** (`import -window root`), no de la `QQuickView`: los menús
+  son `Popup.Window` y viven en otra ventana.
+- **`rm -rf` del `XDG_DATA_HOME` entre corridas**, o la siguiente arranca con la disposición
+  que dejó la anterior y cualquier aserción sobre "la tarjeta está en (3,0)" falla por una
+  razón que no tiene nada que ver.
+
+**El arrastre de una tarjeta se prueba de punta a punta**, y la prueba es el volcado, no la
+captura. Ojo con dos cosas al calcular las coordenadas: **solo la cabecera arrastra** (22 px,
+o 10 si el título está apagado — un clic un píxel más abajo cae en el contenido y no pasa
+nada, me pasó), y el origen de la grilla es `pad(12) + barra de solapas(38) + 6`:
+
+```bash
+XDG_DATA_HOME=/tmp/cm ./build/controlmanager/kdock-controlmanager --dump-sections | head -12
+# ... arnés con xdotool mousemove <x> <y> mousedown 1 / mousemove / mouseup 1 ...
+XDG_DATA_HOME=/tmp/cm ./build/controlmanager/kdock-controlmanager --dump-sections | head -12
+```
+
+**El panel de configuración se maneja desde código**, como el del dock: linkeá los `.o` del
+target (menos `main.cpp.o`), instanciá `CmConfig` + `CmLayout` + `CmSettingsDialog`, buscá los
+controles y hacéles `->click()`. **Desambiguá por el `QGroupBox` que los contiene**, nunca por
+índice: el diálogo tiene casilleros en Ventana, en Apariencia y en Secciones, y
+`findChildren<QCheckBox*>()[0]` no es el que creés.
+
+**Y para probar `org.kdock.Dock` hace falta un kdock corriendo en el bus real**: el del build,
+bajo Xvfb y **sin** `dbus-run-session`, es lo que cierra el círculo sin tocarle el dock al
+usuario. Con eso se verifica lo único que el `.conf` no muestra —que el modo oscuro repinta—:
+
+```bash
+xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
+  env -u WAYLAND_DISPLAY XDG_DATA_HOME=/tmp/kd-cm QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+      PATH=/tmp/fakebin:$PATH ./build/kdock > /tmp/kd.log 2>&1 &
+  sleep 6
+  busctl --user call org.kdock.Dock /Dock org.kdock.Dock setDarkMode b true
+  qdbus6 org.kde.kglobalaccel /component/kdock invokeShortcut toggle-dark-mode
+  import -window $(xwininfo -root -children | awk "/\"kdock\": \(\"kdock\"/ {print \$1}") /tmp/dock.png'
+```
+
+Ojo con la otra mitad de eso: **esa corrida registra el atajo global en el kglobalaccel de
+verdad** (componente `kdock`, acción `toggle-dark-mode`, sin tecla asignada). Es lo que
+queremos que quede, pero conviene saber que pasa, y se comprueba con
+`busctl --user call org.kde.kglobalaccel /component/kdock org.kde.kglobalaccel.Component shortcutNames`.
 
 **El diálogo de Configuración es Qt Widgets, no QML** (`SettingsDialog`, `QTabWidget` con
 una solapa por `create*Tab()`), y **no hay forma de abrirlo desde la CLI**: sale del menú
@@ -500,6 +593,16 @@ backends de verdad como context properties, más `import -window root` bajo Xvfb
 `AppMenuPopup`: `appmenu`, `xdgmenutree`, `desktopentry`, `dockconfig`, `theme`,
 `iconprovider`) el `moc` sale gratis. Encontró todos los bugs de las dos rondas del menú.
 
+**Variante de medición, sin ventana**: para verificar *geometría* (un tamaño mínimo que un
+control debe honrar, un espaciado, un ancho natural) no hace falta capturar nada — basta
+instanciar el `.qml` suelto con context properties falsas (`QQuickItem *btn = …comp.create()`,
+`setProperty()` para los props) e imprimir `width`/`height` con cada valor configurado.
+Es como se verificó que `CmButton` cumple `cmConfig.buttonWidth`/`buttonHeight` (90×34
+natural → 170×48 configurado → vuelve a natural con 0, 2026-08-08): determinístico, sin
+render y sin depender de leer una captura. Los objetos falsos van con `Q_PROPERTY` + `moc`
+(`/usr/lib/qt6/libexec/moc archivo.cpp -o probe.moc`, o el `moc` del PATH — el de 5.15
+rompe el include).
+
 Cinco trampas, las cinco mordieron (2026-07-31):
 
 - **`XDG_DATA_HOME` aislado esconde los datos del usuario.** Hay que aislarlo, porque si no
@@ -549,8 +652,9 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   nuevo hay que agregarlo ahí, igual que un `.qml`.
 - **`Translations` se instancia primero en `main.cpp`**, antes que cualquier otro singleton:
   instala el `QTranslator`, y lo que se haya construido antes ya tiene sus cadenas en capabase.
-- **Las cadenas de `kdock-previews` y `kdock-tilemenu` están en el mismo catálogo** (el
-  `gen-capabase.py` escanea los tres árboles), y los dos binarios cargan **la base** del
+- **Las cadenas de `kdock-previews`, `kdock-tilemenu` y `kdock-controlmanager` están en el
+  mismo catálogo** (el `gen-capabase.py` escanea los cuatro árboles, y para el panel de control
+  **dos** directorios de QML: `qml/` y `qml/cards/`), y los tres binarios cargan **la base** del
   idioma que eligió el dock: `english-ALT-hacker` les da `english`. Si agregás una cadena en
   un accesorio, se regenera igual que las del dock.
 - **Trampa del arnés: un `XDG_DATA_HOME` de prueba reusado esconde las traducciones nuevas.**
@@ -689,8 +793,9 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   `dockwindow.*` — no hay backend que instanciar ni context property que registrar. Quedan
   `DockConfig` (con su `knownWidgetTokens()`), `Dock.qml` y el checkbox del diálogo.
   Y un widget cuyo backend es un **lanzador de otro binario** (el `tilemenu`, con
-  `TileMenuLauncher`) se salta `dockmanager.*`: el objeto es fino y sin estado, así que lo crea
-  el propio `DockWindow` en su ctor —igual que `AppMenu`— en vez de viajar por `Shared`.
+  `TileMenuLauncher`; el `controlmanager`, con `ControlManagerLauncher`) se salta
+  `dockmanager.*`: el objeto es fino y sin estado, así que lo crea el propio `DockWindow` en su
+  ctor —igual que `AppMenu`— en vez de viajar por `Shared`.
 - **`Component.onCompleted` (y cualquier handler) se declara UNA sola vez por objeto.** Un
   segundo `Component.onCompleted` en la raíz de `Dock.qml` no es un error de compilación ni una
   advertencia de `qmllint`: es *"Property value set multiple times"* al cargar, o sea **el QML
@@ -725,9 +830,18 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 - **Un texto nuevo del diálogo o del QML no se traduce solo**: hay que regenerar el catálogo
   (`tools/gen-capabase.py` + `tools/sync-translations.py`, ver *Traducciones* arriba). No hay
   error ni advertencia — la cadena sale en capabase en todos los idiomas.
-- **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **tres** listas: la
+- **Un ícono de breeze que es line-art oscuro desaparece sobre un panel oscuro.** No es un
+  bug de render ni un nombre equivocado: `brightness-high` y compañía se dibujan en negro y
+  sobre el fondo del panel no se ven (pasó en la primera captura de la sección Video). El dock
+  lo resuelve hace rato con dos iconsets (`widgetIconThemeDarkBg`/`widgetIconThemeLightBg`) y
+  `root.widgetIconSuffix`; el panel de control usa el mismo par a través de `win.iconSuffix`.
+  Regla para cualquier superficie nueva: **ninguna URL `image://icon` se arma con
+  `"@" + theme.revision` a mano** — se usa el sufijo de esa superficie, que además elige el set.
+- **Nuevo `.qml`**: agregalo a `qt_add_resources` o no entra al qrc. Hay **cuatro** listas: la
   del `CMakeLists.txt` de arriba (para `qml/`), la de `previews/CMakeLists.txt` (para
-  `previews/qml/`) y la de `tilemenu/CMakeLists.txt` (para `tilemenu/qml/`). Esta última tiene
+  `previews/qml/`), la de `tilemenu/CMakeLists.txt` (para `tilemenu/qml/`) y la de
+  `controlmanager/CMakeLists.txt` (para `controlmanager/qml/` **y** `controlmanager/qml/cards/`,
+  que son entradas sueltas: un `cards/*.qml` nuevo se agrega a mano). La de tilemenu tiene
   además un **segundo** `qt_add_resources` con `BASE ".."` que mete `qml/IconMenuItem.qml` de
   kdock **verbatim**: con ese `BASE` cae en `:/qml/`, o sea el mismo directorio del recurso que
   los `.qml` del menú, y se usa como tipo vecino sin ningún import.
@@ -808,6 +922,28 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   siga vivo**: un `refresh()` son media docena de `pactl`. Para probar el peor caso, un `pactl`
   falso de dos líneas en el `PATH` que loguee y salga con 1 (receta de las herramientas falsas,
   más arriba): los timestamps muestran el backoff y el conteo muestra la amplificación.
+- **Una cadena con `" = "` adentro se parte mal en el catálogo de traducciones.** El formato
+  de los `.md` es `clave = texto` y separa por el **primer** `" = "`, así que un
+  `tr("vacío = la fecha y la hora")` entra como clave `vacío` con valor `la fecha y la hora`:
+  no falla, no avisa, y esa cadena **no se puede traducir nunca**. Se destapó escribiendo el
+  panel de control (2026-08-08) y ya estaba latente en el tooltip de *Dock length*
+  (`"0 = auto (panel stretches…"`, `src/settingsdialog.cpp`), que por eso sigue en capabase en
+  todos los idiomas. Escribí `vacío: la fecha y la hora` y listo.
+- **`Window.window` se lee desde un `Item`, no desde adentro de un `Timer`.** La property
+  adjunta se resuelve sobre el objeto donde se la usa, así que un
+  `running: Window.window.visible` dentro de un `Timer` escupe *"Window.window does only
+  support types deriving from Item"* y el timer **no corre**: el reloj de la tarjeta se queda
+  congelado y parece un bug del backend. Leelo en el `Item` raíz
+  (`readonly property bool panelVisible: Window.window ? Window.window.visible : true`) y usá
+  eso. Lo agarró el arnés al primer intento (2026-08-08).
+- **Un `QDBusArgument` local va `const` — y en `BatteryControl` no lo estaba.** Leyendo
+  `Profiles` (`aa{sv}`) de power-profiles-daemon el objeto era no-const, así que el compilador
+  elegía las sobrecargas de **escritura** de `beginArray()`, y cada refresco imprimía
+  `QDBusArgument: write from a read-only object` — el paso previo al abort de libdbus que ya
+  está documentado más abajo. Estaba ahí desde siempre y lo destapó una sonda de aislamiento de
+  30 líneas que construye un backend por vez e imprime un marcador entre uno y otro
+  (2026-08-08). Si ves ese mensaje en cualquier arnés, no lo ignores: buscá **cuál** de los
+  backends lo emite antes de suponer que es del código que estás tocando.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú

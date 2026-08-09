@@ -34,6 +34,9 @@
 #include "desktopwallpapers.h"
 #include "powercontrol.h"
 #include "previewslauncher.h"
+#include "controlmanagerlauncher.h"
+#include "dockservice.h"
+#include "globalshortcut.h"
 #include "tilemenulauncher.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
@@ -294,6 +297,24 @@ int main(int argc, char *argv[])
     // widget's first click, but the user can ask for it to be resident from the
     // start so that click is instant too.
     TileMenuLauncher::startIfPreloading();
+    ControlManagerLauncher::startIfPreloading();
+
+    // The dock's own D-Bus service. It exists for kdock-controlmanager: dark
+    // mode has to be flipped *inside* this process to repaint (there is no file
+    // watcher on the .conf), and the settings dialog opens from nowhere else.
+    DockService dockService(&manager);
+    dockService.registerOnBus();
+
+    // And the one global shortcut kdock publishes of its own, with no default
+    // key: the user assigns one in Preferencias del sistema → Atajos.
+    GlobalShortcuts shortcuts;
+    QObject::connect(&shortcuts, &GlobalShortcuts::triggered, &dockService,
+                     [&dockService](const QString &action) {
+                         if (action == QLatin1String("toggle-dark-mode"))
+                             dockService.toggleDarkMode();
+                     });
+    shortcuts.registerAction(QStringLiteral("toggle-dark-mode"),
+                             QCoreApplication::translate("main", "Alternar modo oscuro"));
 
     return app.exec();
 }

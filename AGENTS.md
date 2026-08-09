@@ -273,7 +273,7 @@ el dock se lee como dos.
 
 ### Solapas Colores y Fuentes (`SettingsDialog::createColoresTab()` / `createFuentesTab()`, 2026-08-05)
 - Dos **centros de look & feel**: la solapa **Colores** junta todas las opciones de temas/colorsets y colores del dock, y **Fuentes** las cuatro opciones de tipografía. **Nada se quitó de las solapas originales**: cada control existe dos veces (General/Widgets/DarkMode + Colores, Widgets + Fuentes) y es una **copia sincronizada** — escribe a la misma clave de `DockConfig` (o estática) y se re-lee cuando esa clave emite su `*Changed`. Quien edite en cualquier lado, el resto lo refleja al instante (cambiar de solapa no reconstruye el diálogo, así que sin estos sync los duplicados quedarían viejos).
-- **Colores** agrupa por cajas: *Escritorio (KDE)* (`showIconThemes`/`showColorSchemes` copiadas de Widgets **más** los dos pickers que aplican al instante, "· Apply icon theme" / "· Apply color scheme" — desde 2026-08-05 **todos** los selectores de tema del diálogo son `ThemePickerButton`, no combos: ver *El selector de temas del diálogo*—, desde `AppearanceControl` con `refreshIfStale()` en el armado), *Iconset del dock* (el picker de `m_theme` de General), *Íconos de widgets* (modo + sets light/dark de General), *Color del panel* + *Quick colors* (General), *Apps en ejecución* (los tres indicadores de Widgets) y *Modo oscuro* (los dos colores + el grupo "Al cambiar de modo, cambiar también:" de DarkMode). **Fuentes**: `clockFontSize`, `iconLabelWidth`, `iconLabelFontSize`, `labelBold` (copiadas de Widgets), con el mismo gating por `iconLabelMode`/`widgetLabelMode` que la solapa Widgets y la nota de que el modo de etiqueta se elige allá.
+- **Colores** agrupa por cajas: *Escritorio (KDE)* (`showIconThemes`/`showColorSchemes` copiadas de Widgets **más** los dos pickers que aplican al instante, "· Apply icon theme" / "· Apply color scheme" — desde 2026-08-05 **todos** los selectores de tema del diálogo son `ThemePickerButton`, no combos: ver *El selector de temas del diálogo*—, desde `AppearanceControl` con `refreshIfStale()` en el armado), *Iconset del dock* (el picker de `m_theme` de General), *Íconos de widgets* (modo + sets light/dark de General), *Color del panel* + *Quick colors* (General), *Apps en ejecución* (los tres indicadores de Widgets) y *Modo oscuro* (los dos colores + el grupo "Al cambiar de modo, cambiar también:" de DarkMode). **Fuentes**: `clockFontSize`, `iconLabelWidth`, `iconLabelFontSize`, `labelBold` (copiadas de Widgets), con el mismo gating por `iconLabelMode`/`widgetLabelMode` que la solapa Widgets y la nota de que el modo de etiqueta se elige allá. Desde el 2026-08-08 también `controlManagerFontSize` ("Control Manager text size:", el texto propio del widget de Control Manager — ver la sección *Control Manager*), espejo del spinbox del grupo de Widgets, con su propio gating (el widget visible **y** dibujando texto): es el único tamaño de texto del dock que no depende de ningún modo de etiqueta, porque el texto del CM existe aunque no haya nombres que dibujar.
 - **Los nombres coinciden a propósito entre solapas pero configuran cosas distintas** — hay que leerlos con cuidado al tocar esto: "Icon theme picker" (Widgets/Colores: un widget del dock que aplica el iconset al escritorio, `showIconThemes`) ≠ "Iconset del dock" (General/Colores: el override global de kdock, `Theme::setIconTheme`) ≠ "El iconset del dock" (DarkMode/Colores, fila de los extras: qué iconset usa el dock **mientras el modo oscuro está activo**, `darkAppearanceValue(DockIconTheme)`). Lo mismo con "Color scheme picker" vs "El esquema de color del sistema", y "Panel color"/"Quick colors" (General) vs "Fondo del dock" (DarkMode).
 - **Sync por señal, no por rebuild**: los setters solo emiten cuando el valor cambia de verdad, así que `setValue`/`setChecked`/`setCurrentIndex` desde el handler del config termina el loop solo (patrón ya usado en `menuPopupWidthChanged`). Casos especiales: el combo del iconset del dock se sincroniza con `Theme::changed` (relee `m_theme->iconTheme()` — se dispara en cada reload de kdeglobals, no solo al cambiar el override); los tres combos de "Íconos de widgets" se re-seleccionan juntos con `widgetIconThemeChanged` (la señal cubre los tres setters); los colores del modo oscuro y las filas extras se re-leen con `darkModeChanged` (las estáticas terminan en `notifyDarkModeChanged()`). El combo de tema usa `selectComboData()` (anónimo de `settingsdialog.cpp`): selecciona y, si el id configurado no está instalado, agrega una entrada "(not installed)" explícita — sin ella el combo mentiría mostrando el primer tema.
 - **Helpers compartidos** para que Colores y DarkMode no dupliquen ~130 líneas: `makeColorButton()` (botón swatch + `QColorDialog`, devuelve el `refresh` para colgarlo de señales), `addDarkAppearanceExtrasRow()` (una fila check + combo oscuro + combo normal, con re-selección propia vía `darkModeChanged` y `QSignalBlocker` para no re-persistir al sincronizar) y `addDarkAppearanceExtras()` (las tres filas juntas, desde `AppearanceControl`/`Theme`). `createDarkModeTab()` usa los tres.
@@ -911,6 +911,148 @@ engancharlo nunca implica editar el QML del dock. Es un **cuarto binario**, con 
 - **Lo que se toca en kdock, y es nada**: solo `add_subdirectory(calendar)` en el
   `CMakeLists.txt` raíz. No comparte ningún archivo de `src/`.
 
+### Control Manager — binario accesorio `kdock-controlmanager` (`controlmanager/`, 2026-08-08)
+
+Panel de control con **solapas horizontales**: audio, brillo por monitor, perfil de energía,
+modo oscuro, calendario, reproducción (MPRIS), red, fondo de escritorio y sistema. La primera
+solapa (*Principal*) es una **grilla de tarjetas** que el usuario reacomoda y redimensiona
+arrastrando, y cada sección se muestra ahí como tarjeta a elección. **No maneja íconos de
+aplicaciones**: eso es del dock y del menú de mosaicos. Quinto binario, con su árbol, su
+config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
+
+- **La ventana es una superficie layer-shell anclada, no un toplevel.** Es la decisión que lo
+  distingue de `kdock-tilemenu`: el panel tiene tamaño propio (`panelWidth`/`panelHeight`, o
+  un porcentaje de la pantalla) y tiene que colgar del borde que diga el usuario, y en Wayland
+  un cliente **no puede ubicar un toplevel** — KWin lo pondría al medio. Así que compila
+  `src/layershell.cpp` y los dos protocolos, igual que `previews/`.
+  - **Sin privilegios igual**: `zwlr_layer_shell_v1` se le anuncia a un cliente sin autorizar
+    (verificado con `wayland-info`), así que su `.desktop` no necesita refrescar ksycoca —
+    como el del menú de mosaicos, y a diferencia de `kdock-previews`.
+  - **Zona exclusiva siempre 0**: es un panel que se abre y se cierra, no un strut. Reservar
+    espacio le movería las ventanas maximizadas al usuario en cada apertura.
+  - **El teclado se pide y se devuelve**: `kdock.keyboardInteractivity` a 1 al mostrar y a 0
+    al ocultar. Es lo único que le da Esc y, sobre todo, `activeChanged` — o sea "el usuario
+    hizo clic en otro lado", que es la única señal de pérdida de foco que tiene una superficie
+    layer-shell. Las dos guardias son las de `TileWindow`: 400 ms de gracia tras `show()` y un
+    contador de diálogos propios arriba.
+  - **Cierre**: Esc, la ✕, perder el foco y (opcional, apagado) salir el puntero — los cuatro
+    anulados por **Ventana permanente** (`keepOpen`), que es el pedido original de "puede
+    convertirse en ventana permanente con un checkbox".
+- **Las secciones son una tabla estática** (`controlmanager/src/cmsections.cpp`): id, ícono,
+  tamaño inicial en celdas, tamaño mínimo y si tiene solapa propia. Es lo que leen la barra de
+  solapas, el motor de la grilla, el panel de ajustes y `--dump-sections`. **Agregar una
+  sección es una fila ahí, un `.qml` en `qml/cards/` y un `case` en `CmSectionView.qml`.**
+  Las etiquetas **no** están en la tabla: salen de `CmSections::label()` con `tr()` en el
+  momento, para que un cambio de idioma sea una relectura y no una reconstrucción.
+- **Una sola componente por sección, en dos tamaños.** `CmSectionView.qml` mapea id → archivo
+  y le pasa `compact`: la tarjeta de Principal y la solapa completa son **el mismo** `.qml`.
+  Por eso cada `cards/*.qml` tiene dos bloques (`visible: card.compact` / `visible:
+  !card.compact`) en vez de dos archivos que se desincronizarían.
+- **El motor de la grilla es `TileLayout` sin secciones ni grupos** (`cmlayout.cpp`): hay una
+  sola grilla y a lo sumo una docena de tarjetas, así que la tarjeta se identifica por el id de
+  su sección. Se conservó lo que costó caro allá: colisión manual (libre → coloca; **una** del
+  **mismo tamaño** → swap; cualquier otro solapamiento → rechazo), `dropKind()` read-only para
+  que el fantasma no mienta, agrandar que **reubica** en vez de fallar, y los registros de las
+  tarjetas que ahora no están en Principal (vuelven a su lugar al reactivarlas, y mientras
+  tanto no participan de ninguna colisión). El auto-placement es un `firstFreeSlot()` por
+  tarjeta —a diferencia del cursor del menú de mosaicos— porque acá las tarjetas tienen
+  **tamaños distintos** y son pocas.
+- **Solo la cabecera arrastra.** El cuerpo de una tarjeta está lleno de sliders y botones; un
+  `drag.target` sobre toda la tarjeta se los comería. La cabecera es el asa (y el clic derecho
+  abre el menú, el doble clic va a la solapa completa).
+- **La barra de solapas se adapta midiendo, no adivinando.** Con ocho secciones los títulos
+  se pasaban del ancho y la última solapa simplemente no estaba. Ahora las solapas sueltan su
+  etiqueta y se quedan con el ícono (menos la actual, que siempre se lee) cuando no entran.
+  La decisión **no puede leer la fila visible** —su ancho es lo que decide, o sea un binding
+  loop—: la lee de una fila oculta que siempre dibuja las etiquetas completas. Un umbral
+  adivinado se probó primero y falló en las dos direcciones (a 96 px seguía desbordando, a 120
+  plegaba etiquetas que entraban).
+- **Los íconos van por `win.iconSuffix`, nunca por `theme.revision` a mano.** Media docena de
+  íconos de breeze son line-art oscuro y **desaparecen** sobre un panel oscuro (el de brillo se
+  perdió entero en la primera captura). El sufijo resuelve el set (`widgetIconThemeDarkBg` /
+  `widgetIconThemeLightBg` del `kdock.conf` compartido, o sea la misma elección que el dock)
+  según la luminancia del fondo **del panel**, y lleva el `theme.revision` que invalida la
+  caché de pixmaps de QML.
+- **Backends**: reusa `AudioControl`, `BatteryControl`, `BrightnessControl`, `NetworkControl`,
+  `WallpaperControl`, `PowerControl` y `DesktopEntryIndex` tal cual, y agrega tres propios:
+  - **`ScreenBrightness`** (`org.kde.ScreenBrightness`, PowerDevil): brillo **por monitor**, que
+    es lo que `brightnessctl` no puede (maneja el backlight interno y nada más). Un objeto por
+    display con `Label`, `Brightness`, `MaxBrightness` e `IsInternal`. **Los nombres de esos
+    objetos son volátiles**: se renumeran cuando un monitor duerme y vuelve (visto en vivo:
+    `display11`/`display12` pasaron a `display13` entre dos corridas), así que nada los cachea
+    y `DisplayAdded`/`DisplayRemoved` reescanean. Si el servicio no está, la sección cae al
+    `BrightnessControl` de siempre con un solo slider.
+  - **`MprisControl`** (`org.mpris.MediaPlayer2.*`): el reproductor "actual" es el que eligió el
+    usuario, si no el que está `Playing`, si no el primero. La posición **se sondea**, y solo
+    mientras la tarjeta está en pantalla (`setMonitoring`), porque es un round trip por tick.
+  - **`DockLink`**: cliente de `org.kdock.Dock` (abajo).
+- **`org.kdock.Dock` — el servicio nuevo de kdock** (`src/dockservice.{h,cpp}`). Existe porque
+  tres cosas no se pueden hacer desde afuera del proceso del dock: **el modo oscuro** (escribir
+  `darkModeOn` en el `.conf` no repinta nada — no hay watcher de archivos, y el modo se
+  resuelve al dibujar), **el diálogo de Configuración** (se abre solo desde el menú del dock) y
+  **el reinicio**. Métodos: `openSettings(dockId)`, `restart()`, `darkMode()`/`setDarkMode(b)`/
+  `toggleDarkMode()`, `dockIds()`/`dockScreens()`/`primaryDockId()`, señal `darkModeChanged(b)`.
+  - **Tres `as` paralelas en vez de un `a(ssb)`**: `as` no necesita `qDBusRegisterMetaType` de
+    ningún lado (ver la trampa de los structs de D-Bus en `CLAUDE.md`).
+  - **No tiene `quit()` a propósito**: dejar al usuario sin dock y sin forma de volver no es
+    algo que una llamada D-Bus perdida deba poder hacer.
+  - La señal sale del `DarkModeNotifier` **de proceso**, no del `darkModeChanged()` por
+    instancia: con quince docks ese se emite quince veces por conmutación, y esto es una señal
+    de bus.
+- **Atajo global propio** (`src/globalshortcut.{h,cpp}`): kdock publica la acción
+  `toggle-dark-mode` bajo el componente `kdock` de kglobalaccel, por D-Bus crudo (sin KDE
+  Frameworks). `KWinShortcut` solo **dispara** atajos ajenos; esto **registra** uno nuestro.
+  Va **sin combinación por defecto**: aparece en *Preferencias del sistema → Atajos* para que
+  el usuario le asigne una, en vez de robarle una tecla. Se usa `setShortcut` (`asaiu`) y no
+  `setShortcutKeys` (`asa(ai)u`): la firma vieja toma un array de ints, y una `QList<int>`
+  vacía se marshalea sola — la nueva necesitaría un metatipo registrado para decir "ninguna".
+- **Persistencia**: `~/.local/share/kdock/controlmanager.conf`, una sola para toda la sesión
+  (hay un solo proceso). Tres notificadores en vez del único de `TileConfig`, porque cuestan
+  distinto: `settingsChanged()` repinta, `windowChanged()` re-commitea la superficie
+  layer-shell y `sectionsChanged()` reconstruye la barra y la grilla. La disposición es un JSON
+  compacto en la clave `layout`.
+- **Lo que se toca en kdock**: `src/controlmanagerlauncher.{h,cpp}`, seis claves en
+  `DockConfig` (`showControlManager`, `controlManagerIcon`, `controlManagerDisplay`,
+  `controlManagerText`, `controlManagerFormat`, `controlManagerFontSize`) con su línea en
+  **`knownWidgetTokens()`**, el
+  `Component` de `Dock.qml` (bloque, como `tilemenu`), una context property en `DockWindow`, el
+  grupo de la solapa **Widgets**, una línea en `main.cpp` para el precargado, el glob
+  `controlmanager*.conf` en `ConfigArchive`, y —esto sí es nuevo— `DockService` +
+  `GlobalShortcuts` en `main.cpp` y `DockManager::windowFor()`.
+- **El widget dibuja texto, que es lo que ningún otro widget hace**: `controlManagerDisplay`
+  elige ícono / ícono+texto / solo texto, y el texto es `controlManagerText` (una cadena corta
+  del usuario, "Máquina de Pruebas") o —si está vacía— **el reloj**, formateado con
+  `controlManagerFormat`. El `Timer` solo corre cuando el texto *es* el reloj. Crece por
+  `implicitWidth`, igual que `clock2`.
+- **El texto tiene fuente propia** (`config.controlManagerFontSize`, 2026-08-08): es el único
+  texto del dock que no cuelga de ningún modo de etiqueta — existe aunque el dock no dibuje ni
+  nombres de apps ni nombres de secciones, que es justo el caso de un dock con solo este
+  widget. 0 = automático: sigue la fuente del reloj (`clockFontSize`, la que usaba el texto
+  del CM antes del ajuste dedicado) y, si tampoco, una fracción del tamaño del ícono. Se edita
+  en **Configuración → Fuentes → "Control Manager text size:"** y en el grupo de la solapa
+  Widgets ("Tamaño del texto:"), dos copias sincronizadas; el spinbox se deshabilita cuando el
+  widget está apagado o no dibuja texto (`controlManagerDisplay == 0`).
+- **Botones de las solapas redimensionables** (`cmConfig.buttonWidth`/`buttonHeight`, en el
+  panel de ajustes → **Apariencia → "Ancho/Alto mínimo de los botones:"**, 2026-08-08): los
+  `CmButton` de las solapas (y los de las tarjetas de Principal, que son la misma componente)
+  reciben un tamaño mínimo de `implicitWidth`/`implicitHeight`; 0 = tamaño natural (el texto
+  largo sigue pudiendo empujar el ancho). Un `Flow` respeta el `implicitWidth` de cada hijo,
+  así que el cambio re-arma la fila al vuelo.
+- **UI**: Configuración → **Widgets** → grupo *"Control Manager (panel de control)"* (casillero
+  del widget, ícono, qué muestra, texto, formato, precargar, estado y botón *Configurar…*).
+  Todo lo demás vive en el panel propio del binario (`CmSettingsDialog`: Ventana, Apariencia,
+  Grilla, Secciones, Disposición y scripts).
+- **El editor de secciones es una grilla de filas, no un `QListWidget`**: dos casilleros por
+  fila (*Solapa* y *Principal*) más subir/bajar. Un `setItemWidget()` se come el manejo de
+  mouse de la lista, y el arreglo obvio para eso (`WA_TransparentForMouseEvents`) mata los
+  casilleros de adentro — las dos trampas están documentadas en `CLAUDE.md`.
+- **Diagnóstico**: `kdock-controlmanager --dump-sections` imprime la grilla resuelta en ASCII,
+  la tabla de secciones con su estado, los monitores con brillo, los reproductores MPRIS y lo
+  que contesta `org.kdock.Dock`, y sale. No abre ninguna ventana y **solo lee**, así que es la
+  única forma de ver los backends sin tocar la máquina (los sliders del panel escriben al
+  brillo y al mezclador de verdad). Es a este binario lo que `--dump-layout` es al menú de
+  mosaicos.
+
 ### Capa de traducciones (`src/translations.{h,cpp}`, `translations/*.md`, 2026-08-07)
 
 Los textos escritos en el código son la **capa nativa "capabase"** (ni inglés ni español: lo
@@ -1136,7 +1278,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | C++ Class | QML Property / Method | Notes |
 |-----------|----------------------|-------|
 | `AppearanceControl` | `appearance.*` | `iconThemes()`, `colorSchemes()` (listas de mapas con id/name/current/**fav**, + bg/fg/sel en los esquemas, favoritos primero), `refreshIfStale()`, `applyIconTheme(id)`, `applyColorScheme(id)`, `isFavorite(kind,id)`/`setFavorite(kind,id,on)` (kind = `"icons"`/`"colors"`) + `currentIconTheme`/`currentColorScheme`, `keepPickerOpen` (lectura/escritura, compartida por todos los pickers) y las señales `changed`/`favoritesChanged`/`keepPickerOpenChanged` |
-| `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Negritas: `labelBold` (bool, todos los nombres del dock). Renglones: `labelLines` (1 o 2 — con 2 los nombres se envuelven en vez de elidirse) + read-only `iconLabelBoxHeight`. Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
+| `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Negritas: `labelBold` (bool, todos los nombres del dock). Renglones: `labelLines` (1 o 2 — con 2 los nombres se envuelven en vez de elidirse) + read-only `iconLabelBoxHeight`. Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. Widget Control Manager: `showControlManager`, `controlManagerIcon`, `controlManagerDisplay` (0 solo ícono / 1 ícono+texto / 2 solo texto), `controlManagerText` (vacío = el reloj, con `controlManagerFormat`), `controlManagerFontSize` (0 = automático: la fuente del reloj y, si no, una fracción del ícono; independiente de los modos de etiqueta — ver *Control Manager*). App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
 | `Theme` | `theme.background`, `theme.foreground`, `theme.highlight`, `theme.revision` | Live-reloading color scheme |
 | `Translations` | (sin context property) | La capa de traducciones se sirve a QML a través del `QTranslator` instalado: los `qsTr()` no cambian. Lo único que QML ve del tema es `config.widgetName(token)` (ya traducido) y `config.widgetNamesRevision`, que se bumpea también al cambiar de idioma |
 | `DockModel` | `dockModel` (model) | `activate(row)`, `launch(row)`, `togglePinned(row)`, `closeAll(row)`, `windowList(row)`, `moveItem(from, to)`, `activateWindow(row, idx)`, `syncWindows()`, `sendToDesktop(row, position)` (mueve **todas** las ventanas del ícono a un escritorio 1-based, sin seguirlas). Roles: `name`, `iconName`, `pinned`, `windowCount`, `active`, `minimized`, `title`, `isSeparator`, `separatorTransparent` (el separador inline que ocupa lugar y no dibuja línea) |
@@ -1152,6 +1294,15 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `TileLayout` | `tileLayout` | El motor, todo `Q_INVOKABLE`: `groups(section)` (`{index, title, tiles, rows}` por solapa), `rowsOfGroup(section,group)`, `isCustomized(section)`, `dropKind(section,id,group,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveTile(...)` (false = rechazado), **`moveTileToGroup(section,id,group)`**, `resizeTile(...)`, `setTileProperty(section,id,key,value)` (`bg`/`image`/`label`/`icon`/`showIcon`/`showLabel`), `resetTile`, `addGroup`/`renameGroup`/`moveGroup`/`removeGroup`, `resetSection`/`resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
 | `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `currentGroup` (rw: la solapa visible), `searching`, `rows` (del grupo actual), `groups`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
 | `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
+| `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
+| `DockService` | (sin context property) | `org.kdock.Dock` en `/Dock`: `openSettings(dockId)`, `restart()`, `darkMode()`, `setDarkMode(b)`, `toggleDarkMode()`, `dockIds()`, `dockScreens()`, `primaryDockId()` + señal `darkModeChanged(b)`. Lo consume `DockLink` desde el panel |
+| `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural). Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
+| `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`label`/`showTitle`), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
+| `CmModel` | `cards` (model) | Roles `cardId`, `name`, `icon`, `col`, `row`, `span`/`vspan`, `background`, `showTitle`; prop `rows`; `get(row)` |
+| `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`) + los modales `pickColor`, `promptText`, `confirm` |
+| `ScreenBrightness` | `screens` | `available`, `count`, `displays()` (→ `{name, label, internal, value 0..1, brightness, max}`), `setBrightness(name, ratio)`, `setAll(ratio)`, `refresh()`. Brillo **por monitor** vía PowerDevil; los nombres de los objetos son volátiles y no se cachean |
+| `MprisControl` | `mpris` | `available`, `playerId`, `identity`, `title`, `artist`, `album`, `artUrl`, `status`, `playing`, `canGoNext`/`canGoPrevious`/`canPause`/`canSeek`, `position`/`length` (µs), `players()`, `setPlayer(id)`, `playPause()`/`play()`/`pause()`/`stop()`/`next()`/`previous()`, `seekToRatio(r)`, `raisePlayer()`, `setMonitoring(on)` (el sondeo de posición solo mientras se mira) |
+| `DockLink` | `dock` | `available`, `darkMode` (rw), `toggleDarkMode()`, `openSettings(dockId)`, `restartDock()`, `docks()`. Cliente de `org.kdock.Dock`; `available` en false es normal (kdock apagado) y las tarjetas lo usan como reja |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
 | `VirtualDesktops` | `virtualDesktops` | `count`, `current` (posición **1-based**, 0 = KWin no contesta), `names`, `nameOf(position)`, `switchTo(position)`. Lo usan el widget `pager` y el submenú *Escritorio* de los íconos de apps |

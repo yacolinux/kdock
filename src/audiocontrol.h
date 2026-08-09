@@ -19,6 +19,7 @@
 #include <QProcess>
 #include <QString>
 #include <QTimer>
+#include <QVariantList>
 #include <QVector>
 
 class AudioControl : public QObject
@@ -48,6 +49,16 @@ public:
     QVector<Device> outputs() const { return m_outputs; }
     QVector<Device> inputs() const { return m_inputs; }
     QVector<Device> apps() const { return m_apps; }
+
+    // The same three lists in a shape QML can read (the settings dialog uses the
+    // QVector above; kdock-controlmanager draws them from QML). Each element is
+    // a map with keys: type, index, name, description, icon, volume, muted,
+    // isDefault.
+    Q_INVOKABLE QVariantList outputList() const;
+    Q_INVOKABLE QVariantList inputList() const;
+    Q_INVOKABLE QVariantList appList() const;
+    // Highest volume a slider may offer (1.0, or 1.5 with the ceiling raised).
+    Q_INVOKABLE qreal ceiling() const { return volumeCeiling(); }
 
     bool maxVolume() const { return m_maxVolume; }
     qreal volumeCeiling() const { return m_maxVolume ? 1.5 : 1.0; }

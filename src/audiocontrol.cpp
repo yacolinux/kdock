@@ -231,6 +231,48 @@ void AudioControl::setDefault(DeviceType type, const QString &name)
     emit changed();
 }
 
+namespace {
+// One device as a QML-readable map. Kept here rather than in the header so the
+// Device struct stays a plain aggregate.
+QVariantMap deviceToMap(const AudioControl::Device &d)
+{
+    QVariantMap m;
+    m[QStringLiteral("type")] = int(d.type);
+    m[QStringLiteral("index")] = d.index;
+    m[QStringLiteral("name")] = d.name;
+    m[QStringLiteral("description")] = d.description;
+    m[QStringLiteral("icon")] = d.iconName;
+    m[QStringLiteral("volume")] = d.volume;
+    m[QStringLiteral("muted")] = d.muted;
+    m[QStringLiteral("isDefault")] = d.isDefault;
+    return m;
+}
+
+QVariantList devicesToList(const QVector<AudioControl::Device> &devices)
+{
+    QVariantList out;
+    out.reserve(devices.size());
+    for (const AudioControl::Device &d : devices)
+        out.append(deviceToMap(d));
+    return out;
+}
+} // namespace
+
+QVariantList AudioControl::outputList() const
+{
+    return devicesToList(m_outputs);
+}
+
+QVariantList AudioControl::inputList() const
+{
+    return devicesToList(m_inputs);
+}
+
+QVariantList AudioControl::appList() const
+{
+    return devicesToList(m_apps);
+}
+
 void AudioControl::setMaxVolume(bool on)
 {
     if (m_maxVolume == on)

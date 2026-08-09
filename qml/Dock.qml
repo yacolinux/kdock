@@ -559,6 +559,7 @@ Item {
         switch (token) {
         case "menu": return config.showMenuButton
         case "tilemenu": return config.showTileMenu && tileLauncher
+        case "controlmanager": return config.showControlManager && cmLauncher
         case "apps": return config.showAppIcons
         case "clipboard": return config.showClipboard && clipboardHistory
         case "disks": return config.showDisks && disks && disks.available
@@ -597,6 +598,7 @@ Item {
         switch (token) {
         case "menu": return menuComp
         case "tilemenu": return tileMenuComp
+        case "controlmanager": return controlManagerComp
         // Null, not just an invisible section: the section Loader instantiates
         // its component even when the section is hidden, and the apps block is
         // a Repeater over every launcher and window — it would keep rebuilding
@@ -641,6 +643,7 @@ Item {
         return token === "apps" || token === "systray" || token === "relanzadores"
                || token === "pager"
                || token === "scriptrunners" || token === "menu" || token === "tilemenu"
+               || token === "controlmanager"
                || token === "session"
                || token === "battery" || token === "clipboard" || token === "disks"
                || token === "network" || token === "iconthemes"
@@ -666,6 +669,7 @@ Item {
         case "showdesktop": return qsTr("Show desktop")
         case "settings": return qsTr("Configure kdock")
         case "tilemenu": return qsTr("Menú de mosaicos (pantalla completa)")
+        case "controlmanager": return qsTr("Control Manager")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
         case "gap": return qsTr("Transparent separator")
@@ -2225,6 +2229,149 @@ Item {
                     onTriggered: tileLauncher.openSettings()
                 }
                 MenuSeparator {}
+                IconMenuItem {
+                    text: qsTr("Dock settings…")
+                    iconName: "configure"
+                    onTriggered: dockWindow.openSettings()
+                }
+            }
+        }
+    }
+
+    // Control panel. A block, like the tile menu: it owns its own mouse
+    // handling, and there is no popup here — the panel is a layer-shell window
+    // of the separate kdock-controlmanager process and this widget toggles it.
+    //
+    // Unlike every other widget this one can draw *text* instead of (or beside)
+    // its icon: either a fixed string the user typed ("Máquina de Pruebas") or
+    // the clock, formatted by config.controlManagerFormat. Same growth trick as
+    // clock2: the Row's implicit size makes the section as wide as it needs.
+    Component {
+        id: controlManagerComp
+        Item {
+            id: cmRoot
+
+            readonly property bool wantsIcon: config.controlManagerDisplay !== 2
+            readonly property bool wantsText: config.controlManagerDisplay !== 0
+            // An empty custom string means "show the clock" — which is the only
+            // reason this widget needs a timer at all.
+            readonly property bool textIsClock: config.controlManagerText.length === 0
+            property string clockText: ""
+
+            function refreshClock() {
+                cmRoot.clockText = Qt.formatDateTime(new Date(), config.controlManagerFormat)
+            }
+            readonly property string labelText: cmRoot.textIsClock ? cmRoot.clockText
+                                                                   : config.controlManagerText
+
+            Component.onCompleted: cmRoot.refreshClock()
+            onTextIsClockChanged: cmRoot.refreshClock()
+            Connections {
+                target: config
+                function onControlManagerFormatChanged() { cmRoot.refreshClock() }
+            }
+            Timer {
+                // Only ticks when the label is actually a clock; a fixed string
+                // has nothing to update.
+                running: cmRoot.wantsText && cmRoot.textIsClock
+                interval: 1000
+                repeat: true
+                onTriggered: cmRoot.refreshClock()
+            }
+
+            implicitWidth: Math.max(root.appIconPx, cmContent.implicitWidth)
+            implicitHeight: Math.max(root.appIconPx, cmContent.implicitHeight)
+
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && cmMouse.containsMouse
+                delay: 400
+                text: qsTr("Control Manager")
+            }
+
+            Row {
+                id: cmContent
+                anchors.centerIn: parent
+                spacing: cmRoot.wantsIcon && cmRoot.wantsText ? 6 : 0
+
+                Image {
+                    id: cmIcon
+                    visible: cmRoot.wantsIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: visible ? root.appIconPx : 0
+                    height: root.appIconPx
+                    source: "image://icon/"
+                            + (config.controlManagerIcon || "preferences-system")
+                            + root.widgetIconSuffix
+                    sourceSize: Qt.size(root.appIconPx * Screen.devicePixelRatio,
+                                        root.appIconPx * Screen.devicePixelRatio)
+                    scale: cmMouse.containsMouse ? 1.12 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                }
+                Text {
+                    visible: cmRoot.wantsText
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: cmRoot.labelText
+                    color: root.dockTextColor
+                    // Own size when set; otherwise fall back to the clock font
+                    // (which the CM widget used before the dedicated setting)
+                    // and, with neither, to a fraction of the icon size.
+                    font.pixelSize: config.controlManagerFontSize > 0
+                                    ? Math.max(7, Math.round(config.controlManagerFontSize
+                                                             * fitScale))
+                                    : (config.clockFontSize > 0
+                                       ? root.clockFontPx
+                                       : Math.round(root.appIconPx * 0.40))
+                    font.bold: config.labelBold
+                }
+            }
+
+            MouseArea {
+                id: cmMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                // A block, so the section-level MouseArea is disabled here and
+                // the right button has to be handled by this one.
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) { cmCtxMenu.popup(); return }
+                    // The dock's connector: unlike the tile menu's toplevel, the
+                    // panel is a layer surface and really does land there.
+                    cmLauncher.toggle(config.screenName)
+                }
+            }
+
+            Menu {
+                id: cmCtxMenu
+                popupType: Popup.Window
+                // A translated label can be noticeably longer than the capabase
+                // one, and a QtQuick Menu does not size itself to its widest
+                // item (see CLAUDE.md). The 64 px of slack is measured.
+                width: Math.max(implicitWidth + 64, 240)
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
+
+                IconMenuItem {
+                    text: qsTr("Audio")
+                    iconName: "audio-volume-high"
+                    onTriggered: cmLauncher.showSection("audio", config.screenName)
+                }
+                IconMenuItem {
+                    text: qsTr("Video y energía")
+                    iconName: "preferences-system-power-management"
+                    onTriggered: cmLauncher.showSection("video", config.screenName)
+                }
+                IconMenuItem {
+                    text: qsTr("Sistema")
+                    iconName: "preferences-system"
+                    onTriggered: cmLauncher.showSection("system", config.screenName)
+                }
+                MenuSeparator {}
+                IconMenuItem {
+                    text: qsTr("Configurar Control Manager…")
+                    iconName: "configure"
+                    onTriggered: cmLauncher.openSettings()
+                }
                 IconMenuItem {
                     text: qsTr("Dock settings…")
                     iconName: "configure"
