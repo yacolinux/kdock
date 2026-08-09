@@ -4,6 +4,33 @@
 (arquitectura, cada widget, trampas de Wayland/layer-shell, tabla QML↔C++) y se mantiene
 al día con cada feature; este archivo solo tiene lo que hay que saber sí o sí.
 
+## Tests: corré `tests/run.sh` antes de instalar
+
+Desde 2026-08-09 las recetas manuales de este archivo están **congeladas en una suite** (ver
+`tests/README.md`). Lo que antes era media hora de arneses a mano ahora es un comando:
+
+```bash
+tests/run.sh                 # static + unit + qml (~1 min) — lo mismo que corre CI
+tests/run.sh --tier live     # dodge y multi-monitor contra KWin, en la sesión real
+```
+
+Todo está en ctest con labels (`static`, `unit`, `qml`, `live`) y el workflow de GitHub
+Actions (`.github/workflows/ci.yml`) corre `ctest -LE live` en un container de Arch, porque
+el runner de Ubuntu trae Qt 6.4 y el proyecto pide ≥ 6.5.
+
+**Las recetas de más abajo siguen valiendo como el *porqué* de cada test y para diagnosticar a
+mano**, pero para verificar un cambio empezá por la suite. Tres cosas que importan:
+
+- **Un test que no puede correr se saltea (código 77), no falla.** `Skipped` no es verde:
+  sin `xvfb-run` no hay tier `qml`, sin `lupdate` no se valida el catálogo, con un solo
+  monitor `live.multimonitor` no prueba nada.
+- **Toda corrida es sandbox**: `XDG_DATA_HOME` descartable + herramientas falsas en el `PATH`
+  (`tests/lib/`). Si escribís un test nuevo que arranca un binario, pasá por ahí o le vas a
+  cambiar el brillo y el tema al usuario.
+- **Hay dos costuras de test en producción**, las dos apagadas por defecto y documentadas en
+  el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`) y
+  `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`).
+
 ## Build
 
 ```bash

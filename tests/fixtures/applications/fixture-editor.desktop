@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Fixture Editor
+Exec=/bin/true
+Icon=accessories-text-editor
+Categories=Development;TextEditor;

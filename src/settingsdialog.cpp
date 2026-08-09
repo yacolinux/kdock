@@ -572,8 +572,11 @@ QWidget *SettingsDialog::createGeneralTab()
     m_dockLength->setSuffix(QStringLiteral("%"));
     m_dockLength->setSpecialValueText(tr("Auto"));
     m_dockLength->setValue(m_config->dockLength());
-    m_dockLength->setToolTip(tr("0 = auto (panel stretches 100% or adjusts to content). "
-                                ">0 = fixed length as a percentage of the screen edge."));
+    // No " = " in the string: the translation catalogue splits `key = value` on
+    // the first one, so a tooltip written "0 = auto…" enters as the key "0" and
+    // can never be translated (tests/static/check-tr-separator.py guards this).
+    m_dockLength->setToolTip(tr("0: auto (panel stretches 100% or adjusts to content). "
+                                "Above 0: fixed length as a percentage of the screen edge."));
     connect(m_dockLength, &QSpinBox::valueChanged, m_config, &DockConfig::setDockLength);
     form->addRow(tr("Dock length:"), m_dockLength);
 

@@ -1,6 +1,6 @@
 [Español](README.md) | **English** | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.10
+# kdock  ·  RELEASE 0.1.11
 
 ![Kdock configuration example](screenshots/nueva-portada.jpg)
 
@@ -382,6 +382,23 @@ private headers, needed by the layer-shell integration). At runtime you need
 NetworkManager (network), UPower (battery). The Overview, move-window and next-wallpaper
 widgets only show up under KDE.
 
+## Tests
+
+```sh
+tests/run.sh                 # static + unit + qml (~1 min), the same thing CI runs
+tests/run.sh --tier live     # plus the ones that need your Wayland session and KWin
+```
+
+Four ctest tiers: **static** (repo invariants: qmllint, every `.qml` declared in the qrc,
+the translation catalogue up to date), **unit** (Qt Test against the very objects the dock
+is built from), **qml** (the real binaries under Xvfb: the QML loads *and* draws — the
+window geometry is checked too, because a silent log is also what you get when the QML was
+never instantiated) and **live** (intelligent hide against real windows, and multi-monitor:
+both need a compositor, which is why they stay out of CI).
+
+Every run gets a throwaway `XDG_DATA_HOME` and fake system tools in `PATH`, so it **will not
+touch your brightness, theme or configuration**. Details in [`tests/README.md`](tests/README.md).
+
 ## Build and install
 
 ```sh
@@ -501,6 +518,8 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
 | `controlmanager/` | Companion control-panel binary (own tree, reuses 16 files from `src/`) |
 | `protocols/` | Vendored Wayland protocols (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | The translation layers (`capabase.md` + one `.md` per language). Copied to the home directory on first run and edited there |
+| `tests/` | The test suite: `run.sh` plus four ctest tiers (`static`, `unit`, `qml`, `live`). See `tests/README.md` |
+| `.github/` | The CI workflow: builds and runs the three portable tiers in a container with a recent Qt |
 | `tools/` | `gen-capabase.py` (rebuilds `capabase.md` from the code), `sync-translations.py` (propagates new keys to the other languages) and `gen-alt-layers.py` (regenerates the nine ALT layers) |
 | `screenshots/` | README screenshots. `.gitignore` intentionally ignores `*.jpg`/`*.png` (a desktop capture can show too much): the ones here were reviewed one by one and added with `git add -f` |
 | `AGENTS.md` | Architecture document: every widget, Wayland pitfalls, the QML↔C++ table |

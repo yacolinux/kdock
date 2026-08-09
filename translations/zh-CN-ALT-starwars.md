@@ -61,7 +61,7 @@
 (System default) = (系统默认)
 (todavía sin guardar — se guarda sola la primera vez que salgas del Escritorio 1) = (尚未保存 — 第一次离开桌面 1 时会自动保存)
 (volver al anterior) = (恢复上一个)
-0 = auto (panel stretches 100% or adjusts to content). >0 = fixed length as a percentage of the screen edge. = 0 = auto (panel stretches 100% or adjusts to content). >0 = fixed length as a percentage of the screen edge.
+0: auto (panel stretches 100% or adjusts to content). Above 0: fixed length as a percentage of the screen edge. = 0：自动（面板拉伸至 100% 或随内容自适应）。大于 0：按屏幕边缘百分比的固定长度。
 24-hour format = 24 小时制
 <b>%1</b> = <b>%1</b>
 <b>Nombres de apps y widgets</b> = <b>应用程序与小部件名称</b>

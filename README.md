@@ -1,6 +1,6 @@
 **Español** | [English](README.en.md) | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.10
+# kdock  ·  RELEASE 0.1.11
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -389,6 +389,24 @@ privados de WaylandClient, que la integración layer-shell necesita). En runtime
 (red), UPower (batería). Los widgets de Overview, mover-ventana y siguiente-fondo solo
 aparecen bajo KDE.
 
+## Tests
+
+```bash
+tests/run.sh                 # static + unit + qml (~1 min), lo mismo que corre en CI
+tests/run.sh --tier live     # además, contra tu sesión Wayland y KWin
+```
+
+Cuatro tiers en ctest: **static** (invariantes del repo: qmllint, los `.qml` declarados en
+el qrc, el catálogo de traducciones al día), **unit** (Qt Test contra los mismos objetos con
+los que se compila el dock), **qml** (los binarios de verdad bajo Xvfb: el QML carga *y*
+dibuja — se verifica también la geometría de la ventana, porque un log en silencio también
+es lo que se ve cuando el QML nunca se instanció) y **live** (el *intelligent hide* contra
+ventanas reales y el multi-monitor, que necesitan un compositor y por eso no corren en CI).
+
+Cada corrida usa un `XDG_DATA_HOME` descartable y herramientas de sistema falsas en el
+`PATH`, así que **no te toca el brillo, el tema ni la configuración**. Detalle en
+[`tests/README.md`](tests/README.md).
+
 ## Compilar e instalar
 
 ```sh
@@ -511,6 +529,8 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
 | `controlmanager/` | Binario accesorio del panel de control (árbol propio, reusa 16 archivos de `src/`) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | Las capas de traducción (`capabase.md` + un `.md` por idioma). Se copian al home en el primer arranque y se editan ahí |
+| `tests/` | La suite: `run.sh` y cuatro tiers en ctest (`static`, `unit`, `qml`, `live`). Ver `tests/README.md` |
+| `.github/` | El workflow de CI: compila y corre los tres tiers portables en un container con Qt reciente |
 | `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código), `sync-translations.py` (propaga las claves nuevas a los demás idiomas) y `gen-alt-layers.py` (regenera las nueve capas ALT) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |

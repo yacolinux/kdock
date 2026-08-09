@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(kdock VERSION 0.1.10 LANGUAGES C CXX)
+project(kdock VERSION 0.1.11 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,8 +8,19 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick Widgets 
 
 qt_standard_project_setup()
 
-qt_add_executable(kdock
-    src/main.cpp
+# Everything except main.cpp lives in an OBJECT library so the test binaries can
+# link the very same objects the dock is made of (tests/CMakeLists.txt). Before
+# this, a probe had to scrape build/CMakeFiles/kdock.dir for *.o by hand.
+#
+# OBJECT and not STATIC on purpose: every object ends up in the final link, so
+# the qt_add_resources initialisers below and the static layer-shell plugin
+# (Q_PLUGIN_METADATA in src/layershell.cpp; Q_IMPORT_PLUGIN stays in main.cpp)
+# survive without any Q_INIT_RESOURCE bookkeeping.
+#
+# The three accessory binaries are deliberately NOT built on this: they compile
+# their handful of ../src files themselves, which is what keeps them decoupled
+# from this target (see the comment at the top of controlmanager/CMakeLists.txt).
+add_library(kdock_core OBJECT
     src/layershell.cpp        src/layershell.h
     src/windowmonitor.cpp     src/windowmonitor.h
     src/taskmanager.cpp       src/taskmanager.h
@@ -75,7 +86,7 @@ qt_add_executable(kdock
     src/globalshortcut.cpp      src/globalshortcut.h
 )
 
-qt_generate_wayland_protocol_client_sources(kdock FILES
+qt_generate_wayland_protocol_client_sources(kdock_core FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/xdg-shell.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml
@@ -86,7 +97,7 @@ qt_generate_wayland_protocol_client_sources(kdock FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-data-control-v1.xml
 )
 
-qt_add_resources(kdock "qml"
+qt_add_resources(kdock_core "qml"
     PREFIX "/"
     FILES qml/Dock.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
@@ -94,7 +105,7 @@ qt_add_resources(kdock "qml"
 # Shipped translation layers. They are copied to
 # ~/.local/share/kdock/translations on first run (Translations::seedFiles) and
 # edited there; regenerate capabase.md with tools/gen-capabase.py.
-qt_add_resources(kdock "translations"
+qt_add_resources(kdock_core "translations"
     PREFIX "/"
     FILES translations/capabase.md translations/english.md translations/spanish.md
           translations/zh-CN.md
@@ -109,10 +120,11 @@ qt_add_resources(kdock "translations"
           translations/zh-CN-ALT-starwars.md
 )
 
-# The in-tree layer-shell integration is built as a static Qt plugin
-target_compile_definitions(kdock PRIVATE QT_STATICPLUGIN)
+# The in-tree layer-shell integration is built as a static Qt plugin. PUBLIC so
+# main.cpp's Q_IMPORT_PLUGIN compiles with the same definition.
+target_compile_definitions(kdock_core PUBLIC QT_STATICPLUGIN)
 
-target_link_libraries(kdock PRIVATE
+target_link_libraries(kdock_core PUBLIC
     Qt6::CorePrivate
     Qt6::Gui
     Qt6::Qml
@@ -122,6 +134,11 @@ target_link_libraries(kdock PRIVATE
     Qt6::WaylandClientPrivate
     Qt6::DBus
 )
+# Tests include headers as "dockconfig.h", same as the sources do.
+target_include_directories(kdock_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+qt_add_executable(kdock src/main.cpp)
+target_link_libraries(kdock PRIVATE kdock_core)
 
 include(GNUInstallDirs)
 
@@ -142,3 +159,11 @@ add_subdirectory(previews)
 add_subdirectory(tilemenu)
 add_subdirectory(calendar)
 add_subdirectory(controlmanager)
+
+# Test suite (tests/README.md). Off by default so a plain build of the dock
+# needs neither Qt6::Test nor the extra targets; tests/run.sh turns it on.
+option(KDOCK_BUILD_TESTS "Build the test suite (ctest)" OFF)
+if(KDOCK_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

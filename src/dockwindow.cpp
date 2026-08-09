@@ -5,6 +5,7 @@
 #include "clockwidget.h"
 #include "clockwidget2.h"
 #include "dockconfig.h"
+#include "dockgeometry.h"
 #include "dockmanager.h"
 #include "dockmodel.h"
 #include "desktopentry.h"
@@ -223,41 +224,13 @@ int DockWindow::thickness() const
 
 QRect DockWindow::dockRect() const
 {
+    // The arithmetic (and the reason a centered dock reports the whole band)
+    // lives in dockgeometry.h, where it can be tested without a window.
     QScreen *s = screen();
-    if (!s || width() <= 0 || height() <= 0)
+    if (!s)
         return {};
-    const QRect g = s->geometry();
-    const int m = m_config->effectiveMargin();
-    const int w = width();
-    const int h = height();
-    const bool horizontal = m_config->edge() == DockConfig::Bottom
-                            || m_config->edge() == DockConfig::Top;
-
-    // Position along the edge, mirroring the anchors applyLayerProperties()
-    // asks for. Start/end sit against their corner, margin included, so they
-    // are exact. A centered surface is NOT: the compositor centers it inside
-    // whatever the *other* exclusive zones leave free (measured ~90 px off on
-    // a session with a left dock), and a Wayland client is never told where
-    // its surface landed. So a centered dock dodges on the whole edge band —
-    // it hides for a window it doesn't quite touch, never the other way round.
-    const int span = horizontal ? g.width() : g.height();
-    int len = horizontal ? w : h;
-    int along = horizontal ? g.left() : g.top();
-    switch (m_config->alignment()) {
-    case DockConfig::Start:  along += m; break;
-    case DockConfig::Center: len = span; break;
-    case DockConfig::End:    along += span - len - m; break;
-    }
-    const int bw = horizontal ? len : w; // band size, edge-relative
-    const int bh = horizontal ? h : len;
-
-    switch (m_config->edge()) {
-    case DockConfig::Bottom: return QRect(along, g.bottom() + 1 - m - h, bw, bh);
-    case DockConfig::Top:    return QRect(along, g.top() + m, bw, bh);
-    case DockConfig::Left:   return QRect(g.left() + m, along, bw, bh);
-    case DockConfig::Right:  return QRect(g.right() + 1 - m - w, along, bw, bh);
-    }
-    return {};
+    return kdock::dockRectFor(s->geometry(), m_config->edge(), m_config->alignment(),
+                              m_config->effectiveMargin(), QSize(width(), height()));
 }
 
 void DockWindow::watchWindow(AbstractWindow *window)
@@ -294,6 +267,17 @@ void DockWindow::updateWindowsOverlap()
     if (m_windowsOverlap == overlap)
         return;
     m_windowsOverlap = overlap;
+    // Test seam. The dodge state is not on D-Bus and cannot be seen from a
+    // screenshot with any certainty, so this line is the only way an automated
+    // check can assert it (tests/live/dodge.sh, the one thing about the mode
+    // that Xvfb cannot exercise: there is no window protocol there). Silent
+    // unless asked for.
+    if (qEnvironmentVariableIsSet("KDOCK_DEBUG_DODGE")) {
+        const QRect r = dockRect();
+        qInfo("kdock: dodge overlap=%d rect=%d,%d %dx%d windows=%lld", overlap ? 1 : 0,
+              r.x(), r.y(), r.width(), r.height(),
+              m_monitor ? qlonglong(m_monitor->windows.size()) : -1LL);
+    }
     emit windowsOverlapChanged();
 }
 

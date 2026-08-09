@@ -58,7 +58,7 @@
 (System default) = (Predeterminado del sistema)
 (todavía sin guardar — se guarda sola la primera vez que salgas del Escritorio 1) = (todavía sin guardar — se guarda sola la primera vez que salgas del Escritorio 1)
 (volver al anterior) = (volver al anterior)
-0 = auto (panel stretches 100% or adjusts to content). >0 = fixed length as a percentage of the screen edge. = 0 = auto (panel stretches 100% or adjusts to content). >0 = fixed length as a percentage of the screen edge.
+0: auto (panel stretches 100% or adjusts to content). Above 0: fixed length as a percentage of the screen edge. = 0: automático (el panel se estira al 100% o se ajusta al contenido). Más de 0: largo fijo como porcentaje del borde de la pantalla.
 24-hour format = Formato de 24 horas
 <b>%1</b> = <b>%1</b>
 <b>Nombres de apps y widgets</b> = <b>Nombres de apps y widgets</b>

@@ -83,6 +83,13 @@ qml/
   WidgetLabelMenu.qml     — Reusable right-click submenu: widget/section label mode (see Section labels)
 protocols/
   *.xml                   — Vendored Wayland protocols (layer-shell, foreign-toplevel, plasma-window, xdg-shell)
+tests/
+  run.sh                  — El runner: configura, compila y llama a ctest por tier (ver tests/README.md)
+  lib/                    — sandbox.sh (XDG descartable + pila de limpieza), fakebin.sh (herramientas falsas), xvfb-app.sh
+  static/                 — Invariantes del repo: qmllint, .qml en el qrc, catálogo al día, tr() sin " = ", tokens de widget
+  unit/                   — Qt Test contra kdock_core: dockgeometry, dockconfig, dockmanager, desktopentry, translations
+  qml/                    — smoke.sh (matriz de configs bajo Xvfb) y accessories.sh (--dump-layout / --dump-sections)
+  live/                   — dodge.sh y multimonitor.sh: necesitan la sesión Wayland, excluidos de CI por su label
 ```
 
 ## Key Technical Details
@@ -269,6 +276,36 @@ ocultamiento"), y son cuatro:
 - Verificado en la sesión real (segunda instancia aislada, 2026-08-09): dodge escondido con una
   ventana encima y visible en un escritorio vacío; `windows-below` visible sobre la ventana y sin
   reservar espacio; con alineación End el rect calculado coincidió al píxel con la captura.
+
+### Suite de tests (`tests/`, ctest, 2026-08-09)
+
+Las recetas manuales de `CLAUDE.md` están congeladas en cuatro tiers, todos registrados en
+ctest con un **label**, así que `tests/run.sh` y el workflow de GitHub Actions son el mismo
+comando con otro filtro (`ctest -LE live`). El detalle está en `tests/README.md`; lo que hay
+que saber para tocar código:
+
+- **`kdock_core` es una OBJECT library** con todas las fuentes del dock menos `main.cpp`
+  (`CMakeLists.txt` raíz). El binario y los tests linkean los mismos objetos; antes una sonda
+  tenía que rastrillar `build/CMakeFiles/kdock.dir` a mano. OBJECT y no STATIC porque así
+  sobreviven los inicializadores de los `qt_add_resources` y el registro del plugin estático de
+  layer-shell. **Los tres accesorios no la usan**: siguen compilando su puñado de archivos de
+  `../src`, que es lo que los mantiene desacoplados (ver la cabecera de
+  `controlmanager/CMakeLists.txt`).
+- **Un test unitario nuevo** va en `tests/unit/` con `KDOCK_TEST_MAIN` (de `unit/sandbox.h`,
+  que instala el `XDG_DATA_HOME` descartable **antes** de `QApplication`, porque tiene que
+  estar puesto antes de la primera llamada a `QStandardPaths`) más su línea en
+  `tests/CMakeLists.txt`.
+- **Dos costuras de test en producción**, apagadas salvo que se las pida: `KDOCK_TEST_SCREENS`
+  (`DockManager::connectedScreens()`) y `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`
+  en `DockWindow::updateWindowsOverlap()`). Las dos existen porque lo que prueban no se puede
+  observar de otra forma: bajo Xvfb no hay segundo monitor y el estado del dodge no está en
+  D-Bus.
+- **`DockWindow::dockRect()` es una línea** que llama a `kdock::dockRectFor()`
+  (`src/dockgeometry.h`): la matemática se extrajo justamente para poder testearla sin ventana
+  ni compositor.
+- **Una cadena nueva en `tr()`/`qsTr()` ahora rompe el tier static** si no regenerás el
+  catálogo — que es lo que se quería, porque antes la cadena salía en capabase en los trece
+  idiomas y nadie se enteraba.
 
 ### Autohide: animación y máscara (`src/dockwindow.cpp` + `qml/Dock.qml`)
 - QML handles the slide animation via `Behavior on x/y`.

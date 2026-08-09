@@ -1,0 +1,55 @@
+# kdock CI. Corre exactamente lo mismo que `tests/run.sh` en local: los tiers
+# static + unit + qml. El tier `live` queda afuera por su label — necesita la
+# sesión Wayland del usuario y KWin, que en un runner no existen.
+#
+# Va en un container en vez del runner pelado porque el proyecto pide Qt >= 6.5 y
+# ubuntu-24.04 trae 6.4.2. Arch tiene Qt 6.8+ con los headers privados
+# (CorePrivate / WaylandClientPrivate) y qtwaylandscanner, que es justo lo que
+# hace falta y lo que las imágenes "slim" no traen.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+
+    steps:
+      - name: Instalar dependencias
+        run: |
+          pacman -Syu --noconfirm \
+            base-devel cmake ninja git python \
+            qt6-base qt6-declarative qt6-wayland qt6-tools \
+            xorg-server-xvfb xorg-xwininfo dbus
+          # Lo que la suite usa por nombre, para que un cambio de paquete no se
+          # manifieste como un test "skipped" que nadie mira.
+          for tool in cmake ninja qmllint lupdate xvfb-run xwininfo dbus-run-session python3; do
+            command -v "$tool" > /dev/null || { echo "falta $tool"; exit 1; }
+          done
+
+      - uses: actions/checkout@v4
+
+      - name: Configurar
+        run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DKDOCK_BUILD_TESTS=ON
+
+      - name: Compilar los cinco binarios y los tests
+        run: cmake --build build -j
+
+      - name: Tests (static + unit + qml)
+        # -LE live: todo menos el tier que necesita la sesión real.
+        # --no-tests=error para que un filtro mal escrito no pase como verde.
+        run: ctest --test-dir build --output-on-failure --no-tests=error -LE live
+
+      - name: Guardar los logs si algo falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-logs
+          path: build/Testing/
+          if-no-files-found: ignore

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Fixture Browser
+Exec=/bin/true
+Icon=internet-web-browser
+Categories=Network;WebBrowser;

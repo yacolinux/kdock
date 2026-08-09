@@ -342,6 +342,17 @@ QString DockManager::cloneToNextMonitor(const QString &dockId, bool keepSource)
 
 QStringList DockManager::connectedScreens() const
 {
+    // Test seam. The monitor list is the only thing tying DockManager to the
+    // platform, and there is no way to fake a second monitor under Xvfb (this
+    // Xvfb has no RandR 1.5 monitors, so `xrandr --setmonitor` is a no-op), so
+    // without this everything multi-monitor — move/copy dock to the next
+    // monitor, wantedDocks() across screens — would be untestable. Same shape
+    // as KDOCK_NO_WINDOW_ACTIONS in desktopmaximize.cpp.
+    if (qEnvironmentVariableIsSet("KDOCK_TEST_SCREENS")) {
+        return qEnvironmentVariable("KDOCK_TEST_SCREENS")
+            .split(QLatin1Char(','), Qt::SkipEmptyParts);
+    }
+
     QStringList names;
     const auto screens = QGuiApplication::screens();
     names.reserve(screens.size());

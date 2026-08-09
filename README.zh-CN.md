@@ -1,6 +1,6 @@
 [Español](README.md) | [English](README.en.md) | **中文**
 
-# kdock  ·  RELEASE 0.1.10
+# kdock  ·  RELEASE 0.1.11
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -329,6 +329,22 @@ WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。�
 （音量和混音器）、`brightnessctl`（亮度）、UDisks2（磁盘）、NetworkManager（网络）、
 UPower（电池）。Overview、移动窗口和下一张壁纸这几个 widget 只在 KDE 下出现。
 
+## 测试
+
+```sh
+tests/run.sh                 # static + unit + qml（约 1 分钟），与 CI 运行的完全一致
+tests/run.sh --tier live     # 另外还有需要 Wayland 会话与 KWin 的部分
+```
+
+四个 ctest 层级：**static**（仓库不变量：qmllint、每个 `.qml` 都已声明进 qrc、翻译目录与代码
+同步）、**unit**（Qt Test，直接链接构建 Dock 所用的同一批目标文件）、**qml**（真实二进制在
+Xvfb 下运行：QML 既要加载*也要*绘制——同时校验窗口几何，因为日志安静也可能意味着 QML 根本
+没有被实例化）以及 **live**（智能隐藏对真实窗口、以及多显示器；两者都需要合成器，因此不进
+CI）。
+
+每次运行都使用一次性的 `XDG_DATA_HOME` 和位于 `PATH` 最前面的假系统工具，因此**不会改动你的
+亮度、主题或配置**。详见 [`tests/README.md`](tests/README.md)。
+
 ## 编译与安装
 
 ```sh
@@ -446,6 +462,8 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 | `controlmanager/` | 控制面板配套二进制文件（独立源码树，复用 `src/` 中的 16 个文件） |
 | `protocols/` | 内置的 Wayland 协议（layer-shell、foreign-toplevel、plasma-window、xdg-shell） |
 | `translations/` | 翻译层（`capabase.md` + 每种语言一个 `.md`）。首次启动时复制到 home 目录，并在那里编辑 |
+| `tests/` | 测试套件：`run.sh` 加四个 ctest 层级（`static`、`unit`、`qml`、`live`）。见 `tests/README.md` |
+| `.github/` | CI 工作流：在带有较新 Qt 的容器中构建并运行三个可移植层级 |
 | `tools/` | `gen-capabase.py`（从代码重新生成 `capabase.md`）、`sync-translations.py`（将新增的键传播到其他语言）以及 `gen-alt-layers.py`（重新生成九个 ALT 层） |
 | `screenshots/` | README 中使用的截图。`.gitignore` 有意忽略了 `*.jpg`/`*.png`（桌面截图可能泄露过多信息）：这里的图片是逐张审核后用 `git add -f` 添加的 |
 | `AGENTS.md` | 架构文档：每个 widget、Wayland 相关的坑、QML↔C++ 对照表 |
