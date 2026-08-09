@@ -112,7 +112,7 @@ Item {
                     text: qsTr("Brillo")
                     color: theme.foreground
                     opacity: 0.6
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Text {
@@ -120,7 +120,7 @@ Item {
                     text: qsTr("Ni PowerDevil ni brightnessctl responden.")
                     color: theme.foreground
                     opacity: 0.55
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
 
                 Repeater {
@@ -172,7 +172,7 @@ Item {
                     text: qsTr("Perfil de energía")
                     color: theme.foreground
                     opacity: 0.6
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Row {
@@ -196,7 +196,7 @@ Item {
                     text: battery ? battery.tooltipText : ""
                     color: theme.foreground
                     opacity: 0.55
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
             }
 
@@ -208,7 +208,7 @@ Item {
                     text: qsTr("Modo oscuro del dock")
                     color: theme.foreground
                     opacity: 0.6
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Row {
@@ -233,7 +233,7 @@ Item {
                     text: qsTr("kdock no está en el bus: no se puede conmutar desde acá.")
                     color: theme.foreground
                     opacity: 0.55
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
             }
         }

@@ -28,7 +28,7 @@ Item {
             text: qsTr("Siguiente imagen del fondo")
             color: theme.foreground
             opacity: 0.6
-            font.pixelSize: 11
+            font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
             font.bold: true
         }
 
@@ -69,7 +69,7 @@ Item {
             color: theme.foreground
             opacity: 0.45
             wrapMode: Text.Wrap
-            font.pixelSize: 10
+            font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
         }
     }
 }

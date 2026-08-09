@@ -51,7 +51,7 @@ Item {
         text: qsTr("pactl no responde")
         color: theme.foreground
         opacity: 0.6
-        font.pixelSize: 12
+        font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
 
     // --- compact ------------------------------------------------------------
@@ -66,7 +66,7 @@ Item {
             text: card.defaultOutput ? card.defaultOutput.description : qsTr("Sin salida")
             color: theme.foreground
             elide: Text.ElideRight
-            font.pixelSize: 12
+            font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
         }
 
@@ -144,7 +144,7 @@ Item {
                         text: group.modelData.title
                         color: theme.foreground
                         opacity: 0.6
-                        font.pixelSize: 11
+                        font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                         font.bold: true
                     }
 
@@ -188,7 +188,7 @@ Item {
                                 text: devRow.modelData.description
                                 color: theme.foreground
                                 elide: Text.ElideRight
-                                font.pixelSize: 11
+                                font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                                 font.bold: devRow.modelData.isDefault && cmConfig.labelBold
                             }
 

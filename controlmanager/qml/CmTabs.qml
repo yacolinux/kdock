@@ -16,7 +16,7 @@ Item {
 
     signal picked(string id)
 
-    implicitHeight: 34
+    implicitHeight: Math.round(34 * cmConfig.fontScale)
 
     // With eight sections the bar runs past the corner controls and the last tab
     // is simply not there (measured: "Sistema" fell off a 900 px panel). Rather
@@ -46,7 +46,7 @@ Item {
                     Item { width: 15; height: 1 }
                     Text {
                         text: modelData.label
-                        font.pixelSize: 12
+                        font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
                         font.bold: cmConfig.labelBold
                     }
                 }
@@ -78,7 +78,7 @@ Item {
                     readonly property bool showLabel: !tabs.crowded || tab.current
 
                     width: tab.showLabel ? Math.max(64, label.implicitWidth + 26) : 34
-                    height: 28
+                    height: Math.round(28 * cmConfig.fontScale)
                     anchors.verticalCenter: parent.verticalCenter
 
                     ToolTip.text: tab.modelData.label
@@ -121,7 +121,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: tab.modelData.label
                             color: theme.foreground
-                            font.pixelSize: 12
+                            font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
                             font.bold: cmConfig.labelBold
                         }
                     }

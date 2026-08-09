@@ -50,6 +50,8 @@ void CmConfig::load()
     m_labelBold = readBool("labelBold", true);
     m_buttonWidth = readInt("buttonWidth", 0, 0, 600);
     m_buttonHeight = readInt("buttonHeight", 0, 0, 400);
+    m_fontSize = readInt("fontSize", 0, 0, 24);
+    m_iconTheme = m_settings.value(QStringLiteral("iconTheme")).toString();
     m_tabsPosition = readInt("tabsPosition", 0, 0, 1);
     m_showTabIcons = readBool("showTabIcons", true);
     m_showCardTitles = readBool("showCardTitles", true);
@@ -379,6 +381,23 @@ void CmConfig::setButtonHeight(int px)
         return;
     m_buttonHeight = px;
     store(QStringLiteral("buttonHeight"), px);
+}
+
+void CmConfig::setFontSize(int px)
+{
+    px = qBound(0, px, 24);
+    if (m_fontSize == px)
+        return;
+    m_fontSize = px;
+    store(QStringLiteral("fontSize"), px);
+}
+
+void CmConfig::setIconTheme(const QString &id)
+{
+    if (m_iconTheme == id)
+        return;
+    m_iconTheme = id;
+    store(QStringLiteral("iconTheme"), id);
 }
 
 void CmConfig::setTabsPosition(int position)

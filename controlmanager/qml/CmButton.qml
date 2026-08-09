@@ -22,8 +22,11 @@ Item {
     implicitWidth: Math.max(cmConfig ? cmConfig.buttonWidth : 0,
                             compact ? 32 : 90,
                             content.implicitWidth + (compact ? 12 : 20))
+    // The content grows with the scaled font, so the height follows it instead
+    // of clipping the label on a large fontSize.
     implicitHeight: Math.max(cmConfig ? cmConfig.buttonHeight : 0,
-                             compact ? 28 : 34)
+                             Math.max(compact ? 28 : 34,
+                                      content.implicitHeight + (compact ? 8 : 12)))
 
     Rectangle {
         anchors.fill: parent
@@ -60,7 +63,7 @@ Item {
             text: button.label
             color: theme.foreground
             opacity: button.enabled ? 1.0 : 0.4
-            font.pixelSize: button.compact ? 11 : 12
+            font.pixelSize: Math.max(7, Math.round((button.compact ? 11 : 12) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
         }
     }

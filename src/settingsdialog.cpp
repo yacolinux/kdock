@@ -546,9 +546,10 @@ QWidget *SettingsDialog::createGeneralTab()
     auto updateAlignmentEnabled = [this] {
         const bool hasSpring = m_config->widgetOrder().contains(QStringLiteral("spring"));
         // Alignment is ignored only when the dock spans the whole edge (100%
-        // panel mode) AND a spring is present. In fixed-length mode (>0) or
-        // floating mode the alignment always applies.
-        const bool fullEdge = m_config->panelMode() && m_config->dockLength() == 0;
+        // panel mode, or a fixed length of 100%) AND a spring is present. In
+        // any other fixed-length mode or floating mode the alignment applies.
+        const bool fullEdge = (m_config->panelMode() && m_config->dockLength() == 0)
+                              || m_config->dockLength() == 100;
         const bool disabled = fullEdge && hasSpring;
         m_alignment->setEnabled(!disabled);
         if (disabled) {

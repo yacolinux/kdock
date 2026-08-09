@@ -34,7 +34,7 @@ Item {
         text: qsTr("No hay nada reproduciéndose")
         color: theme.foreground
         opacity: 0.55
-        font.pixelSize: 12
+        font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
 
     Column {
@@ -73,7 +73,7 @@ Item {
                                                           : qsTr("Nada reproduciéndose")
                     color: theme.foreground
                     elide: Text.ElideRight
-                    font.pixelSize: card.compact ? 12 : 15
+                    font.pixelSize: Math.max(7, Math.round((card.compact ? 12 : 15) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Text {
@@ -83,7 +83,7 @@ Item {
                     color: theme.foreground
                     opacity: 0.7
                     elide: Text.ElideRight
-                    font.pixelSize: card.compact ? 10 : 12
+                    font.pixelSize: Math.max(7, Math.round((card.compact ? 10 : 12) * cmConfig.fontScale))
                 }
                 Text {
                     width: parent.width
@@ -92,7 +92,7 @@ Item {
                     color: theme.foreground
                     opacity: 0.5
                     elide: Text.ElideRight
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
             }
         }
@@ -143,7 +143,7 @@ Item {
                 text: card.fmt(mpris ? mpris.position : 0)
                 color: theme.foreground
                 opacity: 0.6
-                font.pixelSize: 10
+                font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
             }
             Text {
                 id: len
@@ -152,7 +152,7 @@ Item {
                 text: card.fmt(mpris ? mpris.length : 0)
                 color: theme.foreground
                 opacity: 0.6
-                font.pixelSize: 10
+                font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
             }
             CmSlider {
                 anchors.left: pos.right

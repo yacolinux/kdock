@@ -33,7 +33,7 @@ Item {
         text: qsTr("NetworkManager no responde")
         color: theme.foreground
         opacity: 0.6
-        font.pixelSize: 12
+        font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
 
     // --- compact ------------------------------------------------------------
@@ -60,7 +60,7 @@ Item {
                                                                 : qsTr("Sin conexión")
                 color: theme.foreground
                 elide: Text.ElideRight
-                font.pixelSize: 12
+                font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
                 font.bold: cmConfig.labelBold
             }
         }
@@ -125,7 +125,7 @@ Item {
                     text: qsTr("Conexiones guardadas")
                     color: theme.foreground
                     opacity: 0.6
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Repeater {
@@ -168,7 +168,7 @@ Item {
                             color: theme.foreground
                             opacity: connRow.modelData.active ? 1.0 : 0.7
                             elide: Text.ElideRight
-                            font.pixelSize: 11
+                            font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                             font.bold: connRow.modelData.active && cmConfig.labelBold
                         }
                         MouseArea {
@@ -194,7 +194,7 @@ Item {
                     text: qsTr("Redes cercanas")
                     color: theme.foreground
                     opacity: 0.6
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
                 }
                 Repeater {
@@ -214,7 +214,7 @@ Item {
                             color: theme.foreground
                             opacity: apRow.modelData.active ? 1.0 : 0.75
                             elide: Text.ElideRight
-                            font.pixelSize: 11
+                            font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                         }
                         Text {
                             anchors.right: parent.right
@@ -224,7 +224,7 @@ Item {
                                   + (apRow.modelData.secure ? " 🔒" : "")
                             color: theme.foreground
                             opacity: 0.5
-                            font.pixelSize: 10
+                            font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
                         }
                         // Deliberately no click-to-join here: an open network
                         // would connect with no confirmation and leave a saved

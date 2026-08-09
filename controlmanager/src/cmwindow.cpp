@@ -1,5 +1,6 @@
 #include "cmwindow.h"
 
+#include "appearancecontrol.h"
 #include "cmconfig.h"
 #include "cmlayout.h"
 #include "cmmodel.h"
@@ -57,6 +58,11 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
     , m_model(model)
     , m_backends(backends)
 {
+    // Same object the dock's own settings dialog uses for its theme pickers:
+    // the panel's icon-set picker lists the same themes and honors the same
+    // favorites, so one choice, both surfaces.
+    m_appearance = new AppearanceControl(m_theme, this);
+
     setTitle(QStringLiteral("kdock Control Manager"));
     setFlags(Qt::FramelessWindowHint);
     // The QML paints its own background at config.backgroundOpacity, so the
@@ -121,6 +127,14 @@ QVariantList CmWindow::sections() const
 QString CmWindow::iconSuffix() const
 {
     QString suffix = QStringLiteral("@") + QString::number(m_theme ? m_theme->revision() : 0);
+
+    // An explicit panel icon set wins over everything: the user asked for these
+    // icons, not for the luminance-adapted pair.
+    const QString overrideTheme = m_config->iconTheme();
+    if (!overrideTheme.isEmpty()) {
+        suffix += QLatin1Char('@') + overrideTheme;
+        return suffix;
+    }
 
     // Which of the two sets to ask for: the panel's own background decides, not
     // the desktop's. Same perceptual test the dock uses for its clock colour.
@@ -302,7 +316,7 @@ void CmWindow::onActiveChanged()
 void CmWindow::openSettings()
 {
     if (!m_settingsDialog)
-        m_settingsDialog = new CmSettingsDialog(m_config, m_layout);
+        m_settingsDialog = new CmSettingsDialog(m_config, m_layout, m_appearance);
     m_settingsDialog->show();
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();

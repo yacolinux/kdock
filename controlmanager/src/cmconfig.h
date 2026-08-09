@@ -53,6 +53,14 @@ class CmConfig : public QObject
     // than these even when the configured one is bigger than the natural one.
     Q_PROPERTY(int buttonWidth READ buttonWidth WRITE setButtonWidth NOTIFY settingsChanged)
     Q_PROPERTY(int buttonHeight READ buttonHeight WRITE setButtonHeight NOTIFY settingsChanged)
+    // Every text of the panel, scaled by this factor. 0 = the historic fixed
+    // sizes, which is what fontScale() reports as 1.0.
+    Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY settingsChanged)
+    Q_PROPERTY(qreal fontScale READ fontScale NOTIFY settingsChanged)
+    // Icon set for every icon of the panel (tabs, cards, buttons). Empty =
+    // follow the desktop's icon theme, adapted to the panel background (the
+    // luminance test of CmWindow::iconSuffix).
+    Q_PROPERTY(QString iconTheme READ iconTheme WRITE setIconTheme NOTIFY settingsChanged)
     // 0 tabs on top, 1 tabs at the bottom.
     Q_PROPERTY(int tabsPosition READ tabsPosition WRITE setTabsPosition NOTIFY settingsChanged)
     Q_PROPERTY(bool showTabIcons READ showTabIcons WRITE setShowTabIcons NOTIFY settingsChanged)
@@ -110,6 +118,9 @@ public:
     bool labelBold() const { return m_labelBold; }
     int buttonWidth() const { return m_buttonWidth; }
     int buttonHeight() const { return m_buttonHeight; }
+    int fontSize() const { return m_fontSize; }
+    qreal fontScale() const { return m_fontSize > 0 ? m_fontSize / 12.0 : 1.0; }
+    QString iconTheme() const { return m_iconTheme; }
     int tabsPosition() const { return m_tabsPosition; }
     bool showTabIcons() const { return m_showTabIcons; }
     bool showCardTitles() const { return m_showCardTitles; }
@@ -163,6 +174,8 @@ public:
     void setLabelBold(bool on);
     void setButtonWidth(int px);
     void setButtonHeight(int px);
+    void setFontSize(int px);
+    void setIconTheme(const QString &id);
     void setTabsPosition(int position);
     void setShowTabIcons(bool on);
     void setShowCardTitles(bool on);
@@ -222,6 +235,8 @@ private:
     bool m_labelBold = true;
     int m_buttonWidth = 0;  // 0 = natural size (historic behaviour)
     int m_buttonHeight = 0;
+    int m_fontSize = 0;     // 0 = the historic fixed sizes (fontScale 1.0)
+    QString m_iconTheme;    // empty = follow the desktop's theme
     int m_tabsPosition = 0;
     bool m_showTabIcons = true;
     bool m_showCardTitles = true;

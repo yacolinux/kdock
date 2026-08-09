@@ -117,7 +117,7 @@ Item {
         // panel behaves like a fixed piece of the desktop.
         Item {
             width: pinRow.width
-            height: 24
+            height: Math.round(24 * cmConfig.fontScale)
             anchors.verticalCenter: parent.verticalCenter
 
             Row {
@@ -136,7 +136,7 @@ Item {
                         visible: cmConfig.keepOpen
                         text: "✓"
                         color: theme.background
-                        font.pixelSize: 11
+                        font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                         font.bold: true
                     }
                 }
@@ -145,7 +145,7 @@ Item {
                     text: qsTr("Fijo")
                     color: theme.foreground
                     opacity: 0.8
-                    font.pixelSize: 11
+                    font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
             }
             MouseArea {
@@ -155,7 +155,8 @@ Item {
         }
 
         Item {
-            width: 22; height: 22
+            width: Math.round(22 * cmConfig.fontScale)
+            height: Math.round(22 * cmConfig.fontScale)
             anchors.verticalCenter: parent.verticalCenter
             Rectangle {
                 anchors.fill: parent
@@ -180,7 +181,8 @@ Item {
         }
 
         Item {
-            width: 22; height: 22
+            width: Math.round(22 * cmConfig.fontScale)
+            height: Math.round(22 * cmConfig.fontScale)
             anchors.verticalCenter: parent.verticalCenter
             Rectangle {
                 anchors.fill: parent
@@ -193,7 +195,7 @@ Item {
                 anchors.centerIn: parent
                 text: "✕"
                 color: theme.foreground
-                font.pixelSize: 13
+                font.pixelSize: Math.max(7, Math.round((13) * cmConfig.fontScale))
             }
             MouseArea {
                 id: closeMouse
@@ -335,7 +337,7 @@ Item {
                        + "Configuración → Secciones.")
             color: theme.foreground
             opacity: 0.55
-            font.pixelSize: 12
+            font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         }
     }
 

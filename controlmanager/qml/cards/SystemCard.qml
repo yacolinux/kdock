@@ -35,7 +35,7 @@ Item {
                 text: qsTr("Configuración")
                 color: theme.foreground
                 opacity: 0.6
-                font.pixelSize: 11
+                font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true
             }
 
@@ -88,7 +88,7 @@ Item {
                 text: qsTr("Reiniciar")
                 color: theme.foreground
                 opacity: 0.6
-                font.pixelSize: 11
+                font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true
             }
 
@@ -138,7 +138,7 @@ Item {
                 text: qsTr("Sesión")
                 color: theme.foreground
                 opacity: 0.6
-                font.pixelSize: 11
+                font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true
             }
 
@@ -149,16 +149,17 @@ Item {
 
                 Repeater {
                     model: [
-                        { ic: "system-lock-screen", act: "lock",     tip: qsTr("Bloquear") },
-                        { ic: "system-suspend",     act: "suspend",  tip: qsTr("Suspender") },
-                        { ic: "system-log-out",     act: "logout",   tip: qsTr("Cerrar sesión…") },
-                        { ic: "system-reboot",      act: "reboot",   tip: qsTr("Reiniciar…") },
-                        { ic: "system-shutdown",    act: "shutdown", tip: qsTr("Apagar…") }
+                        { ic: "system-lock-screen", act: "lock",     label: qsTr("Bloquear"), tip: qsTr("Bloquear") },
+                        { ic: "system-suspend",     act: "suspend",  label: qsTr("Suspender"), tip: qsTr("Suspender") },
+                        { ic: "system-log-out",     act: "logout",   label: qsTr("Cerrar sesión"), tip: qsTr("Cerrar sesión…") },
+                        { ic: "system-reboot",      act: "reboot",   label: qsTr("Reiniciar"), tip: qsTr("Reiniciar…") },
+                        { ic: "system-shutdown",    act: "shutdown", label: qsTr("Apagar"), tip: qsTr("Apagar…") }
                     ]
                     delegate: CmButton {
                         required property var modelData
-                        compact: true
+                        compact: card.compact
                         icon: modelData.ic
+                        label: modelData.label
                         tip: modelData.tip
                         onClicked: {
                             win.hidePanel()

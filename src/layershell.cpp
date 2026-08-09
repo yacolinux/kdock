@@ -17,7 +17,7 @@ using QtWaylandClient::QWaylandShellSurface;
 using QtWaylandClient::QWaylandWindow;
 
 LayerShellIntegration::LayerShellIntegration()
-    : QtWaylandClient::QWaylandShellIntegrationTemplate<LayerShellIntegration>(4)
+    : QtWaylandClient::QWaylandShellIntegrationTemplate<LayerShellIntegration>(5)
 {
 }
 
@@ -90,6 +90,7 @@ LayerSurface::LayerSurface(LayerShellIntegration *shell, QWaylandWindow *window)
 
     applyProperty("kdock.anchors");
     applyProperty("kdock.exclusiveZone");
+    applyProperty("kdock.exclusiveEdge");
     applyProperty("kdock.margins");
     applyProperty("kdock.keyboardInteractivity");
 
@@ -116,6 +117,15 @@ void LayerSurface::applyProperty(const QByteArray &name)
         sendSize(w->geometry().size());
     } else if (name == "kdock.exclusiveZone") {
         set_exclusive_zone(value.toInt());
+    } else if (name == "kdock.exclusiveEdge") {
+        // KWin only derives the exclusive edge from the anchor when the
+        // surface hugs one edge or a whole side (edge + both corners); a
+        // dock anchored to an edge plus ONE corner (fixed length with
+        // start/end alignment, or a floating dock aligned to a corner) gets
+        // no strut at all — maximized windows pass under it. The protocol v5
+        // request disambiguates the corner explicitly.
+        if (version() >= ZWLR_LAYER_SURFACE_V1_SET_EXCLUSIVE_EDGE_SINCE_VERSION)
+            set_exclusive_edge(value.toUInt());
     } else if (name == "kdock.margins") {
         const QMargins m = value.value<QMargins>();
         set_margin(m.top(), m.right(), m.bottom(), m.left());

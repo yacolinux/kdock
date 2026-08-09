@@ -90,7 +90,7 @@ Item {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: card.showTitle ? 22 : 10
+        height: card.showTitle ? Math.round(22 * cmConfig.fontScale) : 10
 
         Image {
             id: headerIcon
@@ -115,7 +115,7 @@ Item {
             color: theme.foreground
             opacity: 0.75
             elide: Text.ElideRight
-            font.pixelSize: 11
+            font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
         }
 

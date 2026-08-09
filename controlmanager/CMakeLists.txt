@@ -43,6 +43,10 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/nmdbus.cpp           ${KDOCK_SHARED_SRC}/nmdbus.h
     ${KDOCK_SHARED_SRC}/wallpapercontrol.cpp ${KDOCK_SHARED_SRC}/wallpapercontrol.h
     ${KDOCK_SHARED_SRC}/iconpickerdialog.cpp ${KDOCK_SHARED_SRC}/iconpickerdialog.h
+    # The icon-theme picker of the settings dialog (and AppearanceControl, the
+    # theme lists + favorites it reads).
+    ${KDOCK_SHARED_SRC}/themepicker.cpp      ${KDOCK_SHARED_SRC}/themepicker.h
+    ${KDOCK_SHARED_SRC}/appearancecontrol.cpp ${KDOCK_SHARED_SRC}/appearancecontrol.h
     # DockConfig comes along for two reasons: Theme asks it where the shared
     # settings file lives (icon-theme override), and the card colour menu offers
     # the same eight quick colours the dock's own submenu does.

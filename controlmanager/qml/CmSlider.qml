@@ -23,7 +23,7 @@ Item {
 
     signal moved(real value)
 
-    implicitHeight: compact ? 30 : 38
+    implicitHeight: Math.round((compact ? 30 : 38) * cmConfig.fontScale)
 
     // The backend echoes back what we just wrote, usually a few milliseconds
     // later. Feeding that into the slider while the user is still dragging
@@ -54,7 +54,7 @@ Item {
         elide: Text.ElideRight
         color: theme.foreground
         opacity: row.enabled ? 0.85 : 0.4
-        font.pixelSize: 12
+        font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         font.bold: cmConfig.labelBold
     }
 
@@ -67,9 +67,9 @@ Item {
               : Math.round(row.value * 100) + " %"
         color: theme.foreground
         opacity: row.enabled ? 0.7 : 0.35
-        font.pixelSize: 11
+        font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
         horizontalAlignment: Text.AlignRight
-        width: 42
+        width: Math.round(42 * cmConfig.fontScale)
     }
 
     Slider {

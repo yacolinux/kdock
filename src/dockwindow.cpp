@@ -281,7 +281,15 @@ void DockWindow::applyLayerProperties()
     case DockConfig::Right:  anchor = AnchorRight;  margins.setRight(m);  break;
     }
 
-    if (m_config->panelMode() && m_config->dockLength() == 0) {
+    // A dock that spans the whole edge anchors the full side (edge + both
+    // corners): KWin only derives an exclusive edge from the anchor for a
+    // single edge or a whole side, so edge + ONE corner (the fixed-length
+    // start/end alignment below) silently loses the strut and maximized
+    // windows pass under the dock. At 100 % length the corner anchor is
+    // meaningless anyway — and its margin would push the surface off-screen.
+    const bool fullEdge = (m_config->panelMode() && m_config->dockLength() == 0)
+                          || m_config->dockLength() == 100;
+    if (fullEdge) {
         // Panel mode (100%): also anchor both side edges so the surface
         // stretches across the whole screen edge (alignment is done in QML).
         anchor |= horizontal ? (AnchorLeft | AnchorRight) : (AnchorTop | AnchorBottom);
@@ -309,6 +317,17 @@ void DockWindow::applyLayerProperties()
     }
 
     setProperty("kdock.anchors", anchor);
+    // The dock's own edge, as a wlr-layer-shell anchor value: the layer
+    // surface asks the compositor (protocol v5, see layershell.cpp) to apply
+    // the exclusive zone on this edge even when the anchor is a corner.
+    uint exclusiveEdge = 0;
+    switch (m_config->edge()) {
+    case DockConfig::Bottom: exclusiveEdge = AnchorBottom; break;
+    case DockConfig::Top:    exclusiveEdge = AnchorTop;    break;
+    case DockConfig::Left:   exclusiveEdge = AnchorLeft;   break;
+    case DockConfig::Right:  exclusiveEdge = AnchorRight;  break;
+    }
+    setProperty("kdock.exclusiveEdge", exclusiveEdge);
     setProperty("kdock.margins", QVariant::fromValue(margins));
     setProperty("kdock.layer", 2u); // top
     setProperty("kdock.exclusiveZone", m_config->autohide() ? 0 : thickness() + m);

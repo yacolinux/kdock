@@ -35,7 +35,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDateTime(card.now, "HH:mm")
             color: theme.foreground
-            font.pixelSize: Math.max(20, Math.min(card.height * 0.42, card.width * 0.30))
+            font.pixelSize: Math.max(7, Math.round((Math.max(20, Math.min(card.height * 0.42, card.width * 0.30))) * cmConfig.fontScale))
             font.bold: true
         }
         Text {
@@ -43,7 +43,7 @@ Item {
             text: Qt.formatDateTime(card.now, "ddd d MMM yyyy")
             color: theme.foreground
             opacity: 0.7
-            font.pixelSize: Math.max(10, Math.min(card.height * 0.13, card.width * 0.10))
+            font.pixelSize: Math.max(7, Math.round((Math.max(10, Math.min(card.height * 0.13, card.width * 0.10))) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
         }
         Text {
@@ -52,7 +52,7 @@ Item {
             text: Qt.formatDateTime(card.now, "ss") + " s"
             color: theme.foreground
             opacity: 0.45
-            font.pixelSize: 12
+            font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         }
     }
 }

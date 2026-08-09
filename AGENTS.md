@@ -93,6 +93,7 @@ protocols/
 - Dynamic properties drive live updates:
   - `kdock.anchors` (uint bitmask: top=1, bottom=2, left=4, right=8)
   - `kdock.exclusiveZone` (int — reserved screen space)
+  - `kdock.exclusiveEdge` (uint, protocol anchor value of the dock's edge) — **needed because KWin only derives the exclusive edge from the anchor for a single edge or a whole side** (`LayerSurfaceV1Interface::exclusiveEdge()` in `src/wayland/layershell_v1.cpp`): a surface anchored to an edge plus ONE corner gets `Qt::Edge()` → **no strut at all** → maximized windows pass under the dock. kdock sends the protocol v5 request `set_exclusive_edge` (vendored XML is now v5; the shell integration binds v5) whenever the compositor supports it, and `applyLayerProperties()` anchors the **full side** for any dock spanning the whole edge (`panelMode` with `dockLength==0`, or `dockLength==100` — the corner was meaningless there and its margin pushed the surface off-screen). Partial docks (0<`dockLength`<100 with start/end alignment) keep the corner anchor and rely on `set_exclusive_edge`; on compositors without v5 (sway) those keep today's no-strut behavior. Verified against KWin 6.6.6 source; the user's live symptom was a top dock with `dockLength=100`+alignment End letting maximized windows run under it (2026-08-08).
   - `kdock.layer` (uint — 0=background, 1=bottom, 2=top, 3=overlay)
   - `kdock.margins` (QMargins)
   - `kdock.keyboardInteractivity` (uint — 0=none, 1=exclusive, 2=on-demand)
@@ -1038,6 +1039,25 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   reciben un tamaño mínimo de `implicitWidth`/`implicitHeight`; 0 = tamaño natural (el texto
   largo sigue pudiendo empujar el ancho). Un `Flow` respeta el `implicitWidth` de cada hijo,
   así que el cambio re-arma la fila al vuelo.
+- **Fuente única para todo el panel** (`cmConfig.fontSize`, 2026-08-08): un spinbox en
+  **Apariencia** ("Tamaño de fuente:", 0 = Predeterminado, 12 px efectivos) del que cuelga el
+  `fontScale` read-only (`fontSize/12`, 1.0 con 0). **Cada** `font.pixelSize` del QML del
+  panel —solapas, botones, tarjetas, sliders y secciones, 42 puntos— se multiplica por el
+  factor, y los contenedores que recortarían (alto de solapas, cabecera de tarjeta, fila de
+  slider, esquinas) lo siguen. Ojo al tocar fuentes acá: la fila oculta de medición de
+  `CmTabs` (`measureRow`) escala igual, o el colapso de etiquetas decidiría con el tamaño
+  viejo.
+- **Iconset propio del panel** (`cmConfig.iconTheme`, 2026-08-08): un `ThemePickerButton` en
+  modo `PickValue` en **Apariencia** ("Iconset del panel:", entrada especial vacía = seguir el
+  del sistema). Con id puesto, `CmWindow::iconSuffix()` lo antepone y **gana** sobre el par
+  por luminancia (`widgetIconThemeDarkBg`/`LightBg` del `kdock.conf` compartido); vacío = el
+  comportamiento histórico. El picker lista los mismos temas y favoritos que el del dock:
+  `CmWindow` construye un `AppearanceControl` propio (se compila `appearancecontrol` y
+  `themepicker` en este target, reutilizados sin modificar).
+- **Botones de sesión con etiquetas** (2026-08-08): la fila *Sesión* de `SystemCard.qml`
+  (bloquear/suspender/cerrar sesión/reiniciar/apagar) pasó de ícono pelado a ícono + texto,
+  con `compact: card.compact` — en la solapa completa se leen solos, en la tarjeta chica
+  quedan compactos y el `Flow` envuelve.
 - **UI**: Configuración → **Widgets** → grupo *"Control Manager (panel de control)"* (casillero
   del widget, ícono, qué muestra, texto, formato, precargar, estado y botón *Configurar…*).
   Todo lo demás vive en el panel propio del binario (`CmSettingsDialog`: Ventana, Apariencia,
@@ -1296,7 +1316,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
 | `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
 | `DockService` | (sin context property) | `org.kdock.Dock` en `/Dock`: `openSettings(dockId)`, `restart()`, `darkMode()`, `setDarkMode(b)`, `toggleDarkMode()`, `dockIds()`, `dockScreens()`, `primaryDockId()` + señal `darkModeChanged(b)`. Lo consume `DockLink` desde el panel |
-| `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural). Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
+| `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural), `fontSize` (0 = predeterminado 12 px) + `fontScale` read-only (multiplica cada `font.pixelSize` del panel), `iconTheme` (iconset propio; vacío = el par por luminancia). Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
 | `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`label`/`showTitle`), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
 | `CmModel` | `cards` (model) | Roles `cardId`, `name`, `icon`, `col`, `row`, `span`/`vspan`, `background`, `showTitle`; prop `rows`; `get(row)` |
 | `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`) + los modales `pickColor`, `promptText`, `confirm` |

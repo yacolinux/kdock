@@ -3,6 +3,7 @@
 #include "cmconfig.h"
 #include "cmlayout.h"
 #include "cmsections.h"
+#include "themepicker.h"
 
 #include <QAbstractSpinBox>
 #include <QCheckBox>
@@ -27,10 +28,12 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
-CmSettingsDialog::CmSettingsDialog(CmConfig *config, CmLayout *layout, QWidget *parent)
+CmSettingsDialog::CmSettingsDialog(CmConfig *config, CmLayout *layout,
+                                   AppearanceControl *appearance, QWidget *parent)
     : QDialog(parent)
     , m_config(config)
     , m_layout(layout)
+    , m_appearance(appearance)
 {
     setWindowTitle(tr("Control Manager"));
 
@@ -266,6 +269,35 @@ QWidget *CmSettingsDialog::createAppearanceGroup()
     bold->setChecked(m_config->labelBold());
     connect(bold, &QCheckBox::toggled, m_config, &CmConfig::setLabelBold);
     form->addRow(QString(), bold);
+
+    // Every text of the panel scales from this one size. 0 = the historic fixed
+    // sizes (what the panel always drew before the setting existed).
+    auto *fontSize = new QSpinBox(box);
+    fontSize->setRange(0, 24);
+    fontSize->setSpecialValueText(tr("Predeterminado"));
+    fontSize->setSuffix(tr(" px"));
+    fontSize->setValue(m_config->fontSize());
+    fontSize->setToolTip(tr("Tamaño de todas las fuentes del panel: solapas, "
+                            "botones, tarjetas y cada sección. 12 px es el "
+                            "tamaño por defecto; 0 lo deja."));
+    connect(fontSize, &QSpinBox::valueChanged, m_config, &CmConfig::setFontSize);
+    form->addRow(tr("Tamaño de fuente:"), fontSize);
+
+    // The panel's icon set. Empty = follow the desktop's icon theme, adapted to
+    // the panel background (the luminance pair the dock itself uses).
+    if (m_appearance) {
+        auto *iconPicker = new ThemePickerButton(m_appearance, QStringLiteral("icons"),
+                                                 ThemePickerPopup::PickValue, box);
+        iconPicker->setSpecialEntry(tr("(seguir el del sistema)"));
+        iconPicker->setCurrentId(m_config->iconTheme());
+        iconPicker->setToolTip(tr("Íconos de las solapas, tarjetas y botones. "
+                                  "Vacíos siguen el iconset del escritorio "
+                                  "adaptado al fondo del panel."));
+        connect(iconPicker, &ThemePickerButton::picked, m_config, &CmConfig::setIconTheme);
+        connect(m_config, &CmConfig::settingsChanged, iconPicker,
+                [this, iconPicker] { iconPicker->setCurrentId(m_config->iconTheme()); });
+        form->addRow(tr("Iconset del panel:"), iconPicker);
+    }
 
     // The buttons inside the tabs (and the ones on Principal) are the only
     // controls the panel does not yet let you size. 0 = natural size.

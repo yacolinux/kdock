@@ -13,12 +13,14 @@ class CmConfig;
 class CmLayout;
 class QGridLayout;
 class QScrollArea;
+class AppearanceControl;
 
 class CmSettingsDialog : public QDialog
 {
     Q_OBJECT
 public:
-    CmSettingsDialog(CmConfig *config, CmLayout *layout, QWidget *parent = nullptr);
+    CmSettingsDialog(CmConfig *config, CmLayout *layout,
+                     AppearanceControl *appearance = nullptr, QWidget *parent = nullptr);
 
 protected:
     // Swallows the wheel on spin boxes and combos that do not have the focus —
@@ -40,6 +42,7 @@ private:
 
     CmConfig *m_config;
     CmLayout *m_layout;
+    AppearanceControl *m_appearance = nullptr;
     QScrollArea *m_scroll = nullptr;
     QGridLayout *m_sectionsGrid = nullptr;
     QWidget *m_sectionsHost = nullptr;

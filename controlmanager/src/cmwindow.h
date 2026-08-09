@@ -27,6 +27,7 @@ class CmLayout;
 class CmModel;
 class CmSettingsDialog;
 class Theme;
+class AppearanceControl;
 
 class CmWindow : public QQuickView
 {
@@ -107,6 +108,9 @@ private:
     Theme *m_theme;
     CmLayout *m_layout;
     CmModel *m_model;
+    // Feeds the settings dialog's icon-theme picker (the same lists and
+    // favorites the dock's own dialog uses). Owned by this window.
+    AppearanceControl *m_appearance = nullptr;
     CmBackends m_backends;
     CmSettingsDialog *m_settingsDialog = nullptr;
 

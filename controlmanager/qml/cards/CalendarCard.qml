@@ -46,7 +46,7 @@ Item {
                 anchors.centerIn: parent
                 text: Qt.locale().standaloneMonthName(card.shownMonth) + " " + card.shownYear
                 color: theme.foreground
-                font.pixelSize: card.compact ? 12 : 14
+                font.pixelSize: Math.max(7, Math.round((card.compact ? 12 : 14) * cmConfig.fontScale))
                 font.bold: true
             }
             CmButton {
@@ -67,7 +67,7 @@ Item {
                 text: shortName
                 color: theme.foreground
                 opacity: 0.5
-                font.pixelSize: 10
+                font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
                 horizontalAlignment: Text.AlignHCenter
             }
         }
@@ -101,7 +101,7 @@ Item {
                     text: cell.model.day
                     color: cell.isToday ? theme.background : theme.foreground
                     opacity: cell.thisMonth ? 1.0 : 0.30
-                    font.pixelSize: card.compact ? 10 : 12
+                    font.pixelSize: Math.max(7, Math.round((card.compact ? 10 : 12) * cmConfig.fontScale))
                     font.bold: cell.isToday
                 }
             }
