@@ -42,17 +42,20 @@ Item {
 
     // --- grid metrics -------------------------------------------------------
     // The available width never depends on the cell size, so none of this feeds
-    // back into itself.
+    // back into itself. Cells can be taller than wide: the width follows the
+    // stretch rules, the height is cmConfig.cellHeight.
     readonly property int canvasAvail: Math.max(120, canvasArea.width)
     readonly property int columns: cmConfig.columns > 0
         ? cmConfig.columns
         : Math.max(1, Math.floor((canvasAvail + gap) / (cmConfig.cellSize + gap)))
-    readonly property int cell: cmConfig.cellStretch
+    readonly property int cellW: cmConfig.cellStretch
         ? Math.max(cmConfig.cellMin,
                    Math.min(cmConfig.cellMax,
                             Math.floor((canvasAvail + gap) / columns) - gap))
         : cmConfig.cellSize
-    readonly property int pitch: cell + gap
+    readonly property int cellH: cmConfig.cellHeight
+    readonly property int pitchW: cellW + gap
+    readonly property int pitchH: cellH + gap
 
     // Pointer position while a card is being dragged, in root coordinates.
     property point dragPointer: Qt.point(-1, -1)
@@ -259,19 +262,19 @@ Item {
             Item {
                 id: canvas
                 width: canvasArea.width
-                height: cards.rows * root.pitch + root.pad
+                height: cards.rows * root.pitchH + root.pad
 
                 // Centered when the matrix is narrower than the space.
-                readonly property int gridW: root.columns * root.pitch - root.gap
+                readonly property int gridW: root.columns * root.pitchW - root.gap
                 readonly property int xOffset: Math.max(0, Math.floor((width - gridW) / 2))
 
                 property Item dragCard: null
 
                 function rowAtY(y) {
-                    return Math.max(0, Math.round(y / root.pitch))
+                    return Math.max(0, Math.round(y / root.pitchH))
                 }
                 function colAtX(x, span) {
-                    var c = Math.round((x - canvas.xOffset) / root.pitch)
+                    var c = Math.round((x - canvas.xOffset) / root.pitchW)
                     return Math.max(0, Math.min(root.columns - span, c))
                 }
 
@@ -312,10 +315,10 @@ Item {
                 Rectangle {
                     visible: canvas.dragCard !== null
                     z: 90
-                    x: canvas.xOffset + canvas.dragCol * root.pitch
-                    y: canvas.dragRow * root.pitch
-                    width: canvas.dragCard ? canvas.dragCard.span * root.pitch - root.gap : 0
-                    height: canvas.dragCard ? canvas.dragCard.vspan * root.pitch - root.gap : 0
+                    x: canvas.xOffset + canvas.dragCol * root.pitchW
+                    y: canvas.dragRow * root.pitchH
+                    width: canvas.dragCard ? canvas.dragCard.span * root.pitchW - root.gap : 0
+                    height: canvas.dragCard ? canvas.dragCard.vspan * root.pitchH - root.gap : 0
                     radius: 10
                     color: "transparent"
                     border.width: 2
@@ -339,6 +342,35 @@ Item {
             opacity: 0.55
             font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         }
+    }
+
+    // --- corner resize grips -------------------------------------------------
+    // A layer surface has no compositor resize, so the panel resizes itself:
+    // dragging a corner maps the pointer delta to a new width/height (see
+    // CmCornerGrip and win.setPanelSize). The top-right corner belongs to the
+    // pin/config/close controls; the top-left one only makes sense when the
+    // tab bar is not sitting under it.
+    CmCornerGrip {
+        corner: 0
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        currentW: root.width
+        currentH: root.height
+    }
+    CmCornerGrip {
+        corner: 1
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        currentW: root.width
+        currentH: root.height
+    }
+    CmCornerGrip {
+        corner: 2
+        anchors.left: parent.left
+        anchors.top: parent.top
+        currentW: root.width
+        currentH: root.height
+        visible: cmConfig.tabsPosition === 1
     }
 
     // --- the card context menu, one for the whole canvas --------------------

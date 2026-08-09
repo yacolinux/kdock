@@ -126,6 +126,11 @@ QWidget *CmSettingsDialog::createWindowGroup()
     connect(m_config, &CmConfig::windowChanged, width,
             [this, width] { width->setEnabled(m_config->panelWidthPercent() == 0); });
     width->setEnabled(m_config->panelWidthPercent() == 0);
+    // Dragging a corner of the panel clears the percentage (it writes pixels);
+    // this copy has to follow, or it keeps showing a value that no longer
+    // applies. Setters only emit on a real change, so no loop.
+    connect(m_config, &CmConfig::windowChanged, widthPct,
+            [this, widthPct] { widthPct->setValue(m_config->panelWidthPercent()); });
     form->addRow(tr("Ancho relativo:"), widthPct);
 
     auto *height = new QSpinBox(box);
@@ -144,6 +149,8 @@ QWidget *CmSettingsDialog::createWindowGroup()
     connect(m_config, &CmConfig::windowChanged, height,
             [this, height] { height->setEnabled(m_config->panelHeightPercent() == 0); });
     height->setEnabled(m_config->panelHeightPercent() == 0);
+    connect(m_config, &CmConfig::windowChanged, heightPct,
+            [this, heightPct] { heightPct->setValue(m_config->panelHeightPercent()); });
     form->addRow(tr("Alto relativo:"), heightPct);
 
     auto *margin = new QSpinBox(box);
@@ -340,8 +347,20 @@ QWidget *CmSettingsDialog::createGridGroup()
     cellSize->setRange(32, 400);
     cellSize->setSuffix(tr(" px"));
     cellSize->setValue(m_config->cellSize());
+    cellSize->setToolTip(tr("Ancho de la celda; con «Estirar» encendido el ancho "
+                            "se adapta al panel y este valor es el piso."));
     connect(cellSize, &QSpinBox::valueChanged, m_config, &CmConfig::setCellSize);
-    form->addRow(tr("Tamaño de celda:"), cellSize);
+    form->addRow(tr("Ancho de celda:"), cellSize);
+
+    auto *cellHeight = new QSpinBox(box);
+    cellHeight->setRange(32, 600);
+    cellHeight->setSuffix(tr(" px"));
+    cellHeight->setValue(m_config->cellHeight());
+    cellHeight->setToolTip(tr("Alto de la celda. Las tarjetas miden ancho × "
+                              "alto de celda, así podés hacerlas más altas que "
+                              "anchas."));
+    connect(cellHeight, &QSpinBox::valueChanged, m_config, &CmConfig::setCellHeight);
+    form->addRow(tr("Alto de celda:"), cellHeight);
 
     auto *stretch = new QCheckBox(tr("Estirar las celdas para llenar el ancho"), box);
     stretch->setChecked(m_config->cellStretch());

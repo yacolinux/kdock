@@ -31,8 +31,8 @@ Item {
 
     // `ui` is assigned by the Repeater while the delegate is being built, so the
     // guard is not paranoia: without it the first evaluation logs an error.
-    width: ui ? span * ui.pitch - ui.gap : 0
-    height: ui ? vspan * ui.pitch - ui.gap : 0
+    width: ui ? span * ui.pitchW - ui.gap : 0
+    height: ui ? vspan * ui.pitchH - ui.gap : 0
     z: dragging ? 100 : 1
 
     // While dragging, the MouseArea owns x/y; the moment it lets go these take
@@ -42,14 +42,14 @@ Item {
         property: "x"
         when: !card.dragging
         restoreMode: Binding.RestoreNone
-        value: card.canvasItem ? card.canvasItem.xOffset + card.col * card.ui.pitch : 0
+        value: card.canvasItem ? card.canvasItem.xOffset + card.col * card.ui.pitchW : 0
     }
     Binding {
         target: card
         property: "y"
         when: !card.dragging
         restoreMode: Binding.RestoreNone
-        value: card.canvasItem ? card.row * card.ui.pitch : 0
+        value: card.canvasItem ? card.row * card.ui.pitchH : 0
     }
 
     Behavior on x {

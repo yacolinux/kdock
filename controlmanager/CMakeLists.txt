@@ -70,6 +70,7 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/ControlManager.qml
         qml/CmTabs.qml
         qml/CmCard.qml
+        qml/CmCornerGrip.qml
         qml/CmSlider.qml
         qml/CmButton.qml
         qml/CmSectionView.qml

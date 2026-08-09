@@ -70,6 +70,9 @@ class CmConfig : public QObject
     // --- grid (the Principal tab) ---
     Q_PROPERTY(int columns READ columns WRITE setColumns NOTIFY settingsChanged)
     Q_PROPERTY(int cellSize READ cellSize WRITE setCellSize NOTIFY settingsChanged)
+    // Cells may be taller than they are wide: the width follows the stretch
+    // rules above, the height is this fixed value.
+    Q_PROPERTY(int cellHeight READ cellHeight WRITE setCellHeight NOTIFY settingsChanged)
     Q_PROPERTY(bool cellStretch READ cellStretch WRITE setCellStretch NOTIFY settingsChanged)
     Q_PROPERTY(int cellMin READ cellMin WRITE setCellMin NOTIFY settingsChanged)
     Q_PROPERTY(int cellMax READ cellMax WRITE setCellMax NOTIFY settingsChanged)
@@ -131,6 +134,7 @@ public:
 
     int columns() const { return m_columns; }
     int cellSize() const { return m_cellSize; }
+    int cellHeight() const { return m_cellHeight; }
     bool cellStretch() const { return m_cellStretch; }
     int cellMin() const { return m_cellMin; }
     int cellMax() const { return m_cellMax; }
@@ -181,6 +185,7 @@ public:
     void setShowCardTitles(bool on);
     void setColumns(int columns);
     void setCellSize(int px);
+    void setCellHeight(int px);
     void setCellStretch(bool on);
     void setCellMin(int px);
     void setCellMax(int px);
@@ -243,6 +248,7 @@ private:
 
     int m_columns = 6;
     int m_cellSize = 96;
+    int m_cellHeight = 96;
     bool m_cellStretch = true;
     int m_cellMin = 48;
     int m_cellMax = 220;

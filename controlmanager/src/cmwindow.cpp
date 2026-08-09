@@ -313,9 +313,25 @@ void CmWindow::onActiveChanged()
     hidePanel();
 }
 
-void CmWindow::openSettings()
+void CmWindow::setPanelSize(int w, int h)
 {
-    if (!m_settingsDialog)
+    QScreen *s = screen() ? screen() : QGuiApplication::primaryScreen();
+    const QRect geo = s ? s->geometry() : QRect(0, 0, 1920, 1080);
+    w = qBound(320, w, geo.width());
+    h = qBound(240, h, geo.height());
+    // Dragging writes absolute pixels, so a configured percentage stops
+    // applying (the window group's px spinboxes re-enable through
+    // windowChanged, and its percent spinboxes re-read it).
+    if (m_config->panelWidthPercent() != 0)
+        m_config->setPanelWidthPercent(0);
+    if (m_config->panelHeightPercent() != 0)
+        m_config->setPanelHeightPercent(0);
+    m_config->setPanelWidth(w);
+    m_config->setPanelHeight(h);
+}
+
+void CmWindow::openSettings()
+{    if (!m_settingsDialog)
         m_settingsDialog = new CmSettingsDialog(m_config, m_layout, m_appearance);
     m_settingsDialog->show();
     m_settingsDialog->raise();

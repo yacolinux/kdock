@@ -98,6 +98,8 @@ Alias para "%1" (vacío = dejar solo el monitor y el número): = Alias para "%1"
 Alineación: = Alineación:
 All Applications = Todas las aplicaciones
 Alternar modo oscuro = Alternar modo oscuro
+Alto de celda: = Alto de celda:
+Alto de la celda. Las tarjetas miden ancho × alto de celda, así podés hacerlas más altas que anchas. = Alto de la celda. Las tarjetas miden ancho × alto de celda, así podés hacerlas más altas que anchas.
 Alto del panel: = Alto del panel:
 Alto mínimo de los botones de las solapas; 0 deja el tamaño natural. = Alto mínimo de los botones de las solapas; 0 deja el tamaño natural.
 Alto mínimo de los botones: = Alto mínimo de los botones:
@@ -105,6 +107,8 @@ Alto relativo: = Alto relativo:
 Alto: = Alto:
 Always dark icons = Siempre íconos oscuros
 Always light icons = Siempre íconos claros
+Ancho de celda: = Ancho de celda:
+Ancho de la celda; con «Estirar» encendido el ancho se adapta al panel y este valor es el piso. = Ancho de la celda; con «Estirar» encendido el ancho se adapta al panel y este valor es el piso.
 Ancho del panel: = Ancho del panel:
 Ancho mínimo de los botones de las solapas. Un botón con texto largo puede ser más ancho; 0 deja el tamaño natural. = Ancho mínimo de los botones de las solapas. Un botón con texto largo puede ser más ancho; 0 deja el tamaño natural.
 Ancho mínimo de los botones: = Ancho mínimo de los botones:

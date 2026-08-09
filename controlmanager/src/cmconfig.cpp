@@ -58,6 +58,7 @@ void CmConfig::load()
 
     m_columns = readInt("columns", 6, 0, 24);
     m_cellSize = readInt("cellSize", 96, 32, 400);
+    m_cellHeight = readInt("cellHeight", 96, 32, 600);
     m_cellStretch = readBool("cellStretch", true);
     m_cellMin = readInt("cellMin", 48, 32, 400);
     m_cellMax = readInt("cellMax", 220, 32, 600);
@@ -441,6 +442,15 @@ void CmConfig::setCellSize(int px)
         return;
     m_cellSize = px;
     store(QStringLiteral("cellSize"), px);
+}
+
+void CmConfig::setCellHeight(int px)
+{
+    px = qBound(32, px, 600);
+    if (m_cellHeight == px)
+        return;
+    m_cellHeight = px;
+    store(QStringLiteral("cellHeight"), px);
 }
 
 void CmConfig::setCellStretch(bool on)

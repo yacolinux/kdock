@@ -63,6 +63,11 @@ public:
     QString currentTab() const { return m_currentTab; }
     void setCurrentTab(const QString &tab);
 
+    // Corner-drag resize: the QML grips report the new pixel size and this
+    // stores it, clearing any width/height percentage first (a drag writes
+    // absolute pixels — that is what the user is looking at).
+    Q_INVOKABLE void setPanelSize(int w, int h);
+
     Q_INVOKABLE void openSettings();
     Q_INVOKABLE void quitApp();
     // Relaunch with the same CLI arguments, then quit this instance.
