@@ -759,6 +759,31 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 
 ## Trampas que muerden
 
+- **Un `import` de QML que falta no imprime NADA: el dock arranca con la ventana vacía**
+  (2026-08-09). `Dock.qml` y `previews/qml/PreviewCard.qml` importan
+  `Qt5Compat.GraphicalEffects` (paquete `qml6-module-qt5compat-graphicaleffects` en
+  Debian/Ubuntu, `qt6-5compat` en Arch) para las sombras. Sin ese módulo el componente no
+  compila, la `QQuickView` se queda en su tamaño por defecto de **160x160** y el proceso corre
+  feliz **sin una sola línea en stderr** — ni con `QT_LOGGING_RULES`. Desde afuera se ve igual
+  que un arnés que muestrea demasiado pronto, y por eso costó cuatro corridas de CI a ciegas.
+  El que lo agarra en milisegundos es `tests/unit/tst_qmlload.cpp`, que instancia cada `.qml`
+  del qrc con un `QQmlComponent` e imprime los errores del motor: **si tocás imports de QML,
+  ese es el test que tiene que quedar verde**, no el smoke.
+- **`... | grep -q` bajo `set -o pipefail` devuelve 141**, no 0: `grep -q` corta apenas
+  matchea, el productor se muere con SIGPIPE y el pipeline "falla" **aunque el patrón esté**.
+  Mordió en el chequeo de `--json` de qmllint, que se salteaba solo. Capturá la salida en una
+  variable y después mirala.
+- **`qmllint` a secas puede ser el de Qt5.** En esta máquina `/usr/bin/qmllint` es Qt 5.15:
+  solo mira sintaxis y no conoce ni `--json`; el de Qt6 (`/usr/lib/qt6/bin/qmllint`) reporta
+  1443 diagnósticos en el mismo árbol. Un "todo limpio" con el equivocado no significa nada.
+  Resolvelas con `kdock_qt_tool` (`tests/lib/sandbox.sh`), que pregunta por `qmake6` **antes**
+  de mirar el `PATH`.
+- **Un arnés gráfico con `sleep` fijo miente en la máquina de otro.** Seis segundos alcanzan
+  acá y no en un runner sin GPU, que arranca ~3× más lento; y muestrear temprano ve una ventana
+  que existe pero que su QML todavía no dimensionó, o sea **exactamente el mismo síntoma que un
+  QML roto**. Esperá por condición (`xvfb-app.sh --ready`), con el tiempo como presupuesto
+  máximo. De paso el smoke bajó de 50 s a 18 s.
+
 - **Un cliente Wayland no sabe dónde quedó su superficie, y para una centrada no se puede
   deducir** (2026-08-09): la posición de una layer surface anclada a un solo borde la elige el
   compositor **dentro de lo que le dejan libre las otras zonas exclusivas**, no dentro de la

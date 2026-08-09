@@ -44,6 +44,21 @@ Todo lo que arranca un binario pasa por `lib/sandbox.sh`, que da un `XDG_DATA_HO
   helper y el del script se pisan, y lo que queda vivo es un proceso de prueba y un `.desktop`
   temporal que le sigue concediendo privilegios de KWin a esa ruta.
 
+## Qué cubre cada test unitario
+
+`tst_dockgeometry` (el rectángulo del dock), `tst_dockconfig` (migraciones, orden de
+secciones, grosor), `tst_dockmanager` (mover/copiar dock, bandeja), `tst_desktopentry` (los
+`app_id` deformados de Chromium/Edge), `tst_translations` (el merge del catálogo) y
+`tst_qmlload` (**el QML del qrc compila con el Qt con el que se linkeó**).
+
+El último es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira
+los archivos del árbol, no lo que quedó *dentro* del binario, y el smoke necesita Xvfb y
+medio minuto. `tst_qmlload` instancia cada `.qml` del recurso con un `QQmlComponent` en
+milisegundos, así que cubre el archivo que nadie agregó al `qt_add_resources` y —lo que lo
+justificó— **los `import` que no existen en esa instalación de Qt**. Con eso se encontró que
+`Qt5Compat.GraphicalEffects` era una dependencia de runtime sin declarar: falta el módulo,
+el QML no carga, el dock arranca con la ventana vacía y **no imprime una sola línea**.
+
 ## Agregar un caso
 
 - **unit**: un `.cpp` en `unit/` que use `KDOCK_TEST_MAIN` (de `unit/sandbox.h`, que instala el

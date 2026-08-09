@@ -87,7 +87,7 @@ tests/
   run.sh                  — El runner: configura, compila y llama a ctest por tier (ver tests/README.md)
   lib/                    — sandbox.sh (XDG descartable + pila de limpieza), fakebin.sh (herramientas falsas), xvfb-app.sh
   static/                 — Invariantes del repo: qmllint, .qml en el qrc, catálogo al día, tr() sin " = ", tokens de widget
-  unit/                   — Qt Test contra kdock_core: dockgeometry, dockconfig, dockmanager, desktopentry, translations
+  unit/                   — Qt Test contra kdock_core: dockgeometry, dockconfig, dockmanager, desktopentry, translations, qmlload
   qml/                    — smoke.sh (matriz de configs bajo Xvfb) y accessories.sh (--dump-layout / --dump-sections)
   live/                   — dodge.sh y multimonitor.sh: necesitan la sesión Wayland, excluidos de CI por su label
 ```

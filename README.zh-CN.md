@@ -8,6 +8,7 @@
 
 **面向 Wayland 桌面的 Dock 和面板**，100% 使用 Qt 6 编写。
 
+[![CI](https://github.com/yacolinux/kdock/actions/workflows/ci.yml/badge.svg)](https://github.com/yacolinux/kdock/actions/workflows/ci.yml)
 [![Licencia: MIT](https://img.shields.io/badge/licencia-MIT-blue.svg)](LICENSE)
 ![Qt 6.5+](https://img.shields.io/badge/Qt-6.5%2B-41cd52)
 ![Wayland](https://img.shields.io/badge/Wayland-layer--shell-lightgrey)

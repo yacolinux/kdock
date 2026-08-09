@@ -8,6 +8,7 @@
 
 **Dock and panel for Wayland desktops**, written 100% in Qt 6.
 
+[![CI](https://github.com/yacolinux/kdock/actions/workflows/ci.yml/badge.svg)](https://github.com/yacolinux/kdock/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Qt 6.5+](https://img.shields.io/badge/Qt-6.5%2B-41cd52)
 ![Wayland](https://img.shields.io/badge/Wayland-layer--shell-lightgrey)
