@@ -1,6 +1,6 @@
 [Español](README.md) | **English** | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.9
+# kdock  ·  RELEASE 0.1.10
 
 ![Kdock configuration example](screenshots/nueva-portada.jpg)
 
@@ -60,7 +60,11 @@ The dock, across different edges and label layouts:
   it shows up immediately. **Dock → Move to next monitor**, also from the right-click menu,
   moves the dock to the next connected monitor (wrapping around at the last one): the
   configuration travels with it and the old file is kept renamed as a backup, cleaned up
-  automatically on the next move. At the top of the dialog, a **desktop** selector and the
+  automatically on the next move. Right below it, **Dock → Copy to next monitor** does the
+  same but **leaves the original alone**: the dock stays where it is and the next monitor
+  gets an identical copy, ready to be told apart. The only things a copy does not inherit
+  are the name and — when both will be on screen at once — the system tray, which would
+  otherwise be drawn twice. At the top of the dialog, a **desktop** selector and the
   dock's **name** always show which one you're editing; opening Settings from a dock
   preselects its own. Docks on a desktop **are not built until the first time you enter it**
   —so you don't pay the memory cost of a dock you'll never see— and from then on switching

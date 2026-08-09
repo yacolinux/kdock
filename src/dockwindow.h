@@ -108,6 +108,9 @@ public:
     // Mover Sig. Monitor). The old config is renamed to .tmp; see
     // DockManager::moveDockToNextMonitor().
     Q_INVOKABLE void moveToNextMonitor();
+    // Same, but leaving this dock where it is (right-click → Dock → Copiar a
+    // Sig. Monitor). See DockManager::copyDockToNextMonitor().
+    Q_INVOKABLE void copyToNextMonitor();
     // Open the settings dialog directly on the Audio tab (volume widget
     // right-click).
     Q_INVOKABLE void openAudioSettings();

@@ -609,6 +609,23 @@ void DockWindow::moveToNextMonitor()
     });
 }
 
+void DockWindow::copyToNextMonitor()
+{
+    if (!m_manager || m_config->dockId().isEmpty())
+        return;
+    const QString dockId = m_config->dockId();
+    DockManager *manager = m_manager;
+    // Deferred like the move: this dock survives, but sync() still rebuilds the
+    // dock list from inside the QML click handler that invoked us.
+    QTimer::singleShot(0, this, [this, manager, dockId] {
+        const QString newId = manager->copyDockToNextMonitor(dockId);
+        // Land the (already open) settings dialog on the copy, which is the one
+        // the user is going to want to edit.
+        if (!newId.isEmpty() && m_dialog)
+            m_dialog->showMonitorsTab(newId);
+    });
+}
+
 void DockWindow::openAudioSettings()
 {
     openSettings();

@@ -842,6 +842,7 @@ Configurar el menú… = 配置菜单…
 Configurar redes… = 配置网络…
 Configure kdock = 配置 kdock
 Contraseña de %1 = %1 的密码
+Copiar a Sig. Monitor = 复制到下一显示器
 Corre %1 = Corre %1
 Crear dock vacío = 新建空 Dock
 Dark = 深色

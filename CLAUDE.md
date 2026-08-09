@@ -568,6 +568,27 @@ Docks— sin instanciar una sola ventana. Y si además le pasás un `VirtualDesk
 usuario), así que se puede probar la lógica que depende del escritorio actual sin tocar la
 sesión.
 
+**Nada que dependa de `connectedScreens()` se puede probar acá, y hay dos formas de sortearlo**
+(2026-08-09, probando *Copiar a Sig. Monitor*). Esa lista sale de `QGuiApplication::screens()`,
+o sea de la plataforma: bajo Xvfb hay **una sola** pantalla (`screen`) y `xrandr --setmonitor`
+**no sirve** —este Xvfb no implementa monitores de RandR 1.5, el comando sale con 0 y
+`--listmonitors` sigue mostrando uno—, así que un move/copy "al siguiente monitor" corta
+temprano y la sonda no prueba nada. Lo que funcionó: un parche **temporal** de una línea en
+`connectedScreens()` que devuelva la lista de una variable de entorno, correr la sonda, y
+revertirlo (mismo método que el `qInfo()` del dodge). Y la segunda reja: con la lista falsa,
+los docks que la sonda crea caen en monitores "conectados" y `sync()` intenta armarles ventana
+→ **segfault**. Atalos a un escritorio virtual que no sea el actual (`setDockDesktops({2})` con
+un `Shared` sin `VirtualDesktops`, donde `currentDesktop()` es 0): `wantedDocks()` los deja
+afuera y no se instancia ninguna ventana.
+
+**Y la sonda de `DockManager` miente sobre los archivos en la PRIMERA corrida**: `QSettings`
+escribe diferido, así que un `QFile::exists()` sobre el `.conf` de un dock que la propia sonda
+acaba de crear da **false**, y el `QFile::rename()` a `.conf.tmp` del move no renombra nada
+—sin fallar—. Los archivos aparecen recién cuando los `DockConfig` se destruyen al salir. O
+sea que una aserción sobre archivos hay que hacerla en una **segunda** corrida sobre el mismo
+`XDG_DATA_HOME` (ahí sí: `.conf` intacto en la copia, `.conf.tmp` en el move). No es un bug del
+código: en la app real el archivo existe desde que el dock se creó.
+
 **Y ojo con el `XDG_DATA_HOME` descartable entre corridas de la misma sonda**: los docks que
 creó la corrida anterior siguen ahí, así que la siguiente empieza en otro slot y cualquier
 `assert` sobre "Dock 2" falla por una razón que no tiene nada que ver. `rm -rf` del directorio

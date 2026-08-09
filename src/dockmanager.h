@@ -182,6 +182,13 @@ public:
     // slot.
     QString moveDockToNextMonitor(const QString &dockId);
 
+    // Same, but the original stays where it is and enabled: the next monitor
+    // gets a copy (right-click → Dock → Copiar a Sig. Monitor). The two share
+    // every setting except the tray, which the copy gives up when it would be
+    // on screen next to its source (see canCoexist). Returns the new dockId,
+    // or empty on the same conditions as the move.
+    QString copyDockToNextMonitor(const QString &dockId);
+
     // The dockId that defaults relanzadores to shown: the lowest-slot enabled
     // dock on the primary monitor.
     QString primaryDockId() const;
@@ -239,6 +246,9 @@ private:
     };
 
     void migrateFirstRun();
+    // Body of moveDockToNextMonitor()/copyDockToNextMonitor(): the two differ
+    // only in what happens to the source once the copy is in place.
+    QString cloneToNextMonitor(const QString &dockId, bool keepSource);
     // Drops every systray claim but one (see the .cpp): configs written while
     // the tray was primary-only may flag several docks.
     void normalizeSystrayOwner();

@@ -1,6 +1,6 @@
 **Español** | [English](README.en.md) | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.9
+# kdock  ·  RELEASE 0.1.10
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -59,7 +59,11 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   en el que estás ya tiene docks propios, el nuevo se ata a él para que aparezca en el acto.
   **Dock → Mover Sig. Monitor**, también del clic derecho, lleva el dock al siguiente monitor
   conectado (y da la vuelta al llegar al último): la configuración viaja con él y el archivo
-  viejo queda renombrado como respaldo, limpiándose solo en el próximo move.
+  viejo queda renombrado como respaldo, limpiándose solo en el próximo move. Justo debajo,
+  **Dock → Copiar a Sig. Monitor** hace lo mismo pero **sin tocar el original**: el dock se
+  queda donde está y el monitor siguiente recibe una copia idéntica, lista para diferenciarla
+  (lo único que la copia no hereda es el nombre y, si los dos van a estar en pantalla a la
+  vez, la bandeja del sistema — que se dibujaría dos veces).
   Arriba del diálogo, un selector de **escritorio** y el **nombre** del dock dicen en todo
   momento cuál de todos estás editando; abrir Configuración desde un dock preselecciona el
   suyo. Los docks de un escritorio **no se

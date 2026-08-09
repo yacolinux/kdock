@@ -841,6 +841,7 @@ Configurar el menú… = Configurar el menú…
 Configurar redes… = Configurar redes…
 Configure kdock = Configure kdock
 Contraseña de %1 = Contraseña de %1
+Copiar a Sig. Monitor = Copiar a Sig. Monitor
 Corre %1 = Corre %1
 Crear dock vacío = Crear dock vacío
 Dark = Dark

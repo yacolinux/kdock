@@ -845,6 +845,7 @@ Configurar el menú… = Configure the menu…
 Configurar redes… = Configure networks…
 Configure kdock = Configure kdock
 Contraseña de %1 = Password for %1
+Copiar a Sig. Monitor = Copy to next monitor
 Corre %1 = Corre %1
 Crear dock vacío = Create empty dock
 Dark = Dark

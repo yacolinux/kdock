@@ -1154,6 +1154,11 @@ Item {
                                 onTriggered: dockWindow.moveToNextMonitor()
                             }
                             IconMenuItem {
+                                text: qsTr("Copiar a Sig. Monitor")
+                                iconName: "edit-copy"
+                                onTriggered: dockWindow.copyToNextMonitor()
+                            }
+                            IconMenuItem {
                                 text: qsTr("Crear dock vacío")
                                 iconName: "list-add"
                                 onTriggered: dockWindow.createEmptyDock()
@@ -1713,6 +1718,11 @@ Item {
                                     text: qsTr("Mover Sig. Monitor")
                                     iconName: "go-next"
                                     onTriggered: dockWindow.moveToNextMonitor()
+                                }
+                                IconMenuItem {
+                                    text: qsTr("Copiar a Sig. Monitor")
+                                    iconName: "edit-copy"
+                                    onTriggered: dockWindow.copyToNextMonitor()
                                 }
                                 IconMenuItem {
                                     text: qsTr("Crear dock vacío")
