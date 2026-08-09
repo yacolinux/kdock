@@ -67,7 +67,12 @@ for case in "${CASES[@]}"; do
     geom="$KDOCK_SANDBOX/geometry.txt"
 
     # La ventana buena es la de ("kdock" "kdock"): hay tres que se llaman kdock.
-    "$here/../lib/xvfb-app.sh" --log "$log" --settle 6 --screen "${SCREEN_W}x${SCREEN_H}" \
+    # --ready: la ventana del dock existe y YA no tiene el tamaño por defecto de
+    # una QQuickView vacía (160x160), o sea que su QML terminó de cargar. El
+    # presupuesto es generoso porque un runner sin GPU tarda el triple; como es
+    # espera por condición, en una máquina rápida no cuesta nada.
+    "$here/../lib/xvfb-app.sh" --log "$log" --settle 25 --screen "${SCREEN_W}x${SCREEN_H}" \
+        --ready 'xwininfo -root -children | grep "\"kdock\": (\"kdock\"" | grep -qv " 160x160+"' \
         --out "$geom" \
         --inspect 'xwininfo -root -children; echo "--- pantallas:"; xdpyinfo | grep -A2 "^screen #"' \
         -- "$kdock" || true
