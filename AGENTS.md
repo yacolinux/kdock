@@ -945,6 +945,10 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   sección es una fila ahí, un `.qml` en `qml/cards/` y un `case` en `CmSectionView.qml`.**
   Las etiquetas **no** están en la tabla: salen de `CmSections::label()` con `tr()` en el
   momento, para que un cambio de idioma sea una relectura y no una reconstrucción.
+  Los tamaños por defecto nacen **chicos a propósito desde 2026-08-09** (2×2, wallpaper 1×1):
+  los 3×2/4×2 originales llenaban una fila de 6 columnas con dos tarjetas y la grilla se leía
+  como "solo 2 columnas". Una disposición guardada conserva sus tamaños hasta que el usuario
+  la resetea — cambiar un default acá no re-dimensiona las tarjetas ya colocadas.
 - **Una sola componente por sección, en dos tamaños.** `CmSectionView.qml` mapea id → archivo
   y le pasa `compact`: la tarjeta de Principal y la solapa completa son **el mismo** `.qml`.
   Por eso cada `cards/*.qml` tiene dos bloques (`visible: card.compact` / `visible:

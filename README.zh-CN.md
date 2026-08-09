@@ -1,6 +1,6 @@
 [Español](README.md) | [English](README.en.md) | **中文**
 
-# kdock  ·  RELEASE 0.1.3
+# kdock  ·  RELEASE 0.1.7
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -13,7 +13,7 @@
 ![Wayland](https://img.shields.io/badge/Wayland-layer--shell-lightgrey)
 
 kdock **不链接 KDE Frameworks，也不链接 Plasma**。Wayland 协议直接从其 XML 用
-`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到四个独立的二进制文件，
+`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到五个独立的二进制文件，
 没有需要安装的插件，也不用拖带半个 Plasma 作为依赖。
 
 在 **KDE Plasma 6 / KWin** 上日常使用测试；任务栏部分在 wlroots 系合成器
@@ -199,6 +199,7 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
 | 子启动器 | 嵌套小型 Dock：一个图标展开一个包含其他启动器的工具条 | — |
 | Script Runner | 执行可配置的 shell 脚本 | `sh` |
 | 磁贴菜单 | 打开和关闭全屏磁贴菜单 | `kdock-tilemenu`（D-Bus） |
+| Control Manager | 打开控制面板：音频、各显示器亮度、电源、日历、播放、网络、壁纸和系统。可以在 Dock 上绘制自己的文本（或时钟），并使用自己的字体 | `kdock-controlmanager`（D-Bus） |
 
 ### `kdock-previews`（配套二进制文件）
 
@@ -272,6 +273,33 @@ Menu 小程序，名字也由此而来）。这是第三个独立的二进制文
 - 与 `kdock-tilemenu` 一样，**不需要任何 KWin 特殊权限**：可以直接从 `build/` 目录运行，
   它的 `.desktop` 文件只用于在任务管理器中提供名称和图标。
 
+### `kdock-controlmanager`（配套二进制文件）
+
+**锚定在屏幕边缘的控制面板**——在一个地方查看和操作所有内容：音频、各显示器亮度、电源
+配置文件、暗色模式、日历、播放、网络、壁纸和系统。第五个二进制文件，拥有自己的源码树
+（`controlmanager/`）、自己的配置和自己的设置对话框；由 Dock 的 *Control Manager* widget
+打开和关闭。
+
+- 第一个标签页（**Principal**）是**卡片网格**，可拖拽调整位置和大小（1×1…6×3，每张卡
+  片都可以设置背景色），每个部分还有自己的完整标签页——**两种尺寸共用同一张卡片**。
+  网格单元格可以高于宽，因此卡片可以在宽和高两个方向上配置。
+- **音频**：完整的混音器——输出、输入和各应用流，支持默认设备、静音和 150% 上限。
+- **视频与电源**：**每台显示器一个**亮度滑块（PowerDevil）、电源配置文件以及 Dock 的
+  暗色模式，通过 D-Bus 实时生效。
+- **日历**：可翻页的月份视图，带一个打开 `kdock-calendar` 的按钮。
+- **播放**：封面、标题/艺术家、进度条，以及对任何 MPRIS2 播放器的控制。
+- **网络**：当前连接、附近网络及其安全性，激活/停用和忘记。
+- **壁纸**：推进每台显示器的幻灯片。
+- **系统**：四个设置对话框（KDE、kdock、磁贴菜单、预览）、重启以及带标签的会话行
+  （锁定、挂起、注销、重启、关机）。
+- **外观**：背景（主题 / 自选颜色 / 图片）、不透明度、圆角、粗体、**整个面板统一的字体
+  大小**、自己的图标主题、按钮最小尺寸和标签栏位置。面板可**拖拽边角调整大小**，与普通
+  窗口一致。
+- 使用 Esc、✕ 或失去焦点时关闭——都可以通过**固定窗口**禁用，让它成为一个固定的面板。
+
+与 Dock 一样，它是 layer-shell 表面：**不需要任何 KWin 特殊权限**，它的 `.desktop` 文件
+只提供名称和图标，无需刷新应用索引。
+
 
 ---
 
@@ -297,7 +325,7 @@ UPower（电池）。Overview、移动窗口和下一张壁纸这几个 widget �
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # 安装四个二进制文件及其 .desktop 文件
+sudo cmake --install build     # 安装五个二进制文件及其 .desktop 文件
 ```
 
 > 如果你的环境导出了 `CC="ccache gcc"` / `CXX="ccache g++"`，CMake 的 AutoMoc 会失败：
@@ -325,7 +353,8 @@ kbuildsycoca6
 ```
 
 `kdock-tilemenu` 不在此列，因为它不需要任何特权：可以从任意位置运行，不需要
-`.desktop` 文件，也不需要刷新索引。**`kdock-calendar`** 同理。
+`.desktop` 文件，也不需要刷新索引。**`kdock-calendar`** 和 **`kdock-controlmanager`**
+（其 layer-shell 表面是公开的）同理。
 
 如果你从其他路径运行前两者中的某一个（开发阶段的 `build/kdock`），把 `.desktop` 文件
 复制到 `~/.local/share/applications/`，并将 `Exec=` 指向*那个*二进制文件的绝对路径。
@@ -405,6 +434,7 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 | `previews/` | 预览配套二进制文件（独立源码树，复用 `src/` 中的 5 个文件） |
 | `tilemenu/` | 磁贴菜单配套二进制文件（独立源码树，复用 `src/` 中的 8 个文件） |
 | `calendar/` | 月历配套二进制文件（独立源码树，完全自包含） |
+| `controlmanager/` | 控制面板配套二进制文件（独立源码树，复用 `src/` 中的 16 个文件） |
 | `protocols/` | 内置的 Wayland 协议（layer-shell、foreign-toplevel、plasma-window、xdg-shell） |
 | `translations/` | 翻译层（`capabase.md` + 每种语言一个 `.md`）。首次启动时复制到 home 目录，并在那里编辑 |
 | `tools/` | `gen-capabase.py`（从代码重新生成 `capabase.md`）、`sync-translations.py`（将新增的键传播到其他语言）以及 `gen-alt-layers.py`（重新生成九个 ALT 层） |

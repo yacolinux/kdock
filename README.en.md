@@ -1,6 +1,6 @@
 [Español](README.md) | **English** | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.3
+# kdock  ·  RELEASE 0.1.7
 
 ![Kdock configuration example](screenshots/nueva-portada.jpg)
 
@@ -14,7 +14,7 @@
 
 kdock **does not link against KDE Frameworks or Plasma**. Wayland protocols are generated
 directly from their XML with `qtwaylandscanner`, and everything else is resolved over D-Bus
-or the CLI. The result is four standalone binaries, no plugins to install, and no need to
+or the CLI. The result is five standalone binaries, no plugins to install, and no need to
 drag half of Plasma along as a dependency.
 
 Used daily on **KDE Plasma 6 / KWin**; the taskbar also works on wlroots compositors (sway,
@@ -228,6 +228,7 @@ Frameworks:
 | Sub-launchers | Nested mini-dock: an icon opens a bar with other launchers | — |
 | Script Runner | Runs a configurable shell script | `sh` |
 | Tile menu | Opens and closes the fullscreen menu | `kdock-tilemenu` (D-Bus) |
+| Control Manager | Opens the control panel: audio, per-monitor brightness, power, calendar, playback, network, wallpapers and system. Can draw its own text (or the clock) on the dock, with its own font | `kdock-controlmanager` (D-Bus) |
 
 ### `kdock-previews` (companion binary)
 
@@ -315,6 +316,38 @@ its own.
 - Just like `kdock-tilemenu`, it **needs no special KWin permission**: it runs directly from
   `build/` and its `.desktop` only provides the name and icon in the task manager.
 
+### `kdock-controlmanager` (companion binary)
+
+**Control panel anchored to a screen edge** — the one place to see and touch everything at
+once: audio, per-monitor brightness, power profile, dark mode, calendar, playback, network,
+wallpaper and system. Fifth binary, with its own tree (`controlmanager/`), its own
+configuration and its own settings dialog; the dock's *Control Manager* widget opens and
+closes it.
+
+- The first tab (**Principal**) is a **grid of cards** that rearrange and resize by dragging
+  (1×1…6×3, each with an optional background color), and every section also has its own full
+  tab — **the same card at both sizes**. Grid cells can be taller than wide, so cards are
+  configured in both width and height.
+- **Audio**: the full mixer — outputs, inputs and per-app streams, with default device, mute
+  and the 150 % ceiling.
+- **Video and power**: a brightness slider **per monitor** (PowerDevil), the energy profile
+  and the dock's dark mode, live over D-Bus.
+- **Calendar**: navigable month, with a button to open `kdock-calendar`.
+- **Playback**: cover, title/artist, progress bar and transport for any MPRIS2 player.
+- **Network**: current connection, nearby networks with their security, activate/deactivate
+  and forget.
+- **Wallpaper**: advances each monitor's slideshow.
+- **System**: the four settings dialogs (KDE, kdock, tile menu, previews), the restarts and
+  the labelled session row (lock, suspend, log out, reboot, shut down).
+- **Appearance**: background (theme / own color / image), opacity, rounded corners, bold,
+  **one font size for the whole panel**, its own icon set, minimum button size and the tab
+  bar position. The panel is **resized by dragging its corners**, like a standard window.
+- Closes with Esc, the ✕ or on focus loss — all disabled by **Pinned window**, which leaves
+  it as a fixed panel.
+
+Like the dock, it is a layer-shell surface: **it needs no special KWin permission**, its
+`.desktop` only provides the name and icon, and no application index refresh is needed.
+
 
 ---
 
@@ -341,7 +374,7 @@ widgets only show up under KDE.
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # installs the four binaries and their .desktop files
+sudo cmake --install build     # installs the five binaries and their .desktop files
 ```
 
 > If your environment exports `CC="ccache gcc"` / `CXX="ccache g++"`, CMake's AutoMoc fails:
@@ -370,7 +403,7 @@ kbuildsycoca6
 
 `kdock-tilemenu` isn't listed here because it doesn't request anything privileged: it can be
 run from anywhere, with no `.desktop` and no index refresh. The same applies to
-**`kdock-calendar`**.
+**`kdock-calendar`** and to **`kdock-controlmanager`** (its layer-shell surface is public).
 
 If you run either of the other two from a different path (`build/kdock` during development),
 copy the `.desktop` to `~/.local/share/applications/` with `Exec=` pointing to *that*
@@ -452,6 +485,7 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
 | `previews/` | Companion preview binary (own tree, reuses 5 files from `src/`) |
 | `tilemenu/` | Companion tile-menu binary (own tree, reuses 8 files from `src/`) |
 | `calendar/` | Companion month-calendar binary (own tree, self-contained) |
+| `controlmanager/` | Companion control-panel binary (own tree, reuses 16 files from `src/`) |
 | `protocols/` | Vendored Wayland protocols (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | The translation layers (`capabase.md` + one `.md` per language). Copied to the home directory on first run and edited there |
 | `tools/` | `gen-capabase.py` (rebuilds `capabase.md` from the code), `sync-translations.py` (propagates new keys to the other languages) and `gen-alt-layers.py` (regenerates the nine ALT layers) |

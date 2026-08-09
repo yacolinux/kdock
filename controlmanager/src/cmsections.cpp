@@ -12,13 +12,17 @@ const QList<CmSectionInfo> &table()
 {
     static const QList<CmSectionInfo> t = {
         // id            icon                              w  h  minW minH tab
-        {QStringLiteral("clock"),     QStringLiteral("clock"),                          3, 2, 2, 1, false},
-        {QStringLiteral("audio"),     QStringLiteral("audio-volume-high"),              3, 2, 2, 1, true},
-        {QStringLiteral("video"),     QStringLiteral("preferences-system-power-management"), 3, 2, 2, 1, true},
-        {QStringLiteral("calendar"),  QStringLiteral("office-calendar"),                2, 3, 2, 2, true},
-        {QStringLiteral("play"),      QStringLiteral("applications-multimedia"),        4, 2, 2, 1, true},
+        // Born small (2 cells wide, 3 fit a 6-column row) since 2026-08-09:
+        // the old 3x2/4x2 defaults filled a row with two cards and the grid
+        // read as "only 2 columns". Existing layouts keep their sizes until
+        // the user resets the arrangement.
+        {QStringLiteral("clock"),     QStringLiteral("clock"),                          2, 2, 2, 1, false},
+        {QStringLiteral("audio"),     QStringLiteral("audio-volume-high"),              2, 2, 2, 1, true},
+        {QStringLiteral("video"),     QStringLiteral("preferences-system-power-management"), 2, 2, 2, 1, true},
+        {QStringLiteral("calendar"),  QStringLiteral("office-calendar"),                2, 2, 2, 2, true},
+        {QStringLiteral("play"),      QStringLiteral("applications-multimedia"),        2, 2, 2, 1, true},
         {QStringLiteral("network"),   QStringLiteral("network-wireless"),               2, 2, 2, 1, true},
-        {QStringLiteral("wallpaper"), QStringLiteral("preferences-desktop-wallpaper"),  2, 1, 1, 1, true},
+        {QStringLiteral("wallpaper"), QStringLiteral("preferences-desktop-wallpaper"),  1, 1, 1, 1, true},
         {QStringLiteral("system"),    QStringLiteral("preferences-system"),             2, 2, 1, 1, true},
     };
     return t;
