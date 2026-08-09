@@ -95,7 +95,13 @@ for case in "${CASES[@]}"; do
     else
         w=${size%%x*}; rest=${size#*x}; h=${rest%%+*}
         if [ "$w" = "160" ] && [ "$h" = "160" ]; then
-            problems+=("ventana de 160x160: la raíz del QML no cargó")
+            # 160x160 es el tamaño por defecto de una QQuickView cuya raíz no
+            # cargó, así que acá SIEMPRE hay una razón en stderr (un módulo QML
+            # que falta, el qrc vacío, un error de sintaxis): sin volcarla, en
+            # una máquina ajena el fallo no dice nada.
+            problems+=("ventana de 160x160: la raíz del QML no cargó. Su salida:")
+            while IFS= read -r line; do problems+=("      $line"); done \
+                < <(tail -12 "$log" 2>/dev/null)
         fi
         [ "$want_w" != "-1" ] && [ "$w" != "$want_w" ] && \
             problems+=("ancho $w, esperaba $want_w (geometría: $size)")

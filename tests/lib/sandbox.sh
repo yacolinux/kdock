@@ -76,19 +76,23 @@ kdock_sandbox_fixture_apps() {
     ln -sfn "$fixtures/applications" "$XDG_DATA_HOME/applications"
 }
 
-# Las herramientas de Qt (qmllint, lupdate) NO siempre están en el PATH: Arch las
-# instala en /usr/lib/qt6/bin y no las enlaza a /usr/bin para no chocar con Qt5,
-# que es justo lo que rompió la primera corrida de CI. Se resuelven preguntándole
-# a qmake6 en vez de suponer. Imprime la ruta, o nada si no está.
+# Resuelve una herramienta de Qt (qmllint, lupdate) **prefiriendo la de Qt6**.
+#
+# El PATH va ÚLTIMO a propósito, y las dos razones costaron una corrida de CI cada
+# una: en Arch los binarios de Qt6 viven en /usr/lib/qt6/bin y no se enlazan a
+# /usr/bin (para no chocar con Qt5), así que por PATH no se encuentran; y en
+# Debian/Ubuntu `qmllint` a secas **es el de Qt5**, que solo mira sintaxis y da un
+# "todo limpio" mucho más flojo que el de Qt6 (medido: 0 vs 1443 diagnósticos).
+# Buscar por PATH primero hacía que la misma suite probara cosas distintas en cada
+# máquina. Imprime la ruta, o nada si no está.
 kdock_qt_tool() {
-    local name=${1:?} path
-    if path=$(command -v "$name" 2>/dev/null); then echo "$path"; return 0; fi
-    local dir
+    local name=${1:?} dir path
     for dir in $(qmake6 -query QT_INSTALL_BINS 2>/dev/null) \
                $(qmake6 -query QT_HOST_LIBEXECS 2>/dev/null) \
                /usr/lib/qt6/bin /usr/lib/qt6/libexec; do
         [ -x "$dir/$name" ] && { echo "$dir/$name"; return 0; }
     done
+    if path=$(command -v "$name" 2>/dev/null); then echo "$path"; return 0; fi
     return 1
 }
 
