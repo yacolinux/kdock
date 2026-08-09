@@ -711,6 +711,27 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 
 ## Trampas que muerden
 
+- **Un cliente Wayland no sabe dónde quedó su superficie, y para una centrada no se puede
+  deducir** (2026-08-09): la posición de una layer surface anclada a un solo borde la elige el
+  compositor **dentro de lo que le dejan libre las otras zonas exclusivas**, no dentro de la
+  pantalla. Medido en la sesión real: un dock flotante centrado abajo cayó 92 px a la derecha
+  del centro geométrico (había otro dock a la izquierda). `QScreen::availableGeometry()` **no
+  ayuda**: bajo este KWin es idéntica a `geometry()` (sonda de diez líneas con `Qt6Gui`). Por eso
+  `DockWindow::dockRect()` —la entrada del modo *intelligent hide*— solo es exacta para
+  alineación Start/End y borde completo, y para Center usa la franja del borde entero a
+  propósito. Si escribís algo que necesite la posición real de la superficie, no la calcules:
+  cambiá el diseño para no necesitarla.
+- **El modo *dodge* solo se prueba en la sesión Wayland real** (2026-08-09): bajo Xvfb no hay
+  protocolo de ventanas, así que `windowsOverlap` queda en false y el dock sale siempre visible
+  — la corrida limpia no prueba nada de la feature. La receta que funcionó: copiar el binario a
+  un directorio **sin `#`**, un `.desktop` temporal con `X-KDE-Wayland-Interfaces` apuntando ahí
+  + el `kbuildsycoca6` con ruta explícita, un `qInfo()` temporal en `updateWindowsOverlap()` que
+  imprima rect/overlap/escritorio, y **cambiar de escritorio virtual** (`busctl set-property …
+  current`) para ver el flanco: en el escritorio vacío `overlap` pasa a false y el dock vuelve.
+  Acordate de borrar el `.desktop`, refrescar ksycoca de nuevo, volver al escritorio original y
+  sacar el `qInfo()`. Y para medir la posición real, `spectacle-custom` + un recorte con una
+  regla de coordenadas dibujada encima vale más que un diff de imágenes (el fondo cambia entre
+  capturas y el bbox sale de pantalla completa).
 - **`left`/`top`/`right`/`bottom` son propiedades FINAL de `Item`** (2026-08-09): declarar
   `property bool left` en un componente QML propio es *"Cannot override FINAL property"* y
   **la carga de TODO el archivo falla** — `CmCornerGrip` tenía `left`/`top` y el panel de

@@ -651,7 +651,15 @@ void DockConfig::load()
     m_settings.endGroup();
     m_spacing = m_settings.value(QStringLiteral("spacing"), 6).toInt();
     m_screenMargin = m_settings.value(QStringLiteral("screenMargin"), 4).toInt();
-    m_autohide = m_settings.value(QStringLiteral("autohide"), false).toBool();
+    // `hideMode` superseded the `autohide` boolean: a config written before it
+    // existed only has the latter, so it seeds the mode (and keeps being
+    // written by setHideMode, since the widget toggle still reads it).
+    m_hideMode = m_settings.value(QStringLiteral("hideMode"),
+                                  m_settings.value(QStringLiteral("autohide"), false).toBool()
+                                      ? int(AutoHide) : int(AlwaysVisible))
+                     .toInt();
+    if (m_hideMode < AlwaysVisible || m_hideMode > WindowsBelow)
+        m_hideMode = AlwaysVisible;
     m_opacity = m_settings.value(QStringLiteral("opacity"), 0.85).toDouble();
     // Stored as a #RRGGBB string; empty/absent = inherit the theme color.
     const QString pc = m_settings.value(QStringLiteral("panelColor")).toString();
@@ -1950,11 +1958,25 @@ void DockConfig::setScreenMargin(int margin)
 
 void DockConfig::setAutohide(bool autohide)
 {
-    if (m_autohide == autohide)
+    // The auto-hide widget/menu toggle is a two-state shortcut over the mode:
+    // turning it off from a dodge/windows-below dock lands on always visible.
+    setHideMode(autohide ? AutoHide : AlwaysVisible);
+}
+
+void DockConfig::setHideMode(int mode)
+{
+    if (mode < AlwaysVisible || mode > WindowsBelow)
+        mode = AlwaysVisible;
+    if (m_hideMode == mode)
         return;
-    m_autohide = autohide;
-    m_settings.setValue(QStringLiteral("autohide"), autohide);
-    emit autohideChanged();
+    const bool wasAutohide = autohide();
+    m_hideMode = mode;
+    m_settings.setValue(QStringLiteral("hideMode"), mode);
+    // Kept in sync so a config downgraded to an older kdock still auto-hides.
+    m_settings.setValue(QStringLiteral("autohide"), autohide());
+    emit hideModeChanged();
+    if (wasAutohide != autohide())
+        emit autohideChanged();
 }
 
 void DockConfig::setOpacity(qreal opacity)

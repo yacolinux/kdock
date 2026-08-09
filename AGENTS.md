@@ -232,7 +232,45 @@ el dock se lee como dos.
 - Además cada sección declara `Layout.minimumWidth/Height = implicitWidth/Height` (los springs, 0): así el layout **nunca** aprieta una sección por debajo de lo que dibuja, y los separadores dinámicos son los que devuelven el espacio.
 - UI: Settings → Widgets → "Auto-shrink" + "Minimum icon size".
 
-### Autohide (`src/dockwindow.cpp` + `qml/Dock.qml`)
+### Modos de ocultamiento (`config.hideMode`, `src/dockwindow.cpp` + `qml/Dock.qml`, 2026-08-09)
+`DockConfig::HideMode` reemplazó al booleano `autohide` y decide dos cosas: si el dock se
+esconde, y si pide zona exclusiva. Se elige en Configuración → General ("Modo de
+ocultamiento"), y son cuatro:
+
+| valor | clave | zona exclusiva | se oculta |
+|---|---|---|---|
+| 0 | `AlwaysVisible` (default) | `thickness + margen` | nunca |
+| 1 | `AutoHide` | 0 | salvo hover / menú abierto / arrastre |
+| 2 | `DodgeWindows` (*intelligent hide*) | 0 | mientras una ventana llegue a su rectángulo |
+| 3 | `WindowsBelow` (*las ventanas pasan abajo*) | 0 | nunca |
+
+- **`autohide` sigue existiendo** como atajo de dos estados sobre el modo (`autohide() ==
+  hideMode()==AutoHide`; `setAutohide()` va a `AutoHide`/`AlwaysVisible`): es lo que togglean el
+  widget `autohide` y el menú, y lo que se sigue escribiendo al `.conf` para que una config que
+  vuelva a un kdock viejo siga ocultándose. `load()` migra al revés: sin clave `hideMode`, un
+  `autohide=true` siembra el modo 1.
+- **Una sola pregunta para la zona exclusiva**: `DockConfig::reservesSpace()` (solo el modo 0).
+  `applyLayerProperties()` la usa; cualquier modo nuevo entra por ahí.
+- **El dodge se calcula en `DockWindow::updateWindowsOverlap()`** y sale a QML como la property
+  `windowsOverlap`. Recorre `WindowMonitor::windows` salteando minimizadas, `skipTaskbar` y las
+  que no están en el escritorio actual (lista vacía = *todos* los escritorios, ver
+  `AbstractWindow::desktops`), y busca intersección con `DockWindow::dockRect()`. Se recalcula
+  con `windowAdded`/`windowRemoved`, el `changed` de cada ventana (cubre geometría, minimizado y
+  escritorio), el cambio de escritorio actual, el tamaño de la superficie y edge/alignment/margen.
+  Fuera del modo 2 queda en false, así que el binding de QML es inerte.
+- **`dockRect()` reconstruye la posición**, porque Wayland nunca le dice a un cliente dónde
+  quedó su superficie: geometría de la pantalla + borde + margen + alineación + tamaño de la
+  superficie. Es exacto para Start/End y para el borde completo. **Para Center no lo es** —el
+  compositor centra dentro de lo que le dejan libre las *otras* zonas exclusivas (medido ~90 px
+  de corrimiento en una sesión con un dock a la izquierda)—, así que un dock centrado esquiva
+  con la **franja del borde entero**: se esconde de más, nunca de menos.
+- QML lo junta todo en `root.hideWanted` (`hideMode===1 || (hideMode===2 && dockWindow.windowsOverlap)`),
+  que es lo que `revealed` niega; el resto de la animación y de la máscara no cambió.
+- Verificado en la sesión real (segunda instancia aislada, 2026-08-09): dodge escondido con una
+  ventana encima y visible en un escritorio vacío; `windows-below` visible sobre la ventana y sin
+  reservar espacio; con alineación End el rect calculado coincidió al píxel con la captura.
+
+### Autohide: animación y máscara (`src/dockwindow.cpp` + `qml/Dock.qml`)
 - QML handles the slide animation via `Behavior on x/y`.
 - When the animation finishes hiding, `dockWindow.setHidden(true)` is called.
 - `setHidden(true)` shrinks the input region (`QWindow::setMask`) to a 3px hover strip on the screen edge so mouse events pass through to windows underneath.
@@ -1324,11 +1362,11 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | C++ Class | QML Property / Method | Notes |
 |-----------|----------------------|-------|
 | `AppearanceControl` | `appearance.*` | `iconThemes()`, `colorSchemes()` (listas de mapas con id/name/current/**fav**, + bg/fg/sel en los esquemas, favoritos primero), `refreshIfStale()`, `applyIconTheme(id)`, `applyColorScheme(id)`, `isFavorite(kind,id)`/`setFavorite(kind,id,on)` (kind = `"icons"`/`"colors"`) + `currentIconTheme`/`currentColorScheme`, `keepPickerOpen` (lectura/escritura, compartida por todos los pickers) y las señales `changed`/`favoritesChanged`/`keepPickerOpenChanged` |
-| `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Negritas: `labelBold` (bool, todos los nombres del dock). Renglones: `labelLines` (1 o 2 — con 2 los nombres se envuelven en vez de elidirse) + read-only `iconLabelBoxHeight`. Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. Widget Control Manager: `showControlManager`, `controlManagerIcon`, `controlManagerDisplay` (0 solo ícono / 1 ícono+texto / 2 solo texto), `controlManagerText` (vacío = el reloj, con `controlManagerFormat`), `controlManagerFontSize` (0 = automático: la fuente del reloj y, si no, una fracción del ícono; independiente de los modos de etiqueta — ver *Control Manager*). App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
+| `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Ocultamiento: `hideMode` (0 siempre visible / 1 auto-hide / 2 intelligent hide / 3 las ventanas pasan abajo) + `autohide` (atajo de dos estados sobre él) — ver *Modos de ocultamiento*. Negritas: `labelBold` (bool, todos los nombres del dock). Renglones: `labelLines` (1 o 2 — con 2 los nombres se envuelven en vez de elidirse) + read-only `iconLabelBoxHeight`. Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. Widget Control Manager: `showControlManager`, `controlManagerIcon`, `controlManagerDisplay` (0 solo ícono / 1 ícono+texto / 2 solo texto), `controlManagerText` (vacío = el reloj, con `controlManagerFormat`), `controlManagerFontSize` (0 = automático: la fuente del reloj y, si no, una fracción del ícono; independiente de los modos de etiqueta — ver *Control Manager*). App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
 | `Theme` | `theme.background`, `theme.foreground`, `theme.highlight`, `theme.revision` | Live-reloading color scheme |
 | `Translations` | (sin context property) | La capa de traducciones se sirve a QML a través del `QTranslator` instalado: los `qsTr()` no cambian. Lo único que QML ve del tema es `config.widgetName(token)` (ya traducido) y `config.widgetNamesRevision`, que se bumpea también al cambiar de idioma |
 | `DockModel` | `dockModel` (model) | `activate(row)`, `launch(row)`, `togglePinned(row)`, `closeAll(row)`, `windowList(row)`, `moveItem(from, to)`, `activateWindow(row, idx)`, `syncWindows()`, `sendToDesktop(row, position)` (mueve **todas** las ventanas del ícono a un escritorio 1-based, sin seguirlas). Roles: `name`, `iconName`, `pinned`, `windowCount`, `active`, `minimized`, `title`, `isSeparator`, `separatorTransparent` (el separador inline que ocupa lugar y no dibuja línea) |
-| `DockWindow` | `dockWindow` | `setHidden(bool)`, `openSettings()`, `openSettingsToDock()`, `createEmptyDock()`, `deleteDock()`, `restart()`, `quit()` |
+| `DockWindow` | `dockWindow` | `windowsOverlap` (bool read-only: en modo *dodge*, una ventana llega al dock — ver *Modos de ocultamiento*), `setHidden(bool)`, `openSettings()`, `openSettingsToDock()`, `createEmptyDock()`, `deleteDock()`, `restart()`, `quit()` |
 | `VolumeControl` | `volume` | `available`, `volume`, `muted`, `iconName`, `setVolume(v)`, `toggleMute()`, `refresh()` (called on hover to avoid acting on a stale cache) |
 | `AudioControl` | (no context property) | Mixer backend for Settings → Audio only: `available`, `maxVolume`; devices/streams via C++ API |
 | `IconProvider` | `image://icon/name@rev[@themeId]` | `theme.revision` appended to bust cache on theme change; optional `themeId` resolves that icon against another icon set (widget icons adapted to the dock color) |

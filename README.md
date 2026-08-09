@@ -1,6 +1,6 @@
 **Español** | [English](README.en.md) | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.7
+# kdock  ·  RELEASE 0.1.9
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -77,6 +77,16 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   escritorio**: uno puede correr un slideshow mientras otro muestra una imagen fija. Un monitor
   al que no le asignes nada no se toca. Viene **apagado**: mientras no lo prendas, kdock no le
   escribe una sola clave a tu escritorio.
+- **Cuatro modos de ocultamiento**, en Configuración → General: *Siempre visible* (reserva el
+  espacio, las ventanas nunca lo tapan), *Ocultar cuando no se usa* (el auto-ocultado de
+  siempre: se desliza afuera y vuelve al acercar el mouse), **Ocultamiento inteligente** (queda
+  a la vista mientras nada lo moleste y se esconde solo cuando una ventana llega a su
+  rectángulo — el *dodge* de Latte) y **Las ventanas pasan por debajo** (siempre visible pero
+  sin reservar espacio, así una ventana maximizada usa el borde entero y pasa por abajo).
+  Los tres últimos no piden *exclusive zone*, así que no te recortan el área de maximizado. El
+  ocultamiento inteligente mira solo las ventanas del **escritorio virtual actual** e ignora las
+  minimizadas; con alineación centrada esquiva sobre la franja del borde entero, porque en
+  Wayland el compositor —no el cliente— decide dónde queda una superficie centrada.
 - **Modos de presentación**: flotante o panel de borde a borde, modo compacto, alineación
   inicio/centro/fin, opacidad, color de fondo, largo fijo o automático.
 - **Colores rápidos**: ocho colores de fondo configurables, aplicables al vuelo desde el
@@ -225,7 +235,7 @@ Frameworks:
 | Sesión | Cerrar sesión, reiniciar, apagar, bloquear, suspender | D-Bus de KDE |
 | Mostrar escritorio | Toggle de "mostrar escritorio" | Protocolo del compositor |
 | Escritorios | Paginador mínimo: un número por escritorio virtual, clic para ir; el actual va resaltado | KWin (D-Bus) |
-| Auto-ocultar | Prende y apaga el auto-ocultado | — |
+| Auto-ocultar | Prende y apaga el auto-ocultado (los otros dos modos se eligen en Configuración) | — |
 | Modo oscuro | Clic izquierdo: esquema normal; clic derecho: modo oscuro | — |
 | Relanzadores | Mini-dock anidado: un ícono despliega una barra con otros lanzadores | — |
 | Script Runner | Ejecuta un script shell configurable | `sh` |

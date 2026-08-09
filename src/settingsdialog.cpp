@@ -687,10 +687,27 @@ QWidget *SettingsDialog::createGeneralTab()
     connect(m_margin, &QSpinBox::valueChanged, m_config, &DockConfig::setScreenMargin);
     form->addRow(tr("Screen edge margin:"), m_margin);
 
-    m_autohide = new QCheckBox(tr("Hide the dock when not in use"), tab);
-    m_autohide->setChecked(m_config->autohide());
-    connect(m_autohide, &QCheckBox::toggled, m_config, &DockConfig::setAutohide);
-    form->addRow(tr("Auto-hide:"), m_autohide);
+    m_hideMode = new QComboBox(tab);
+    m_hideMode->addItem(tr("Always visible"), int(DockConfig::AlwaysVisible));
+    m_hideMode->addItem(tr("Hide the dock when not in use"), int(DockConfig::AutoHide));
+    m_hideMode->addItem(tr("Intelligent hide (hides when a window reaches it)"),
+                        int(DockConfig::DodgeWindows));
+    m_hideMode->addItem(tr("Windows go below (always visible, no reserved space)"),
+                        int(DockConfig::WindowsBelow));
+    m_hideMode->setCurrentIndex(qMax(0, m_hideMode->findData(m_config->hideMode())));
+    connect(m_hideMode, &QComboBox::currentIndexChanged, this, [this](int i) {
+        m_config->setHideMode(m_hideMode->itemData(i).toInt());
+    });
+    // The auto-hide widget and the dock menu flip the same setting, so the
+    // combo re-reads it instead of drifting while the dialog stays open.
+    connect(m_config, &DockConfig::hideModeChanged, m_hideMode, [this] {
+        const int i = m_hideMode->findData(m_config->hideMode());
+        if (i >= 0 && i != m_hideMode->currentIndex()) {
+            QSignalBlocker blocker(m_hideMode);
+            m_hideMode->setCurrentIndex(i);
+        }
+    });
+    form->addRow(tr("Hide mode:"), m_hideMode);
 
     m_opacity = new QSlider(Qt::Horizontal, tab);
     m_opacity->setRange(0, 100);

@@ -219,7 +219,7 @@ private:
     QSpinBox *m_iconSize;
     QSpinBox *m_spacing;
     QSpinBox *m_margin;
-    QCheckBox *m_autohide;
+    QComboBox *m_hideMode;
     QSlider *m_opacity;
     QLabel *m_alignmentNote;
     QSpinBox *m_dockLength;

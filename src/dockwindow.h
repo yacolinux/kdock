@@ -39,9 +39,15 @@ class TileMenuLauncher;
 class ControlManagerLauncher;
 class VirtualDesktops;
 
+class AbstractWindow;
+
 class DockWindow : public QQuickView
 {
     Q_OBJECT
+    // Dodge mode: true while a window of the current desktop reaches the
+    // dock's rectangle. Dock.qml folds it into `revealed`, so the surface
+    // slides away exactly like it does for auto-hide.
+    Q_PROPERTY(bool windowsOverlap READ windowsOverlap NOTIFY windowsOverlapChanged)
 public:
     DockWindow(DockConfig *config, Theme *theme, DockModel *model, DesktopEntryIndex *apps,
                VolumeControl *volume, ClockWidget *clock, ClockWidget2 *clock2,
@@ -116,6 +122,11 @@ public:
     // app menu search) switch it to "exclusive" while open.
     Q_INVOKABLE void setKeyboardInteractive(bool on);
 
+    bool windowsOverlap() const { return m_windowsOverlap; }
+
+signals:
+    void windowsOverlapChanged();
+
 private:
     void applyLayerProperties();
     // Recreate the layer surface on the configured output (or the primary
@@ -129,6 +140,14 @@ private:
     // setHidden() returns early when the flag didn't change.
     void applyHiddenMask();
     int thickness() const;
+    // The dock's rectangle in screen coordinates. Wayland never tells a client
+    // where its surface ended up, so it is rebuilt from what put it there:
+    // screen geometry + edge + margin + alignment + the surface size.
+    QRect dockRect() const;
+    // Recompute m_windowsOverlap (dodge mode only; the other modes leave it
+    // false so Dock.qml's binding is inert).
+    void updateWindowsOverlap();
+    void watchWindow(AbstractWindow *window);
 
     DockConfig *m_config;
     Theme *m_theme;
@@ -156,6 +175,7 @@ private:
     // Same, for kdock-controlmanager (context property "cmLauncher").
     ControlManagerLauncher *m_cmLauncher = nullptr;
     bool m_hidden = false;
+    bool m_windowsOverlap = false;
     QList<QRect> m_gapRects; // transparent separators, see setGapRects()
     bool m_primary = false;
     bool m_screenChangePending = false;

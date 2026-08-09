@@ -34,6 +34,7 @@ class DockConfig : public QObject
     Q_PROPERTY(int spacing READ spacing WRITE setSpacing NOTIFY spacingChanged)
     Q_PROPERTY(int screenMargin READ screenMargin WRITE setScreenMargin NOTIFY screenMarginChanged)
     Q_PROPERTY(bool autohide READ autohide WRITE setAutohide NOTIFY autohideChanged)
+    Q_PROPERTY(int hideMode READ hideMode WRITE setHideMode NOTIFY hideModeChanged)
     Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity NOTIFY opacityChanged)
     Q_PROPERTY(QColor panelColor READ panelColor WRITE setPanelColor NOTIFY panelColorChanged)
     Q_PROPERTY(bool panelColorSet READ panelColorSet NOTIFY panelColorChanged)
@@ -175,6 +176,18 @@ public:
     Q_ENUM(Edge)
     enum Alignment { Start = 0, Center = 1, End = 2 };
     Q_ENUM(Alignment)
+
+    // How the dock shares the screen edge with the windows below it. The old
+    // `autohide` boolean is the AutoHide value of this enum and is still
+    // exposed (widget toggle, tooltips) as a shortcut for it.
+    //   AlwaysVisible  reserves the strut, windows never cover the dock.
+    //   AutoHide       slides away unless the pointer is over it; no strut.
+    //   DodgeWindows   visible while nothing overlaps it; hides when a window
+    //                  of the current desktop reaches its rectangle.
+    //   WindowsBelow   always visible, but no strut: maximized windows extend
+    //                  under the dock.
+    enum HideMode { AlwaysVisible = 0, AutoHide = 1, DodgeWindows = 2, WindowsBelow = 3 };
+    Q_ENUM(HideMode)
 
     // Which icon set the standard widget icons (volume, network, session…) are
     // taken from. Monochrome themed icons are drawn in a color meant for a
@@ -487,7 +500,14 @@ public:
     int dockThickness() const;
     int spacing() const { return m_spacing; }
     int screenMargin() const { return m_screenMargin; }
-    bool autohide() const { return m_autohide; }
+    // Kept as the shortcut it always was: "the dock hides on its own when the
+    // pointer leaves it". The dodge mode hides too, but on a different trigger,
+    // so it is not folded in here.
+    bool autohide() const { return m_hideMode == AutoHide; }
+    int hideMode() const { return m_hideMode; }
+    // Whether the dock asks the compositor for an exclusive zone. Only the
+    // plain always-visible mode does; the other three let windows through.
+    bool reservesSpace() const { return m_hideMode == AlwaysVisible; }
     qreal opacity() const { return m_opacity; }
     // Custom panel background color; invalid = inherit the KDE theme color.
     QColor panelColor() const { return m_panelColor; }
@@ -636,6 +656,7 @@ public:
     void setSpacing(int spacing);
     void setScreenMargin(int margin);
     void setAutohide(bool autohide);
+    void setHideMode(int mode);
     void setOpacity(qreal opacity);
     // Pass an invalid QColor() to clear (revert to the theme color).
     void setPanelColor(const QColor &color);
@@ -752,6 +773,7 @@ signals:
     void spacingChanged();
     void screenMarginChanged();
     void autohideChanged();
+    void hideModeChanged();
     void opacityChanged();
     void panelColorChanged();
     void panelPresetColorsChanged();
@@ -879,7 +901,7 @@ private:
     int m_widgetIconScale = 100; // % of iconSize applied to widget sections
     int m_spacing = 6;
     int m_screenMargin = 4;
-    bool m_autohide = false;
+    int m_hideMode = AlwaysVisible;
     qreal m_opacity = 0.85;
     QColor m_panelColor; // invalid = inherit theme background
     QStringList m_panelPresetColors;

@@ -1,6 +1,6 @@
 [Español](README.md) | **English** | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.7
+# kdock  ·  RELEASE 0.1.9
 
 ![Kdock configuration example](screenshots/nueva-portada.jpg)
 
@@ -76,6 +76,15 @@ The dock, across different edges and label layouts:
   one can run a slideshow while another shows a fixed image. A monitor you don't assign
   anything to is left untouched. It ships **off**: until you turn it on, kdock doesn't write
   a single key to your desktop.
+- **Four hide modes**, in Settings → General: *Always visible* (reserves the space, windows
+  never cover it), *Hide when not in use* (the auto-hide of old: it slides away and comes back
+  on hover), **Intelligent hide** (stays out while nothing bothers it and hides only when a
+  window reaches its rectangle — Latte's *dodge*) and **Windows go below** (always visible but
+  without reserving space, so a maximized window uses the whole edge and runs underneath).
+  The last three ask for no *exclusive zone*, so they don't shrink your maximize area.
+  Intelligent hide only looks at windows on the **current virtual desktop** and ignores
+  minimized ones; with center alignment it dodges on the whole edge band, because on Wayland it
+  is the compositor — not the client — that decides where a centered surface lands.
 - **Presentation modes**: floating or edge-to-edge panel, compact mode, start/center/end
   alignment, opacity, background color, fixed or automatic length.
 - **Quick colors**: eight configurable background colors, applicable on the fly from the
@@ -223,7 +232,7 @@ Frameworks:
 | Session | Log out, restart, shut down, lock, suspend | KDE D-Bus |
 | Show desktop | "Show desktop" toggle | Compositor protocol |
 | Desktops | Minimal pager: one number per virtual desktop, click to switch; the current one is highlighted | KWin (D-Bus) |
-| Auto-hide | Turns auto-hide on and off | — |
+| Auto-hide | Turns auto-hide on and off (the other two modes are picked in Settings) | — |
 | Dark mode | Left click: normal scheme; right click: dark mode | — |
 | Sub-launchers | Nested mini-dock: an icon opens a bar with other launchers | — |
 | Script Runner | Runs a configurable shell script | `sh` |

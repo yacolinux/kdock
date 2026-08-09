@@ -549,7 +549,12 @@ Item {
 
     property bool menuOpen: false
     readonly property bool dragging: dragCount > 0
-    readonly property bool revealed: !config.autohide || dockHover.hovered || menuOpen || dragging
+    // The dock wants to be out of the way: always in auto-hide mode, and only
+    // while a window reaches it in intelligent-hide (dodge) mode. The other two
+    // modes never hide — "windows go below" just drops the exclusive zone.
+    readonly property bool hideWanted: config.hideMode === 1
+                                       || (config.hideMode === 2 && dockWindow.windowsOverlap)
+    readonly property bool revealed: !hideWanted || dockHover.hovered || menuOpen || dragging
 
     onRevealedChanged: if (revealed) dockWindow.setHidden(false)
 

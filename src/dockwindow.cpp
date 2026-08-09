@@ -103,7 +103,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // so the exclusive zone) without touching the icon size.
     connect(m_config, &DockConfig::dockThicknessChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::screenMarginChanged, this, &DockWindow::applyLayerProperties);
-    connect(m_config, &DockConfig::autohideChanged, this, &DockWindow::applyLayerProperties);
+    connect(m_config, &DockConfig::hideModeChanged, this, &DockWindow::applyLayerProperties);
+    connect(m_config, &DockConfig::hideModeChanged, this, &DockWindow::updateWindowsOverlap);
     connect(m_config, &DockConfig::panelModeChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::compactChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::alignmentChanged, this, &DockWindow::applyLayerProperties);
@@ -173,6 +174,28 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     connect(this, &QWindow::heightChanged, this,
             [this] { if (m_hidden || !m_gapRects.isEmpty()) applyHiddenMask(); });
 
+    // Dodge mode inputs: the window list (and every window's geometry), the
+    // current desktop, and the dock's own rectangle — which moves with the
+    // surface size and with every geometry setting.
+    if (m_monitor) {
+        connect(m_monitor, &WindowMonitor::windowAdded, this, [this](AbstractWindow *w) {
+            watchWindow(w);
+            updateWindowsOverlap();
+        });
+        connect(m_monitor, &WindowMonitor::windowRemoved, this,
+                &DockWindow::updateWindowsOverlap);
+        for (AbstractWindow *w : std::as_const(m_monitor->windows))
+            watchWindow(w);
+    }
+    if (m_desktops)
+        connect(m_desktops, &VirtualDesktops::currentChanged, this,
+                &DockWindow::updateWindowsOverlap);
+    connect(this, &QWindow::widthChanged, this, &DockWindow::updateWindowsOverlap);
+    connect(this, &QWindow::heightChanged, this, &DockWindow::updateWindowsOverlap);
+    connect(m_config, &DockConfig::edgeChanged, this, &DockWindow::updateWindowsOverlap);
+    connect(m_config, &DockConfig::alignmentChanged, this, &DockWindow::updateWindowsOverlap);
+    connect(m_config, &DockConfig::screenMarginChanged, this, &DockWindow::updateWindowsOverlap);
+
     setResizeMode(QQuickView::SizeViewToRootObject); // content drives surface size
     setSource(QUrl(QStringLiteral("qrc:/qml/Dock.qml")));
 
@@ -196,6 +219,82 @@ int DockWindow::thickness() const
     // Single source of truth, shared with Dock.qml's root.thickness (which
     // reads the same config.dockThickness): icon/label cell + padding.
     return m_config->dockThickness();
+}
+
+QRect DockWindow::dockRect() const
+{
+    QScreen *s = screen();
+    if (!s || width() <= 0 || height() <= 0)
+        return {};
+    const QRect g = s->geometry();
+    const int m = m_config->effectiveMargin();
+    const int w = width();
+    const int h = height();
+    const bool horizontal = m_config->edge() == DockConfig::Bottom
+                            || m_config->edge() == DockConfig::Top;
+
+    // Position along the edge, mirroring the anchors applyLayerProperties()
+    // asks for. Start/end sit against their corner, margin included, so they
+    // are exact. A centered surface is NOT: the compositor centers it inside
+    // whatever the *other* exclusive zones leave free (measured ~90 px off on
+    // a session with a left dock), and a Wayland client is never told where
+    // its surface landed. So a centered dock dodges on the whole edge band —
+    // it hides for a window it doesn't quite touch, never the other way round.
+    const int span = horizontal ? g.width() : g.height();
+    int len = horizontal ? w : h;
+    int along = horizontal ? g.left() : g.top();
+    switch (m_config->alignment()) {
+    case DockConfig::Start:  along += m; break;
+    case DockConfig::Center: len = span; break;
+    case DockConfig::End:    along += span - len - m; break;
+    }
+    const int bw = horizontal ? len : w; // band size, edge-relative
+    const int bh = horizontal ? h : len;
+
+    switch (m_config->edge()) {
+    case DockConfig::Bottom: return QRect(along, g.bottom() + 1 - m - h, bw, bh);
+    case DockConfig::Top:    return QRect(along, g.top() + m, bw, bh);
+    case DockConfig::Left:   return QRect(g.left() + m, along, bw, bh);
+    case DockConfig::Right:  return QRect(g.right() + 1 - m - w, along, bw, bh);
+    }
+    return {};
+}
+
+void DockWindow::watchWindow(AbstractWindow *window)
+{
+    if (!window)
+        return;
+    // `changed` covers geometry, minimized and the desktop list, which is
+    // everything the overlap test reads.
+    connect(window, &AbstractWindow::changed, this, &DockWindow::updateWindowsOverlap);
+}
+
+void DockWindow::updateWindowsOverlap()
+{
+    bool overlap = false;
+    if (m_config->hideMode() == DockConfig::DodgeWindows && m_monitor) {
+        const QRect dock = dockRect();
+        const QString desktop = m_desktops ? m_desktops->currentDesktopId() : QString();
+        if (!dock.isEmpty()) {
+            for (const AbstractWindow *w : std::as_const(m_monitor->windows)) {
+                if (w->minimized || w->skipTaskbar || w->geometry.isEmpty())
+                    continue;
+                // An empty desktop list means "on all desktops" in the
+                // plasma-window protocol, not "on none" — see AbstractWindow.
+                if (!desktop.isEmpty() && !w->desktops.isEmpty()
+                    && !w->desktops.contains(desktop))
+                    continue;
+                if (w->geometry.intersects(dock)) {
+                    overlap = true;
+                    break;
+                }
+            }
+        }
+    }
+    if (m_windowsOverlap == overlap)
+        return;
+    m_windowsOverlap = overlap;
+    emit windowsOverlapChanged();
 }
 
 void DockWindow::scheduleApplyScreen()
@@ -330,7 +429,9 @@ void DockWindow::applyLayerProperties()
     setProperty("kdock.exclusiveEdge", exclusiveEdge);
     setProperty("kdock.margins", QVariant::fromValue(margins));
     setProperty("kdock.layer", 2u); // top
-    setProperty("kdock.exclusiveZone", m_config->autohide() ? 0 : thickness() + m);
+    // Only the plain always-visible mode reserves a strut. Auto-hide, dodge and
+    // "windows go below" all let maximized windows use the whole edge.
+    setProperty("kdock.exclusiveZone", m_config->reservesSpace() ? thickness() + m : 0);
 }
 
 void DockWindow::setHidden(bool hidden)
