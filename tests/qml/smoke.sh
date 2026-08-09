@@ -86,6 +86,12 @@ for case in "${CASES[@]}"; do
     size=$(grep -oE '[0-9]+x[0-9]+\+[0-9-]+\+[0-9-]+' "$geom" 2>/dev/null | head -1)
     if [ -z "$size" ]; then
         problems+=("no apareció la ventana del dock: el QML no llegó a instanciarse")
+        # Sin esto, en una máquina ajena (CI) el fallo no dice NADA de la causa:
+        # un X que no arranca, un binario que no linkea o una raíz rota se ven
+        # exactamente igual desde acá.
+        problems+=("últimas líneas de su salida:")
+        while IFS= read -r line; do problems+=("      $line"); done \
+            < <(tail -8 "$log" 2>/dev/null)
     else
         w=${size%%x*}; rest=${size#*x}; h=${rest%%+*}
         if [ "$w" = "160" ] && [ "$h" = "160" ]; then
