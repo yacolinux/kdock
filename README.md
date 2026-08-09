@@ -381,8 +381,11 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
 ```
 
 Módulos de Qt: Core, Gui, Qml, Quick, Widgets, DBus y WaylandClient (más los headers
-privados de WaylandClient, que la integración layer-shell necesita). En runtime hace falta
-`QtQuick.Controls`.
+privados de WaylandClient, que la integración layer-shell necesita). En runtime hacen falta
+**dos módulos QML**: `QtQuick.Controls` y `Qt5Compat.GraphicalEffects` (paquete
+`qml6-module-qt5compat-graphicaleffects` en Debian/Ubuntu, `qt6-5compat` en Arch), que el
+dock y las tarjetas de vista previa usan para las sombras. **Sin el segundo el dock no
+arranca**: el QML no carga y la ventana queda vacía.
 
 **En runtime**, cada dependencia es opcional y solo apaga su widget si falta: `wpctl` o
 `pactl` (volumen y mezclador), `brightnessctl` (brillo), UDisks2 (discos), NetworkManager

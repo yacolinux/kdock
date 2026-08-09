@@ -322,8 +322,10 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
 ```
 
 Qt 模块：Core、Gui、Qml、Quick、Widgets、DBus 和 WaylandClient（还需要
-WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。运行时需要
-`QtQuick.Controls`。
+WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。运行时需要**两个 QML 模块**：
+`QtQuick.Controls` 和 `Qt5Compat.GraphicalEffects`（Debian/Ubuntu 上的
+`qml6-module-qt5compat-graphicaleffects` 包，Arch 上的 `qt6-5compat`），Dock 与预览卡片的
+阴影会用到它们。**缺少后者 Dock 根本无法启动**：QML 加载失败，窗口一片空白。
 
 **运行时**，每个依赖都是可选的，缺失时只会关闭对应的 widget：`wpctl` 或 `pactl`
 （音量和混音器）、`brightnessctl`（亮度）、UDisks2（磁盘）、NetworkManager（网络）、

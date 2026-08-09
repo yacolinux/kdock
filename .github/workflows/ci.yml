@@ -25,7 +25,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm \
             base-devel cmake ninja git python \
-            qt6-base qt6-declarative qt6-wayland qt6-tools \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-5compat \
             xorg-server-xvfb xorg-xauth xorg-xwininfo dbus
           # xorg-xauth va explícito: xvfb-run lo NECESITA (arma un .Xauthority
           # para el display nuevo) y en Arch xorg-server-xvfb no lo arrastra, a
@@ -57,33 +57,6 @@ jobs:
 
       - name: Compilar los cinco binarios y los tests
         run: cmake --build build -j
-
-      # PASO TEMPORAL de diagnóstico (se saca cuando CI esté verde): el dock sale
-      # con la ventana en 160x160 y sin imprimir una sola línea, cosa que no pasa
-      # en la máquina de desarrollo. Esto muestra qué dice Qt con el logging de QML
-      # prendido y si la ventana cambia de tamaño con el tiempo.
-      - name: DIAG dock bajo Xvfb
-        run: |
-          echo "== Qt y módulos QML disponibles =="
-          qmake6 -query QT_VERSION
-          ls /usr/lib/qt6/qml 2>/dev/null | head -20
-          echo "== corrida con logging de QML =="
-          mkdir -p /tmp/diag/kdock
-          printf '[General]\nedge=0\ndockLength=100\n' > /tmp/diag/kdock/kdock.conf
-          cp /tmp/diag/kdock/kdock.conf /tmp/diag/kdock/kdock-screen.conf
-          xvfb-run -a -s "-screen 0 1920x1080x24" bash -c '
-            XDG_DATA_HOME=/tmp/diag QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
-              QT_LOGGING_RULES="qt.qml.*=true" ./build/kdock > /tmp/diag/out.log 2>&1 &
-            P=$!
-            for t in 3 8 15; do
-              sleep $t
-              echo "--- t+${t}s:"
-              xwininfo -root -children | grep kdock || true
-            done
-            kill $P 2>/dev/null; sleep 1'
-          echo "== salida del dock (primeras 60 líneas) =="
-          head -60 /tmp/diag/out.log || true
-          echo "== tamaño: $(wc -c < /tmp/diag/out.log) bytes =="
 
       - name: Tests (static + unit + qml)
         # -LE live: todo menos el tier que necesita la sesión real.

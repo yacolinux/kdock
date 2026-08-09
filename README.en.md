@@ -374,8 +374,11 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
 ```
 
 Qt modules: Core, Gui, Qml, Quick, Widgets, DBus and WaylandClient (plus WaylandClient's
-private headers, needed by the layer-shell integration). At runtime you need
-`QtQuick.Controls`.
+private headers, needed by the layer-shell integration). At runtime you need **two QML
+modules**: `QtQuick.Controls` and `Qt5Compat.GraphicalEffects` (package
+`qml6-module-qt5compat-graphicaleffects` on Debian/Ubuntu, `qt6-5compat` on Arch), used for
+the shadows in the dock and the preview cards. **Without the second one the dock does not
+start**: the QML fails to load and the window comes up empty.
 
 **At runtime**, every dependency is optional and only disables its widget if missing:
 `wpctl` or `pactl` (volume and mixer), `brightnessctl` (brightness), UDisks2 (disks),
