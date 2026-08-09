@@ -11,9 +11,12 @@
 set -uo pipefail
 
 repo=${1:-.}
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../lib/sandbox.sh
+source "$here/../lib/sandbox.sh"
 cd "$repo"
 
-command -v qmllint > /dev/null || { echo "SKIP: qmllint no está instalado" >&2; exit 77; }
+qmllint=$(kdock_qt_tool qmllint) || kdock_skip "no encontré qmllint (ni en el PATH ni en el Qt de qmake6)"
 
 trees=(qml previews/qml tilemenu/qml controlmanager/qml controlmanager/qml/cards)
 status=0
@@ -25,7 +28,7 @@ for tree in "${trees[@]}"; do
     shopt -u nullglob
     [ ${#files[@]} -gt 0 ] || continue
 
-    out=$(qmllint "${files[@]}" 2>&1 | grep -iE "error|syntax" || true)
+    out=$("$qmllint" "${files[@]}" 2>&1 | grep -iE "error|syntax" || true)
     if [ -n "$out" ]; then
         echo "FAIL: $tree"
         echo "$out" | sed 's/^/    /'

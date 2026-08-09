@@ -76,6 +76,22 @@ kdock_sandbox_fixture_apps() {
     ln -sfn "$fixtures/applications" "$XDG_DATA_HOME/applications"
 }
 
+# Las herramientas de Qt (qmllint, lupdate) NO siempre están en el PATH: Arch las
+# instala en /usr/lib/qt6/bin y no las enlaza a /usr/bin para no chocar con Qt5,
+# que es justo lo que rompió la primera corrida de CI. Se resuelven preguntándole
+# a qmake6 en vez de suponer. Imprime la ruta, o nada si no está.
+kdock_qt_tool() {
+    local name=${1:?} path
+    if path=$(command -v "$name" 2>/dev/null); then echo "$path"; return 0; fi
+    local dir
+    for dir in $(qmake6 -query QT_INSTALL_BINS 2>/dev/null) \
+               $(qmake6 -query QT_HOST_LIBEXECS 2>/dev/null) \
+               /usr/lib/qt6/bin /usr/lib/qt6/libexec; do
+        [ -x "$dir/$name" ] && { echo "$dir/$name"; return 0; }
+    done
+    return 1
+}
+
 kdock_skip() { echo "SKIP: $*" >&2; exit 77; }
 kdock_fail() { echo "FAIL: $*" >&2; exit 1; }
 kdock_info() { echo "  $*"; }

@@ -12,10 +12,17 @@
 set -uo pipefail
 
 repo=${1:-.}
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=../lib/sandbox.sh
+source "$here/../lib/sandbox.sh"
 cd "$repo"
 
-command -v lupdate > /dev/null || { echo "SKIP: lupdate no está instalado" >&2; exit 77; }
-command -v python3 > /dev/null || { echo "SKIP: python3 no está instalado" >&2; exit 77; }
+# gen-capabase.py llama a lupdate por nombre, así que si vive fuera del PATH
+# (Arch: /usr/lib/qt6/bin) hay que ponérselo delante.
+lupdate=$(kdock_qt_tool lupdate) || kdock_skip "no encontré lupdate (ni en el PATH ni en el Qt de qmake6)"
+PATH="$(dirname "$lupdate"):$PATH"
+export PATH
+command -v python3 > /dev/null || kdock_skip "python3 no está instalado"
 
 snapshot=$(mktemp -d /tmp/kdock-catalog.XXXXXX)
 restore() {

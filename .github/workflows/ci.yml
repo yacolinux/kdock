@@ -27,8 +27,22 @@ jobs:
             base-devel cmake ninja git python \
             qt6-base qt6-declarative qt6-wayland qt6-tools \
             xorg-server-xvfb xorg-xwininfo dbus
-          # Lo que la suite usa por nombre, para que un cambio de paquete no se
-          # manifieste como un test "skipped" que nadie mira.
+          # Arch instala los binarios de Qt6 en /usr/lib/qt6/bin y NO los enlaza a
+          # /usr/bin (para no chocar con Qt5), así que qmllint y lupdate no están
+          # en el PATH. Los scripts igual los resuelven preguntándole a qmake6
+          # (tests/lib/sandbox.sh: kdock_qt_tool), pero dejarlos en el PATH del job
+          # es más simple de leer cuando algo falla.
+          # (qmake6 puede estar en ese mismo directorio, así que hay fallback.)
+          if command -v qmake6 > /dev/null; then
+            qmake6 -query QT_INSTALL_BINS >> "$GITHUB_PATH"
+          else
+            echo /usr/lib/qt6/bin >> "$GITHUB_PATH"
+          fi
+
+      - name: Verificar que están las herramientas que usa la suite
+        # Sin esto, una herramienta que falta se manifiesta como un test "skipped"
+        # (código 77) y la corrida sale verde sin haber probado ese tier.
+        run: |
           for tool in cmake ninja qmllint lupdate xvfb-run xwininfo dbus-run-session python3; do
             command -v "$tool" > /dev/null || { echo "falta $tool"; exit 1; }
           done
