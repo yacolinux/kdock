@@ -38,6 +38,7 @@ kdock_add_unit_test(tst_dockconfig)
 kdock_add_unit_test(tst_dockmanager)
 kdock_add_unit_test(tst_desktopentry)
 kdock_add_unit_test(tst_translations)
+kdock_add_unit_test(tst_qmlload)
 
 # The fake tools have to exist before any test runs, so they are generated at
 # build time by a target every unit test depends on.
@@ -46,7 +47,8 @@ add_custom_command(
     COMMAND ${KDOCK_TESTS_DIR}/lib/fakebin.sh ${CMAKE_CURRENT_BINARY_DIR}/fakebin
     COMMENT "Generating the fake system tools used by the tests")
 add_custom_target(kdock_fakebin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp)
-foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations)
+foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations
+          tst_qmlload)
     add_dependencies(${t} kdock_fakebin)
 endforeach()
 
