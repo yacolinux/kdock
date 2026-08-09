@@ -69,7 +69,7 @@ for case in "${CASES[@]}"; do
     # La ventana buena es la de ("kdock" "kdock"): hay tres que se llaman kdock.
     "$here/../lib/xvfb-app.sh" --log "$log" --settle 6 --screen "${SCREEN_W}x${SCREEN_H}" \
         --out "$geom" \
-        --inspect 'xwininfo -root -children | awk "/\"kdock\": \(\"kdock\"/ {print \$0}"' \
+        --inspect 'xwininfo -root -children; echo "--- pantallas:"; xdpyinfo | grep -A2 "^screen #"' \
         -- "$kdock" || true
 
     problems=()
@@ -82,8 +82,10 @@ for case in "${CASES[@]}"; do
             < <(grep -E "$BAD" "$log" | head -5)
     fi
 
+    # La ventana buena es la de ("kdock" "kdock"): hay tres que se llaman kdock.
     # 1920x68+0+0 -> ancho 1920, alto 68
-    size=$(grep -oE '[0-9]+x[0-9]+\+[0-9-]+\+[0-9-]+' "$geom" 2>/dev/null | head -1)
+    size=$(grep '"kdock": ("kdock"' "$geom" 2>/dev/null \
+           | grep -oE '[0-9]+x[0-9]+\+[0-9-]+\+[0-9-]+' | head -1)
     if [ -z "$size" ]; then
         problems+=("no apareció la ventana del dock: el QML no llegó a instanciarse")
         # Sin esto, en una máquina ajena (CI) el fallo no dice NADA de la causa:
@@ -99,9 +101,7 @@ for case in "${CASES[@]}"; do
             # cargó, así que acá SIEMPRE hay una razón en stderr (un módulo QML
             # que falta, el qrc vacío, un error de sintaxis): sin volcarla, en
             # una máquina ajena el fallo no dice nada.
-            problems+=("ventana de 160x160: la raíz del QML no cargó. Su salida:")
-            while IFS= read -r line; do problems+=("      $line"); done \
-                < <(tail -12 "$log" 2>/dev/null)
+            problems+=("ventana de 160x160: la raíz del QML no cargó")
         fi
         [ "$want_w" != "-1" ] && [ "$w" != "$want_w" ] && \
             problems+=("ancho $w, esperaba $want_w (geometría: $size)")
@@ -114,6 +114,13 @@ for case in "${CASES[@]}"; do
     else
         echo "FAIL: $name"
         printf '    %s\n' "${problems[@]}"
+        # Volcado crudo: en una máquina ajena (CI) esto es lo único que hay para
+        # distinguir un módulo QML que falta de una raíz sin tamaño o de un X que
+        # no arrancó. Se imprime entero a propósito, es corto.
+        echo "    --- stderr del proceso ($(wc -c < "$log" 2>/dev/null) bytes):"
+        sed 's/^/      /' "$log" 2>/dev/null | head -25
+        echo "    --- ventanas de X:"
+        sed 's/^/      /' "$geom" 2>/dev/null | head -20
         failures=$((failures + 1))
     fi
 
