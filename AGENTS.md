@@ -538,6 +538,7 @@ que saber para tocar código:
   - **Diagnosing this needs a screenshot, not the config**: the stored key changing is exactly what the broken version did. `spectacle-custom -b -n -f` before and after, cropped to the monitor's geometry, and count differing pixels — the desktop is mostly covered by windows, so "it changed" is a matter of degree, not of eyeballing.
   - **A monitor showing a STATIC image (`org.kde.image`) is the other half of the job**, added the same day after the user reported "ninguno de los botones funciona": that is what a monitor driven by *Wallpapers per virtual desktop* looks like (it pins one image per monitor on desktops 2..N), and it is also where a desktop lands whose slideshow was never restored. There is no slideshow to advance, so "next" is **the next file of the folder the current image lives in** (`nextImage()`: non-recursive, case-insensitive sort, wrapping; the folder comes from the `Image` key itself, so there is nothing new to configure). And here the plain write **does** work: `org.kde.image` honours `writeConfig("Image") + reloadConfig()` and repaints (measured: 2.03 M pixels per click, three clicks, three wallpapers) — the exact opposite of the slideshow plugin, which is why the two paths differ instead of sharing one.
   - Any other wallpaper plugin, and an empty `screenName`, are still no-ops / fall back to the global shortcut.
+  - **`nextWallpaperAll()`** advances every connected monitor, one `advanceForGeometry()` per `QScreen`. There is no "all screens" call in Plasma's scripting API and the KDE global shortcut only ever moves the primary one, so a loop is the whole implementation. It is what the panel's *Todos* button uses when no script is configured (2026-08-10).
 - Availability is the same static KDE-session check; `showNextWallpaper` flag + Settings → Widgets checkbox.
 - **CLI / `next-wall.sh`**: the same `WallpaperControl` is reachable one-shot via `kdock --next-wallpaper [--screen NAME]` (`runNextWallpaperCli` in `main.cpp`, dispatched before any dock is built). `next-wall.sh` is a thin wrapper. Two ways it learns the current monitor: (B) `ScriptRunnersManager::run(id, screenName)` exports the launching dock's connector as `KDOCK_SCREEN` (passed from `ScriptRunnerWidget`/`Dock.qml`'s `config.screenName`) → `--screen "$KDOCK_SCREEN"`, exact and no window; (A) fallback when the var is absent (global shortcut / terminal) — the CLI opens a 1×1 probe `QWidget` (`Qt::Tool`, frameless) that the compositor maps onto the active output, then reads `windowHandle()->screen()->name()`. The one-shot process keeps its loop alive ~1.6–2 s for the chained async D-Bus calls, then quits. **Re-`ninja install` after changing this** — the wrapper's `command -v kdock` resolves the *installed* binary first.
 
@@ -1082,6 +1083,13 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   y le pasa `compact`: la tarjeta de Principal y la solapa completa son **el mismo** `.qml`.
   Por eso cada `cards/*.qml` tiene dos bloques (`visible: card.compact` / `visible:
   !card.compact`) en vez de dos archivos que se desincronizarían.
+- **La tarjeta de fondo: un botón por monitor conectado más *Todos***
+  (`cards/WallpaperCard.qml`). Los de cada monitor van a `wallpaperControl.nextWallpaper(name)`
+  y *Todos* a `nextWallpaperAll()`; `cmConfig.wallpaperScript`, si está definido, **reemplaza**
+  a este último (se corre con `win.runScript`). Antes era al revés —sin script, *Todos* salía
+  gris—, y eso se leyó como "no funciona cambiar el fondo de todos los monitores"
+  (2026-08-10): un botón deshabilitado por una opción vacía no explica nada. El script quedó
+  como override para quien tenga el suyo.
 - **El motor de la grilla es `TileLayout` sin secciones ni grupos** (`cmlayout.cpp`): hay una
   sola grilla y a lo sumo una docena de tarjetas, así que la tarjeta se identifica por el id de
   su sección. Se conservó lo que costó caro allá: colisión manual (libre → coloca; **una** del

@@ -808,6 +808,7 @@ Apagar… = Shut Down…
 Aplicaciones = Aplicaciones
 Applications = Applications
 Avanza el fondo de %1 = Avanza el fondo de %1
+Avanza el fondo de todos los monitores conectados = Avanza el fondo de todos los monitores conectados
 Bajar = Move down
 Balanced = Balanced
 Bloquear = Lock
@@ -849,7 +850,6 @@ Copiar a Sig. Monitor = Copy to next monitor
 Corre %1 = Corre %1
 Crear dock vacío = Create empty dock
 Dark = Dark
-Definí el script en la configuración = Definí el script en la configuración
 Desmontar = Unmount
 Detener = Detener
 Dispositivos extraíbles = Removable devices
@@ -1008,7 +1008,7 @@ Ventana aquí = Window here
 Ver historial actual = Show current history
 Ver la sección completa = Ver la sección completa
 Volumen hasta 150 % = Volumen hasta 150 %
-«Todos» corre el script configurado; los demás usan el motor propio del dock, que sabe apuntar a un monitor. = «Todos» corre el script configurado; los demás usan el motor propio del dock, que sabe apuntar a un monitor.
+«Todos» avanza cada monitor conectado, o corre el script si configuraste uno. = «Todos» avanza cada monitor conectado, o corre el script si configuraste uno.
 
 ## Widgets
 menu = Holocron

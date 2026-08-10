@@ -81,6 +81,19 @@ void WallpaperControl::nextWallpaper(const QString &screenName)
     advanceForGeometry(g.x(), g.y());
 }
 
+void WallpaperControl::nextWallpaperAll()
+{
+    if (!m_available)
+        return;
+    // By geometry, not by name: that is what the containments are matched on
+    // anyway, and it skips the name lookup per screen.
+    const auto screens = QGuiApplication::screens();
+    for (QScreen *s : screens) {
+        const QRect g = s->geometry();
+        advanceForGeometry(g.x(), g.y());
+    }
+}
+
 void WallpaperControl::advanceForGeometry(int x, int y)
 {
     // Step 1: find out which of the two wallpaper plugins the containment runs,

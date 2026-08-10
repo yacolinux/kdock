@@ -38,6 +38,10 @@ public:
     // Advance the wallpaper on the given monitor (by connector name, e.g.
     // "DP-1"). Empty name falls back to the primary-only global shortcut.
     Q_INVOKABLE void nextWallpaper(const QString &screenName = QString());
+    // Same, for every connected monitor. Each one is resolved and advanced on
+    // its own — there is no "all screens" call in Plasma's scripting API, and
+    // the KDE global shortcut only ever moves the primary one.
+    Q_INVOKABLE void nextWallpaperAll();
 
 private:
     void checkAvailability();

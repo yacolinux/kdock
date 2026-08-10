@@ -808,6 +808,7 @@ Apagar… = 关机…
 Aplicaciones = Aplicaciones
 Applications = 应用程序
 Avanza el fondo de %1 = Avanza el fondo de %1
+Avanza el fondo de todos los monitores conectados = Avanza el fondo de todos los monitores conectados
 Bajar = 下移
 Balanced = 平衡
 Bloquear = 锁屏
@@ -849,7 +850,6 @@ Copiar a Sig. Monitor = 复制到下一显示器
 Corre %1 = Corre %1
 Crear dock vacío = 新建空 Dock
 Dark = 深色
-Definí el script en la configuración = Definí el script en la configuración
 Desmontar = 卸载
 Detener = Detener
 Dispositivos extraíbles = 可移动设备
@@ -1008,7 +1008,7 @@ Ventana aquí = 窗口移到此处
 Ver historial actual = 查看当前历史
 Ver la sección completa = Ver la sección completa
 Volumen hasta 150 % = Volumen hasta 150 %
-«Todos» corre el script configurado; los demás usan el motor propio del dock, que sabe apuntar a un monitor. = «Todos» corre el script configurado; los demás usan el motor propio del dock, que sabe apuntar a un monitor.
+«Todos» avanza cada monitor conectado, o corre el script si configuraste uno. = «Todos» avanza cada monitor conectado, o corre el script si configuraste uno.
 
 ## Widgets
 menu = 零度酷客

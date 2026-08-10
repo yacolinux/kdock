@@ -49,23 +49,34 @@ Item {
                 }
             }
 
+            // No script configured is the common case, and leaving the button
+            // greyed out there made "cambiar el fondo de todos los monitores"
+            // look broken (reported 2026-08-10). The engine can do it on its
+            // own — one advance per connected monitor — so the script is now
+            // an override for whoever has one, not a requirement.
             CmButton {
                 compact: card.compact
                 icon: "view-refresh"
                 label: qsTr("Todos")
                 tip: cmConfig.wallpaperScript.length > 0
                      ? qsTr("Corre %1").arg(cmConfig.wallpaperScript)
-                     : qsTr("Definí el script en la configuración")
+                     : qsTr("Avanza el fondo de todos los monitores conectados")
                 enabled: cmConfig.wallpaperScript.length > 0
-                onClicked: win.runScript(cmConfig.wallpaperScript)
+                         || (wallpaperControl ? wallpaperControl.available : false)
+                onClicked: {
+                    if (cmConfig.wallpaperScript.length > 0)
+                        win.runScript(cmConfig.wallpaperScript)
+                    else
+                        wallpaperControl.nextWallpaperAll()
+                }
             }
         }
 
         Text {
             visible: !card.compact
             width: parent.width
-            text: qsTr("«Todos» corre el script configurado; los demás usan el motor propio "
-                       + "del dock, que sabe apuntar a un monitor.")
+            text: qsTr("«Todos» avanza cada monitor conectado, o corre el script si "
+                       + "configuraste uno.")
             color: theme.foreground
             opacity: 0.45
             wrapMode: Text.Wrap
