@@ -79,11 +79,24 @@ sigue mapeado en memoria y el install lo reemplaza sin `ETXTBSY`. Sí hay que re
 para que tome el nuevo (su menú *Dock → Reiniciar* se re-lanza solo); reiniciarle el dock
 al usuario sin avisar deja la pantalla sin dock, así que preguntá antes.
 
-Los dos accesorios se reinician distinto y sin riesgo de dejar la pantalla pelada: cada uno
-sale por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu`, método `quit`) y vuelve a
-levantarse solo — el de previews al prender su casilla, el del menú de mosaicos en el próximo
-clic del widget. O sea que actualizar `kdock-tilemenu` es `install` + matarlo; no hace falta
-tocar el dock.
+Los accesorios se reinician distinto y sin riesgo de dejar la pantalla pelada: cada uno sale
+por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu` / `org.kdock.ControlManager`, método
+`quit`) y vuelve a levantarse solo — el de previews al prender su casilla, los otros dos en el
+próximo clic de su widget (o enseguida, si tienen *Precargar*). O sea que actualizar
+`kdock-tilemenu` es `install` + matarlo; no hace falta tocar el dock.
+
+**Desde 2026-08-10 *Dock → Reiniciar* ya los baja a los tres** (`src/apprestart.cpp`), así que
+para el usuario alcanza con eso. Pero **un accesorio que quedó corriendo no muestra el arreglo
+que acabás de instalar**, y desde afuera se ve idéntico a "el bug sigue": el proceso tiene
+mapeado el binario que el `install` reemplazó. La comprobación son dos segundos y no hay que
+saltearla antes de volver a diagnosticar:
+
+```bash
+ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(deleted)" = es el VIEJO
+```
+
+Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
+y el bug "seguía" (2026-08-10).
 
 El install escribe **diez** cosas: los cinco binarios y sus cinco `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los

@@ -1,5 +1,6 @@
 #include "dockservice.h"
 
+#include "apprestart.h"
 #include "dockconfig.h"
 #include "dockmanager.h"
 #include "dockwindow.h"
@@ -58,14 +59,10 @@ void DockService::openSettings(const QString &dockId)
 
 void DockService::restart()
 {
-    // Same as DockWindow::restart(), spelled out here so it works even when no
-    // dock window exists right now (every dock hidden by the virtual-desktop
-    // rule, for instance).
-    QStringList args = QCoreApplication::arguments();
-    if (!args.isEmpty())
-        args.removeFirst();
-    QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
-    QCoreApplication::quit();
+    // Same thing DockWindow::restart() does — accessories included. Reached
+    // even when no dock window exists right now (every dock hidden by the
+    // virtual-desktop rule, for instance).
+    kdock::restartAll();
 }
 
 bool DockService::darkMode()

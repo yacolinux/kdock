@@ -82,6 +82,7 @@ add_library(kdock_core OBJECT
     src/previewslauncher.cpp    src/previewslauncher.h
     src/tilemenulauncher.cpp    src/tilemenulauncher.h
     src/controlmanagerlauncher.cpp src/controlmanagerlauncher.h
+    src/apprestart.cpp          src/apprestart.h
     src/dockservice.cpp         src/dockservice.h
     src/globalshortcut.cpp      src/globalshortcut.h
 )

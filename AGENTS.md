@@ -1128,6 +1128,19 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
     ningún lado (ver la trampa de los structs de D-Bus en `CLAUDE.md`).
   - **No tiene `quit()` a propósito**: dejar al usuario sin dock y sin forma de volver no es
     algo que una llamada D-Bus perdida deba poder hacer.
+  - **`restart()` reinicia la familia entera, no solo este proceso** (`src/apprestart.{h,cpp}`,
+    2026-08-10). Los tres accesorios residentes (`kdock-previews`, `kdock-tilemenu`,
+    `kdock-controlmanager`) sobreviven a un reinicio del dock a propósito —es lo que los hace
+    instantáneos—, y el precio es que después de un `cmake --install` siguen ejecutando el
+    binario que tenían mapeado, o sea **el viejo**: se ve como "instalé el arreglo y el bug
+    sigue" (2026-08-10, con un `/proc/<pid>/exe` que ya decía `(deleted)`). Ahora *Dock →
+    Reiniciar* (y el `restart()` de D-Bus, que es el mismo camino) les pide `quit` a los tres
+    y **espera a que suelten el nombre del bus** antes de relanzarse. La espera no es cortesía:
+    `PreviewsLauncher::startIfEnabled()` y los `startIfPreloading()` se saltean cuando el
+    nombre sigue registrado, así que entregar la posta mientras los viejos agonizan deja a los
+    tres apagados. Tope de 2 s: pasado eso relanza igual, que es exactamente lo que pasaba
+    antes. **`kdock-calendar` no está en la lista**: no tiene servicio ni estado, es una
+    ventana de una sola vez, así que el próximo lanzamiento ya usa el binario nuevo.
   - La señal sale del `DarkModeNotifier` **de proceso**, no del `darkModeChanged()` por
     instancia: con quince docks ese se emite quince veces por conmutación, y esto es una señal
     de bus.

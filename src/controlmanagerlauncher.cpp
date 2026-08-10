@@ -114,6 +114,12 @@ void ControlManagerLauncher::setPreload(bool on)
     s.setValue(QStringLiteral("preload"), on);
 }
 
+void ControlManagerLauncher::quitRunning()
+{
+    if (running())
+        callPanel(QStringLiteral("quit"));
+}
+
 void ControlManagerLauncher::startIfPreloading()
 {
     // --hide: come up resident but with nothing on screen, so the first click is

@@ -102,6 +102,12 @@ void TileMenuLauncher::setPreload(bool on)
     s.setValue(QStringLiteral("preload"), on);
 }
 
+void TileMenuLauncher::quitRunning()
+{
+    if (running())
+        callTileMenu(QStringLiteral("quit"));
+}
+
 void TileMenuLauncher::startIfPreloading()
 {
     // --hide: come up resident but with nothing on screen, so the first click is

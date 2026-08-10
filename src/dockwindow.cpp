@@ -1,5 +1,6 @@
 #include "dockwindow.h"
 
+#include "apprestart.h"
 #include "brightnesscontrol.h"
 #include "batterycontrol.h"
 #include "clockwidget.h"
@@ -642,13 +643,10 @@ void DockWindow::quit()
 
 void DockWindow::restart()
 {
-    // Preserve the CLI arguments this instance was started with (e.g.
-    // --screen <name>) so the relaunched dock lands on the same output.
-    QStringList args = QCoreApplication::arguments();
-    if (!args.isEmpty())
-        args.removeFirst();
-    QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
-    QCoreApplication::quit();
+    // The accessories go down with the dock and come back with it: restarting
+    // only this process would leave them on the binary they were started with,
+    // which right after an install is the old one (see apprestart.h).
+    kdock::restartAll();
 }
 
 void DockWindow::setKeyboardInteractive(bool on)

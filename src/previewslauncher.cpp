@@ -98,6 +98,12 @@ void PreviewsLauncher::openSettings()
         start({QStringLiteral("--settings")});
 }
 
+void PreviewsLauncher::quitRunning()
+{
+    if (running())
+        callPreviews(QStringLiteral("quit"));
+}
+
 void PreviewsLauncher::startIfEnabled()
 {
     if (enabled() && !running())

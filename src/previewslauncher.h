@@ -33,6 +33,9 @@ public:
     void setEnabled(bool on);
     // Open the previews' own configuration panel.
     void openSettings();
+    // Stop a running instance without touching the master switch: the process
+    // is meant to come back (kdock::restartAll, then startIfEnabled()).
+    static void quitRunning();
     // Start the process when the switch is on and nothing is running yet.
     // Called once from main() after the docks are up.
     void startIfEnabled();

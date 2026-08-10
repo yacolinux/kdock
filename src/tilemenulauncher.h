@@ -25,6 +25,9 @@ public:
     static QString binaryPath();
     static bool installed();
     static bool running();
+    // Stop a running instance. It comes back on the next click of the widget,
+    // or right away when preload is on (kdock::restartAll).
+    static void quitRunning();
     // Whether kdock should bring the process up at startup instead of waiting
     // for the first click. Lives in the tile menu's own config file.
     static bool preload();
