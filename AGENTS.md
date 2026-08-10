@@ -208,12 +208,35 @@ el dock se lee como dos.
   secciones visibles y se queda con los tramos que alguna interseca.
 - **La región de entrada es el complemento de lo pintado**, no la lista de huecos: un tramo
   descartado también es transparente, así que también tiene que dejar pasar los clics.
+- **Un hueco es hueco solo donde no dibuja ninguna sección** (2026-08-10): lo primero que hace
+  `computeGapRuns()` es restarle a los huecos los rectángulos del contenido
+  (`root.subtractSpans()`, resta de intervalos sobre el eje principal). De ahí sale una
+  invariante que vale aunque el cálculo llegue tarde: si un punto tiene contenido no está en
+  ningún hueco → cae en algún tramo → ese tramo tiene contenido → sobrevive al filtro de tramos
+  vacíos → **no** entra en los recortes. O sea que **una sección no puede quedarse sin clics**,
+  ni siquiera cuando el layout se queda sin lugar y empieza a apilar secciones (el modo de falla
+  que justifica el auto-shrink). De paso el dibujo y la región de entrada no pueden discrepar:
+  salen los dos de la misma lista.
 - **`root.computeGapRuns()`** saca la geometría iterando `sectionRepeater.itemAt(i)` y
   mapeando con `mapToItem(slider, …)`: los ids de adentro del delegate no se ven desde la raíz
   (misma razón por la que existe `labelStrings()`). Calcula el **complemento** de los huecos y
-  lo publica en `gapRuns`; está debounced con un `Timer` de 16 ms y se re-dispara desde
-  `onWidthChanged`/`onHeightChanged` y las señales de `config` que mueven secciones
-  (`widgetOrder`, `panelMode`, `alignment`, `dockLength`, `edge`, `spacing`, `dockThickness`).
+  lo publica en `gapRuns`.
+- **El disparador es la geometría, no una lista de señales** (2026-08-10). El delegate de
+  `sectionRepeater` reprograma el cálculo en sus `onXChanged`/`onYChanged`/`onWidthChanged`/
+  `onHeightChanged` (y en el `onVisibleChanged`, que ya existía para la medición de nombres), o
+  sea que cualquier cosa que mueva una sección lo dispara. Las señales de `config` que ya estaban
+  (`widgetOrder`, `panelMode`, `alignment`, `dockLength`, `edge`, `spacing`, `dockThickness`) y
+  el `onWidthChanged` de la raíz quedan como estaban: son redundantes con esto pero cubren un
+  cambio de config que no mueva nada. Todo pasa por el `Timer` de 16 ms, que **coalesce**: en un
+  arranque entero (íconos, bandeja, las pasadas del auto-shrink) se ejecuta **una sola vez**, ya
+  con la geometría asentada — medido bajo Xvfb.
+  Antes el cálculo colgaba solo del ancho de la raíz y de esas señales, y **en modo panel
+  `root.width` no cambia nunca**: los tramos quedaban congelados en la geometría del primer
+  frame. Eso se veía como huecos pintados encima de íconos —y esos mismos íconos recortados de
+  la región de entrada, con sus clics cayendo al escritorio— y como un dock que se queda
+  "soldado" en una sola franja cuando el contenido pasa de capacidad y después vuelve a entrar
+  (con los springs en 0 el cálculo toma el camino de "un solo tramo, sin máscara", y sin
+  recálculo se quedaba ahí para siempre).
 - **El hueco también es hueco para el mouse**: la misma función manda los rectángulos a
   `DockWindow::setGapRects()`, que los resta de la región de entrada (`applyHiddenMask()`, el
   mismo `setMask()` que usa el auto-ocultado). Sin eso el hueco se vería pero se comería los

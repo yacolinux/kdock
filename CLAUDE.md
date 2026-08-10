@@ -815,6 +815,28 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   alineación Start/End y borde completo, y para Center usa la franja del borde entero a
   propósito. Si escribís algo que necesite la posición real de la superficie, no la calcules:
   cambiá el diseño para no necesitarla.
+- **En modo panel `root.width` NO cambia nunca**, así que cualquier cálculo colgado de
+  `onWidthChanged` se congela después del arranque (2026-08-10). El contenido que llega tarde es
+  la regla, no la excepción: los íconos de bandeja, las ventanas, la medición de nombres y las
+  pasadas del auto-shrink mueven el layout **después** del primer frame. Los tramos de fondo de
+  los separadores transparentes se calculaban así y quedaban con la geometría inicial: se veía
+  como huecos pintados encima de íconos y —porque esa misma lista alimenta la máscara de
+  entrada— como **clics que pasan de largo** por esos íconos, que parece un bug de la máscara y
+  es un cálculo viejo. Si algo depende de dónde están las secciones, colgalo de la geometría
+  (`onXChanged`/`onWidthChanged` en el delegate) y no de una lista de señales de config, que hay
+  que acordarse de ampliar cada vez. El `Timer` de 16 ms de por medio hace que salga barato:
+  coalesce el arranque entero en **un** cálculo, con la geometría ya asentada.
+  Y se reproduce bajo Xvfb en una corrida, sin sesión real: config con dos `gap`, un
+  `panelColor` bien visible (si no, el panel es negro sobre el negro de Xvfb y la captura no
+  dice nada), `dockLength=45` para que el contenido **no entre** y el auto-shrink corra después
+  del primer cálculo, y `python3` + `convert … txt:-` sobre una fila de la captura para listar
+  los tramos pintados. Antes: `[(0,863)]` — un solo tramo, el dock "soldado". Después:
+  `[(5,64) (92,353) (381,858)]`, los huecos justo donde están los separadores.
+  Ojo con dos cosas del arnés: **bajo X no hay layer-shell**, así que `panelMode` no estira la
+  ventana (sale de 77x77, o sea el grosor) y hay que usar `dockLength=100`; y una clave agregada
+  al final de un `.conf` copiado cae dentro de la **última sección** (`[widgetNames]`), no en
+  `[General]` — insertala después de la primera línea, y ojo si la clave ya existe más abajo,
+  porque gana la última.
 - **La franja que descubre un dock escondido está al borde de la SUPERFICIE, no de la pantalla**
   (2026-08-10). El margen de layer-shell (`screenMargin`, 4 px salvo en Compacto) separa la
   superficie del borde, así que los 3 px de la máscara de `applyHiddenMask()` caen adentro de la

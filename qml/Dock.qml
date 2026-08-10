@@ -170,6 +170,30 @@ Item {
         onTriggered: root.computeGapRuns()
     }
     function scheduleGapRuns() { gapTimer.restart() }
+    // spans minus cuts, on the main axis. Both are {pos, size} lists; a span
+    // that a cut splits in two comes back as two.
+    function subtractSpans(spans, cuts) {
+        let out = []
+        for (let i = 0; i < spans.length; ++i) {
+            let pieces = [{ from: spans[i].pos, to: spans[i].pos + spans[i].size }]
+            for (let c = 0; c < cuts.length; ++c) {
+                const cf = cuts[c].pos, ct = cuts[c].pos + cuts[c].size
+                let next = []
+                for (let p = 0; p < pieces.length; ++p) {
+                    const pf = pieces[p].from, pt = pieces[p].to
+                    if (ct <= pf || cf >= pt) { next.push(pieces[p]); continue }
+                    if (cf > pf) next.push({ from: pf, to: cf })
+                    if (ct < pt) next.push({ from: ct, to: pt })
+                }
+                pieces = next
+            }
+            for (let k = 0; k < pieces.length; ++k) {
+                if (pieces[k].to > pieces[k].from)
+                    out.push({ pos: pieces[k].from, size: pieces[k].to - pieces[k].from })
+            }
+        }
+        return out
+    }
     function computeGapRuns() {
         const total = root.horizontal ? slider.width : slider.height
         let holes = []
@@ -190,6 +214,19 @@ Item {
         }
         if (holes.length === 0) {
             // No transparent separator: one run, no mask. Same dock as always.
+            root.gapRuns = [{ pos: 0, size: total }]
+            dockWindow.setGapRects([])
+            return
+        }
+        // A hole is a hole only where no section draws. Everything below derives
+        // from this one rule, and it is what guarantees that a section can never
+        // be left outside the painted runs — and therefore never has its clicks
+        // cut out of the input region. Sections normally do not overlap a
+        // separator, but they do when the layout runs out of room and starts
+        // piling them (the failure mode the auto-shrink exists for), and a stale
+        // measurement can put them anywhere.
+        holes = root.subtractSpans(holes, content)
+        if (holes.length === 0) {
             root.gapRuns = [{ pos: 0, size: total }]
             dockWindow.setGapRects([])
             return
@@ -873,6 +910,25 @@ Item {
                     readonly property bool block: root.isBlock(token)
                     readonly property bool draggable: !block
 
+                    // The painted runs and the input mask are derived from where
+                    // the sections *are*, so the trigger has to be exactly that:
+                    // any section that moves or resizes reschedules the run
+                    // computation. A list of config signals cannot stand in for
+                    // it — the layout also moves when an app opens or closes, a
+                    // tray item arrives, the auto-shrink rescales or the label
+                    // measurement settles, and in panel mode root.width never
+                    // changes, so after startup nothing recomputed at all and the
+                    // runs stayed frozen on the first frame's geometry (bug
+                    // 2026-08-10: holes painted over icons, and those same icons
+                    // cut out of the input region, so their clicks fell through
+                    // to the desktop). scheduleGapRuns() coalesces through a
+                    // 16 ms timer, and computeGapRuns() writes nothing the layout
+                    // reads, so this cannot feed back.
+                    onXChanged: root.scheduleGapRuns()
+                    onYChanged: root.scheduleGapRuns()
+                    onWidthChanged: root.scheduleGapRuns()
+                    onHeightChanged: root.scheduleGapRuns()
+
                     // Name of this section, drawn around its content. The apps
                     // block is excluded: it labels each of its own icons with
                     // the separate app setting; the separators draw no name.
@@ -881,7 +937,9 @@ Item {
                     readonly property string label: labelled ? root.widgetNameOf(token) : ""
                     // Renames and show/hide both move the widest drawn name.
                     onLabelChanged: root.scheduleLabelMeasure()
-                    onVisibleChanged: root.scheduleLabelMeasure()
+                    // One handler per property: the gap runs care too, because a
+                    // section switching off changes which run has content in it.
+                    onVisibleChanged: { root.scheduleLabelMeasure(); root.scheduleGapRuns() }
                     // Measured off-screen, never from the drawn Text: its width
                     // feeds the section size, which would loop back into it.
                     TextMetrics {
