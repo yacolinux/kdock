@@ -6,18 +6,11 @@
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDir>
-#include <QDirIterator>
 #include <QGuiApplication>
 #include <QProcessEnvironment>
 #include <QScreen>
-#include <QUrl>
-
-#include <algorithm>
 
 namespace {
-
-const QChar kSep = QChar(0x1f); // unit separator between script output fields
 
 // JS snippet resolving the Plasma screen index whose geometry starts at (x, y)
 // into `t` (‑1 if none). Only valid indices (0..screenCount-1) are scanned so a
@@ -82,76 +75,40 @@ void WallpaperControl::nextWallpaper(const QString &screenName)
 
 void WallpaperControl::advanceForGeometry(int x, int y)
 {
-    // Step 1: read the slideshow's current image + folders for the containment
-    // on the target screen.
-    const QString readScript =
+    // Step 1: take the containment off the slideshow plugin, and deliberately
+    // WITHOUT reloadConfig() — reloading here repaints to whatever stale image
+    // the org.kde.image group holds, which reads as an extra wallpaper flashing
+    // by before the real one.
+    const QString toImage =
         targetIndexJs(x, y) +
         QStringLiteral(
             "if(t<0){print('NONE');}else{var ds=desktops();var done=false;"
             "for(var j=0;j<ds.length&&!done;j++){var d=ds[j];if(d.screen===t){done=true;"
-            "if(d.wallpaperPlugin!=='org.kde.slideshow'){print('NOSLIDE');}else{"
-            "d.currentConfigGroup=['Wallpaper','org.kde.slideshow','General'];"
-            "print('OK'+String.fromCharCode(31)+d.readConfig('Image')"
-            "+String.fromCharCode(31)+d.readConfig('SlidePaths'));}}}}");
+            "if(d.wallpaperPlugin!=='org.kde.slideshow'){print('NOSLIDE');}"
+            "else{d.wallpaperPlugin='org.kde.image';print('OK');}}}}");
 
-    auto reply = PlasmaScript::evaluate(readScript);
+    auto reply = PlasmaScript::evaluate(toImage);
     auto *watcher = new QDBusPendingCallWatcher(reply, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, x, y](QDBusPendingCallWatcher *w) {
         w->deleteLater();
         QDBusPendingReply<QString> r = *w;
-        if (r.isError())
-            return;
-        const QString out = r.value();
-        const QStringList parts = out.split(kSep);
-        if (parts.isEmpty() || parts.first() != QLatin1String("OK") || parts.size() < 3)
-            return; // NONE / NOSLIDE / unexpected
-
-        const QString currentPath = QUrl(parts.at(1)).toLocalFile();
-        const QStringList folders =
-            parts.at(2).split(QLatin1Char(','), Qt::SkipEmptyParts);
-
-        const QString next = nextImage(folders, currentPath);
-        if (next.isEmpty())
+        // NONE (no containment there), NOSLIDE (a static wallpaper has no
+        // "next" image, by design) or an error: leave the desktop alone.
+        if (r.isError() || r.value() != QLatin1String("OK"))
             return;
 
-        // Step 2: write the chosen image back to the same containment.
-        const QString nextUrl = QUrl::fromLocalFile(next).toString();
-        const QString writeScript =
+        // Step 2: back to the slideshow, and KDE advances it itself. This has
+        // to be a SEPARATE evaluateScript call — both flips in one script do
+        // not repaint at all — which is why it is chained on the reply instead
+        // of being one round trip.
+        const QString toSlideshow =
             targetIndexJs(x, y) +
             QStringLiteral(
                 "if(t>=0){var ds=desktops();for(var j=0;j<ds.length;j++){var d=ds[j];"
-                "if(d.screen===t){d.currentConfigGroup=['Wallpaper','org.kde.slideshow','General'];"
-                "d.writeConfig('Image','%1');d.reloadConfig();break;}}}")
-                .arg(PlasmaScript::escapeJs(nextUrl));
-        PlasmaScript::run(writeScript);
+                "if(d.screen===t){d.wallpaperPlugin='org.kde.slideshow';"
+                "d.reloadConfig();break;}}}");
+        PlasmaScript::run(toSlideshow);
     });
-}
-
-QString WallpaperControl::nextImage(const QStringList &folders, const QString &currentPath)
-{
-    static const QStringList kFilters = {
-        QStringLiteral("*.jpg"),  QStringLiteral("*.jpeg"), QStringLiteral("*.png"),
-        QStringLiteral("*.webp"), QStringLiteral("*.bmp"),  QStringLiteral("*.gif"),
-        QStringLiteral("*.svg"),  QStringLiteral("*.svgz")};
-
-    QStringList files;
-    for (const QString &folder : folders) {
-        QDirIterator it(folder, kFilters, QDir::Files, QDirIterator::Subdirectories);
-        while (it.hasNext())
-            files << it.next();
-    }
-    files.removeDuplicates();
-    if (files.isEmpty())
-        return {};
-
-    // Stable order so "next" is deterministic regardless of Plasma's mode.
-    std::sort(files.begin(), files.end(), [](const QString &a, const QString &b) {
-        return a.compare(b, Qt::CaseInsensitive) < 0;
-    });
-
-    int idx = files.indexOf(currentPath);
-    // idx < 0 (current not in the set) → start at the first image.
-    return files.at((idx + 1) % files.size());
 }
 
 void WallpaperControl::invokeGlobalShortcut()

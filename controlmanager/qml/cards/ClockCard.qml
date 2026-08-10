@@ -27,6 +27,21 @@ Item {
         onTriggered: card.now = new Date()
     }
 
+    // Click the clock, get the calendar — the same reflex the dock's clock
+    // widget trains (there a left click opens kdock-calendar; here the calendar
+    // is a tab away, so it just goes there). Only when that tab actually
+    // exists: with the section disabled the click would set a currentTab the
+    // tab bar does not draw, and the panel would look empty.
+    readonly property bool calendarReachable: cmConfig.sectionEnabled("calendar")
+                                              && cmConfig.visibleTabs().indexOf("calendar") >= 0
+
+    MouseArea {
+        anchors.fill: parent
+        enabled: card.calendarReachable
+        cursorShape: Qt.PointingHandCursor
+        onClicked: win.currentTab = "calendar"
+    }
+
     Column {
         anchors.centerIn: parent
         spacing: card.compact ? 0 : 6
