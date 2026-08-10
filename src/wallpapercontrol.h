@@ -12,6 +12,12 @@
 // SEPARATE call, back to org.kde.slideshow + reloadConfig(): KDE then advances
 // the slideshow itself, exactly like the desktop's own "Next Wallpaper". That
 // is what this class does, and what next-wall.sh has been doing since 2026-07-16.
+//
+// A monitor showing a STATIC image (org.kde.image — which is what *Wallpapers
+// per virtual desktop* leaves on desktops 2..N) has no slideshow to advance, so
+// there "next" means the next file of the folder the current image lives in.
+// That plugin, unlike the slideshow one, does honour writeConfig("Image") +
+// reloadConfig() and repaints — measured, and the reason the two paths differ.
 
 #pragma once
 
@@ -37,10 +43,12 @@ private:
     void checkAvailability();
     // Primary-only fallback: invoke the KDE global shortcut.
     void invokeGlobalShortcut();
-    // Ask KDE for the next image of the slideshow on the containment at
-    // (x, y), by cycling its wallpaper plugin. No-op when that containment is
-    // not running a slideshow.
+    // Advance the wallpaper of the containment at (x, y): cycle the plugin for
+    // a slideshow, write the next file of the folder for a static image. No-op
+    // for any other wallpaper plugin.
     void advanceForGeometry(int x, int y);
+    // Pick the image after `currentPath` (sorted, wrapping) from `folders`.
+    static QString nextImage(const QStringList &folders, const QString &currentPath);
 
     bool m_available = false;
 };
