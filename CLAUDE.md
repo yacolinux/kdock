@@ -815,6 +815,30 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   alineación Start/End y borde completo, y para Center usa la franja del borde entero a
   propósito. Si escribís algo que necesite la posición real de la superficie, no la calcules:
   cambiá el diseño para no necesitarla.
+- **Un lanzador de PWA de Chromium cuya app ya no está instalada en el perfil es un no-op
+  silencioso, y no es un bug de kdock** (2026-08-10, diagnosticado en una segunda máquina). El
+  `.desktop` sobrevive a la desinstalación de la PWA. kdock ejecuta el `Exec`, el wrapper del
+  navegador encuentra la instancia viva, le relaya la línea de comandos, imprime *"Abriendo en
+  sesión de explorador existente"* y sale; el navegador **ignora un `--app-id` que no conoce**.
+  Desde afuera se ve exactamente como *"kdock no lanza esta app"*.
+  **Diagnóstico en dos minutos**: `journalctl --user | grep -i "sesión de explorador"` — si el
+  mensaje aparece con un **pid hijo** de kdock (distinto del pid del dock), kdock ya hizo su
+  parte y el problema es del navegador. Se confirma comparando el extId del `.desktop`
+  (`[a-p]{32}`) contra `~/.config/<navegador>/Default/Web Applications/Manifest Resources/`,
+  que es la lista de apps realmente instaladas en ese perfil.
+  **Dos pistas falsas que cuestan horas, las dos mordieron:**
+  - *"Desde el ícono anclado sí funciona, desde el menú no"* **no** significa que el camino del
+    menú esté roto. `DockModel::launch()`, `AppMenu::launch()` y `TileWindow::launch()`
+    terminan los tres en el mismo `DesktopEntryIndex::byId()` + `DesktopEntryIndex::launch()`:
+    con el mismo id hacen lo mismo. Si uno anda y el otro no, es que **son `.desktop` distintos
+    para la misma app** — varias PWA tienen dos o tres lanzadores (Edge, Chrome, y las copias
+    hechas a mano con sufijo "ED") con nombres casi iguales en el menú, y lo que está anclado
+    suele ser justo el que sí funciona. El caso real: anclado `msedge-hnpfjng…` "WhatsApp Web"
+    (instalada, lanza) contra `msedge-ffllmad…` "WhatsApp" del menú (desinstalada, no hace
+    nada).
+  - El `.desktop` **no** es la diferencia: los archivos salieron **byte a byte idénticos** entre
+    la máquina donde anda y la que no (`diff` sobre el mismo nombre). Lo que difiere es el
+    **perfil del navegador**, que no se ve en ningún lado del dock.
 - **En modo panel `root.width` NO cambia nunca**, así que cualquier cálculo colgado de
   `onWidthChanged` se congela después del arranque (2026-08-10). El contenido que llega tarde es
   la regla, no la excepción: los íconos de bandeja, las ventanas, la medición de nombres y las
