@@ -103,7 +103,18 @@ Item {
     }
     onLabelVisibleChanged: scheduleLabelMeasure()
     onWidgetLabelVisibleChanged: scheduleLabelMeasure()
-    Component.onCompleted: { scheduleLabelMeasure(); scheduleGapRuns() }
+    // One handler per object: a second Component.onCompleted is "Property value
+    // set multiple times" and the whole file fails to load. The setHidden() is
+    // the *initial* hidden state — the ones in the slide Behaviors only fire
+    // when an animation ends, so a dock that comes up auto-hidden was never
+    // reported as hidden and kept its whole surface hoverable (and its edge
+    // margin) until the first show/hide cycle.
+    Component.onCompleted: {
+        scheduleLabelMeasure()
+        scheduleGapRuns()
+        if (!revealed)
+            dockWindow.setHidden(true)
+    }
     Connections {
         target: config
         // The only two inputs of config.iconLabelFontPx. Deliberately *not*

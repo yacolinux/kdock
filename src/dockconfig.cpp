@@ -341,21 +341,25 @@ namespace {
 // "previous" is what the system had right before dark mode went on: it is what
 // an empty "normal" value restores. Written by DarkModeAppearance, never by the
 // dialog, so the user's own choice is a separate key and survives untouched.
+// "self" is the id kdock last pushed to the system, and it is what tells the
+// two apart: see darkAppearanceSelfApplied().
 struct DarkAppearanceKeys {
     const char *enabled;
     const char *dark;
     const char *normal;
     const char *previous;
+    const char *self;
 };
 const DarkAppearanceKeys kDarkAppearanceKeys[] = {
     {"darkModeApplyColorScheme",   "darkModeColorSchemeDark",   "darkModeColorSchemeNormal",
-     "darkModeColorSchemePrev"},
+     "darkModeColorSchemePrev", "darkModeColorSchemeSelf"},
     {"darkModeApplyIconTheme",     "darkModeIconThemeDark",     "darkModeIconThemeNormal",
-     "darkModeIconThemePrev"},
+     "darkModeIconThemePrev", "darkModeIconThemeSelf"},
     // The dock's own override has no "previous": there an empty id is a real
-    // choice ("no override, follow KDE"), not "leave it alone".
+    // choice ("no override, follow KDE"), not "leave it alone". And no "self":
+    // Theme is written synchronously, so there is no stale read to guard.
     {"darkModeApplyDockIconTheme", "darkModeDockIconThemeDark", "darkModeDockIconThemeNormal",
-     nullptr},
+     nullptr, nullptr},
 };
 constexpr int kDarkAppearanceCount = int(std::size(kDarkAppearanceKeys));
 } // namespace
@@ -410,6 +414,23 @@ void DockConfig::setDarkAppearancePrevious(int item, const QString &value)
     s.setValue(QString::fromLatin1(kDarkAppearanceKeys[item].previous), value);
     // No notifyDarkModeChanged(): this is bookkeeping about the system, not a
     // setting the UI shows.
+}
+
+QString DockConfig::darkAppearanceSelfApplied(int item)
+{
+    if (item < 0 || item >= kDarkAppearanceCount || !kDarkAppearanceKeys[item].self)
+        return QString();
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QString::fromLatin1(kDarkAppearanceKeys[item].self)).toString();
+}
+
+void DockConfig::setDarkAppearanceSelfApplied(int item, const QString &value)
+{
+    if (item < 0 || item >= kDarkAppearanceCount || !kDarkAppearanceKeys[item].self)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QString::fromLatin1(kDarkAppearanceKeys[item].self), value);
+    // Bookkeeping like the "previous" above: no notifyDarkModeChanged().
 }
 
 void DockConfig::setDarkAppearanceValue(int item, bool dark, const QString &value)

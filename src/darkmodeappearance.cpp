@@ -26,6 +26,11 @@ void DarkModeAppearance::sync()
     // which outlives this process. Without it a restart with the mode already
     // on would re-apply (harmless) and, worse, a restart with it off would skip
     // the restore and leave the desktop dark forever.
+    //
+    // It is also the source of truth that makes re-entry a no-op: while it says
+    // the mode is on, nothing here runs, so more clicks on "go dark" can never
+    // touch what the normal mode restores. That value is the user's to change,
+    // from Settings -> DarkMode.
     if (dark == DockConfig::darkAppearanceApplied())
         return;
     apply(dark);
@@ -45,8 +50,20 @@ void DarkModeAppearance::apply(bool dark)
         for (auto [item, live] :
              {std::pair{int(DockConfig::SystemColorScheme), m_appearance->currentColorScheme()},
               std::pair{int(DockConfig::SystemIconTheme), m_appearance->currentIconTheme()}}) {
-            if (DockConfig::darkAppearanceEnabled(item) && !live.isEmpty())
-                DockConfig::setDarkAppearancePrevious(item, live);
+            // Only a value the *user* put there is worth remembering. The tools
+            // that apply these are startDetached (~900 ms), so leaving the mode
+            // and coming back right away reads a system that still holds the
+            // dark id kdock just wrote — and storing that as "what was there
+            // before" makes leaving dark mode restore dark, forever. That is
+            // the bug this guard exists for (2026-08-10).
+            if (live.isEmpty() || live == DockConfig::darkAppearanceSelfApplied(item)
+                || live == DockConfig::darkAppearanceValue(item, true))
+                continue;
+            // Not gated on darkAppearanceEnabled(): the snapshot is free
+            // bookkeeping, and without it turning an item on *while already
+            // dark* would leave nothing to restore on the way back. What the
+            // flag governs is what gets applied, in valueFor() below.
+            DockConfig::setDarkAppearancePrevious(item, live);
         }
     }
 
@@ -64,9 +81,16 @@ void DarkModeAppearance::apply(bool dark)
 
     if (m_appearance) {
         // Both are no-ops on an empty id — better to leave the desktop alone
-        // than to apply a guess.
-        m_appearance->applyColorScheme(valueFor(DockConfig::SystemColorScheme));
-        m_appearance->applyIconTheme(valueFor(DockConfig::SystemIconTheme));
+        // than to apply a guess. Whatever does go out is recorded as ours, so
+        // the snapshot above can tell it apart from a choice of the user's.
+        const QString colors = valueFor(DockConfig::SystemColorScheme);
+        const QString icons = valueFor(DockConfig::SystemIconTheme);
+        m_appearance->applyColorScheme(colors);
+        m_appearance->applyIconTheme(icons);
+        if (!colors.isEmpty())
+            DockConfig::setDarkAppearanceSelfApplied(DockConfig::SystemColorScheme, colors);
+        if (!icons.isEmpty())
+            DockConfig::setDarkAppearanceSelfApplied(DockConfig::SystemIconTheme, icons);
     }
     if (m_theme && DockConfig::darkAppearanceEnabled(DockConfig::DockIconTheme)) {
         // Unlike the two above, an empty id is meaningful here: it clears the

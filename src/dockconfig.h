@@ -355,6 +355,14 @@ public:
     // DockIconTheme, where an empty id already means something else.
     static QString darkAppearancePrevious(int item);
     static void setDarkAppearancePrevious(int item, const QString &value);
+    // The id kdock itself last pushed to the system, in either direction. It is
+    // what makes the snapshot above trustworthy: the tools that apply a scheme
+    // or an icon theme are startDetached, so re-reading the system right after
+    // a switch can still return the *previous* value — and storing that as "what
+    // was there before" poisons the normal mode for good. A live value equal to
+    // this one is ours, not the user's choice, so it is never snapshotted.
+    static QString darkAppearanceSelfApplied(int item);
+    static void setDarkAppearanceSelfApplied(int item, const QString &value);
     // Whether the side effects above are currently applied. Persisted, because
     // it is the state of the *system*, not of this process: without it a
     // restart would re-apply them and overwrite nothing, or skip the restore.

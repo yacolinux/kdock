@@ -355,13 +355,21 @@ void DockWindow::applyLayerProperties()
     uint anchor = AnchorBottom;
     QMargins margins;
     const int m = m_config->effectiveMargin();
+    // While hidden the surface hugs the screen edge instead of standing off by
+    // the margin: the reveal strip is a few pixels at the *surface's* edge
+    // (applyHiddenMask()), so with a margin those pixels sit inside the screen
+    // and the dock would only come back once the pointer moved *away* from the
+    // edge by exactly the margin — the erratic reveal reported 2026-08-10. Only
+    // the dock's own edge; the alignment margins below stay put, or the dock
+    // would slide along the edge every time it hides.
+    const int edgeM = m_hidden ? 0 : m;
     const bool horizontal = m_config->edge() == DockConfig::Bottom
                             || m_config->edge() == DockConfig::Top;
     switch (m_config->edge()) {
-    case DockConfig::Bottom: anchor = AnchorBottom; margins.setBottom(m); break;
-    case DockConfig::Top:    anchor = AnchorTop;    margins.setTop(m);    break;
-    case DockConfig::Left:   anchor = AnchorLeft;   margins.setLeft(m);   break;
-    case DockConfig::Right:  anchor = AnchorRight;  margins.setRight(m);  break;
+    case DockConfig::Bottom: anchor = AnchorBottom; margins.setBottom(edgeM); break;
+    case DockConfig::Top:    anchor = AnchorTop;    margins.setTop(edgeM);    break;
+    case DockConfig::Left:   anchor = AnchorLeft;   margins.setLeft(edgeM);   break;
+    case DockConfig::Right:  anchor = AnchorRight;  margins.setRight(edgeM);  break;
     }
 
     // A dock that spans the whole edge anchors the full side (edge + both
@@ -424,6 +432,11 @@ void DockWindow::setHidden(bool hidden)
         return;
     m_hidden = hidden;
     applyHiddenMask();
+    // Re-anchor: hiding drops the edge margin so the reveal strip reaches the
+    // real screen edge, showing puts it back. The change reaches the compositor
+    // live through the dynamic-property filter in layershell.cpp, the same path
+    // screenMarginChanged() already uses.
+    applyLayerProperties();
 }
 
 void DockWindow::setGapRects(const QVariantList &rects)

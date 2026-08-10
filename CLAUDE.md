@@ -427,11 +427,17 @@ se instala. **No hace falta CMake: alcanza con linkear los objetos que el build 
 salteando `main.cpp.o`:
 
 ```bash
-OBJS=$(find build/CMakeFiles/kdock.dir -name '*.o' | grep -v '/main.cpp.o' | tr '\n' ' ')
+OBJS=$(find build/CMakeFiles/kdock_core.dir -name '*.o' | tr '\n' ' ')
 g++ -std=c++17 -fPIC /tmp/p/dlg.cpp $OBJS -Isrc \
     $(pkg-config --cflags --libs Qt6Widgets Qt6Quick Qt6Qml Qt6DBus Qt6WaylandClient \
                                  Qt6Gui Qt6Core wayland-client) -o /tmp/p/dlgprobe
 ```
+
+**Es `kdock_core.dir`, no `kdock.dir`** (desde que existe la suite de tests: las clases viven en
+la librería que comparten `kdock` y los tests). Linkear `kdock.dir` da *"vtable for X sin
+definir"* para cualquier `QObject` — su `mocs_compilation.cpp` está **vacío** y los `moc_*.cpp`
+se compilan del otro lado. Y no mezcles las dos: `qrc_translations.cpp` está en ambas y salen
+*"definiciones múltiples"*.
 
 **Relinkeá la sonda después de cada `cmake --build`**: el `g++` de arriba no depende de nada,
 así que si solo recompilás el proyecto la sonda sigue siendo la vieja y ves el bug que creías
@@ -498,6 +504,21 @@ riesgo. Con eso se cerró el bug de dark mode del 2026-08-05.
 Y si en cambio dejás que las herramientas corran de verdad: **son `startDetached`**, o sea
 asíncronas. Una sonda que lee `kdeglobals` inmediatamente después ve el valor **viejo** y parece
 que la aplicación no hizo nada; hay que esperar (~900 ms) antes de leer.
+
+**Y esa lectura vieja no es solo un problema del arnés: guardarla rompe el modo normal para
+siempre** (2026-08-10, bug reportado por el usuario). `DarkModeAppearance` capturaba el esquema
+de color vivo al entrar en oscuro, para restaurarlo al salir. Salir del modo y volver a entrar
+dentro de esos ~900 ms lee un `kdeglobals` que **todavía tiene el esquema oscuro que kdock
+acababa de escribir**, y lo guarda como "lo que había antes": desde ahí, salir del modo oscuro
+*restaura oscuro*, y no hay forma de que se recupere solo. Se destapó con el
+`darkModeColorSchemePrev` del usuario apuntando a un `.colors` con `BackgroundNormal=24,25,38`.
+Regla general: **antes de guardar un valor leído del sistema como "el del usuario", verificá que
+no sea uno que vos mismo escribiste** — kdock lo hace con `DockConfig::darkAppearanceSelfApplied()`.
+La sonda que lo prueba son 60 líneas contra `kdock_core` con las herramientas falsas en el `PATH`
+y un `XDG_CONFIG_HOME` descartable (que es lo que aísla `kdeglobals`; `XDG_DATA_HOME` **no**
+alcanza), simulando la carrera a mano: escribir el valor oscuro en el `kdeglobals` falso entre
+paso y paso. El control positivo —sacar la guarda, recompilar, correr— pasa de `PASS` a
+`prev=DarkTest` en una corrida.
 
 ### Arnés del portapapeles en la sesión real (klipper como control)
 
@@ -794,6 +815,18 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   alineación Start/End y borde completo, y para Center usa la franja del borde entero a
   propósito. Si escribís algo que necesite la posición real de la superficie, no la calcules:
   cambiá el diseño para no necesitarla.
+- **La franja que descubre un dock escondido está al borde de la SUPERFICIE, no de la pantalla**
+  (2026-08-10). El margen de layer-shell (`screenMargin`, 4 px salvo en Compacto) separa la
+  superficie del borde, así que los 3 px de la máscara de `applyHiddenMask()` caen adentro de la
+  pantalla: el mouse en el borde no descubre nada y el dock aparece al *retirar* el puntero
+  exactamente esos píxeles — se lee como un descubrimiento errático, no como un problema de
+  geometría, y en Compacto no pasa (margen 0). Arreglado poniendo el margen del borde propio en 0
+  mientras `m_hidden`; los laterales de alineación **no**, o el dock se corre a lo largo del
+  borde al esconderse. Lo mismo mordía al arrancar: los `setHidden(true)` de las `Behavior` del
+  slider solo corren al terminar una animación, y el primer valor escondido lo toma el binding
+  **sin animar**, así que un dock que arranca oculto nunca se reportaba como oculto. Nada de esto
+  se prueba bajo Xvfb (no hay layer-shell); lo que sí se comprueba ahí en diez segundos es que el
+  `setHidden(true)` inicial ocurre, con un `qInfo()` temporal.
 - **El modo *dodge* solo se prueba en la sesión Wayland real** (2026-08-09): bajo Xvfb no hay
   protocolo de ventanas, así que `windowsOverlap` queda en false y el dock sale siempre visible
   — la corrida limpia no prueba nada de la feature. La receta que funcionó: copiar el binario a

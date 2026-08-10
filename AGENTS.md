@@ -273,6 +273,26 @@ ocultamiento"), y son cuatro:
   con la **franja del borde entero**: se esconde de más, nunca de menos.
 - QML lo junta todo en `root.hideWanted` (`hideMode===1 || (hideMode===2 && dockWindow.windowsOverlap)`),
   que es lo que `revealed` niega; el resto de la animación y de la máscara no cambió.
+- **Escondido, la superficie se pega al borde de la pantalla** (2026-08-10). La franja que hace
+  reaparecer el dock son 3 px al borde de *la superficie* (`applyHiddenMask()`), así que con un
+  margen de pantalla —4 px por defecto, 0 solo en modo Compacto— esos píxeles caían **adentro**
+  de la pantalla: apoyar el mouse en el borde no hacía nada y el dock aparecía recién al
+  *retirar* el puntero exactamente esos píxeles. `applyLayerProperties()` usa `edgeM`
+  (`m_hidden ? 0 : effectiveMargin()`) para el margen del **borde propio del dock**; los
+  márgenes laterales de alineación siguen con el margen real, o el dock se correría a lo largo
+  del borde cada vez que se esconde. `setHidden()` llama a `applyLayerProperties()` además de a
+  `applyHiddenMask()`, y el cambio llega en vivo por el filtro de propiedades dinámicas de
+  `layershell.cpp`. El deslizamiento de QML no cambia: `hideDistance` sigue siendo
+  `thickness + effectiveMargin`, o sea que escondido el contenido queda unos píxeles *de más*
+  fuera de pantalla — invisible igual, y el margen solo se mueve cuando el contenido ya está
+  afuera, así que no hay salto.
+- **El estado escondido inicial hay que reportarlo a mano.** Los `dockWindow.setHidden(true)` de
+  las `Behavior` del slider solo corren cuando *termina* una animación, y en el primer arranque
+  el binding de `x`/`y` toma el valor escondido sin animar: un dock que arranca en auto-ocultar
+  nunca se anunciaba como escondido, así que hasta el primer ciclo mostrar→ocultar conservaba su
+  margen y **toda** su superficie recibía hover (la mitad "errática" del bug de arriba). Lo hace
+  el `Component.onCompleted` de la raíz de `Dock.qml` — el que ya existía: un segundo handler es
+  *"Property value set multiple times"* y el archivo entero no carga.
 - Verificado en la sesión real (segunda instancia aislada, 2026-08-09): dodge escondido con una
   ventana encima y visible en un escritorio vacío; `windows-below` visible sobre la ventana y sin
   reservar espacio; con alineación End el rect calculado coincidió al píxel con la captura.
@@ -471,6 +491,8 @@ que saber para tocar código:
   - **El vacío significa cosas distintas en cada lado, y por eso son dos etiquetas.** En el selector de modo oscuro, id vacío = **"(no cambiar)"**: `applyColorScheme()`/`applyIconTheme()` no hacen nada y el escritorio se queda como está. En el de modo normal es **"(volver al anterior)"**: `DarkModeAppearance::apply()` guarda el valor vivo del sistema **al entrar** en oscuro (`DockConfig::setDarkAppearancePrevious()`, claves `darkModeColorSchemePrev` / `darkModeIconThemePrev`) y lo restaura al salir. Ese snapshot está **persistido**, por lo mismo que `darkAppearanceApplied`: la restauración tiene que andar aunque el dock se reinicie con el modo puesto. Un valor explícito le gana al snapshot. En la fila del iconset **del dock** no hay ninguna de las dos: ahí el id vacío ya significa otra cosa ("sin override, seguir a KDE"), y por eso ese ítem no tiene clave `Prev`.
     - **Antes esto se hacía sembrando el combo** desde el sistema al construir la solapa, y estuvo roto todo ese tiempo: la siembra solo corría si el usuario abría la solapa con el modo apagado, y encima guardaba vacío porque `currentColorScheme()` leía la clave mal (ver `CLAUDE.md`). Resultado: al salir de oscuro el escritorio se quedaba con el esquema oscuro. Arreglado 2026-08-05 capturando al entrar, que además no depende de que nadie abra ningún diálogo.
     - Igual hace falta la entrada explícita al frente de la lista: sin ella el selector se queda en el primero por orden alfabético y conmutar el modo le aplica *ese* al usuario.
+    - **El snapshot solo guarda lo que puso el usuario, nunca lo que puso kdock** (2026-08-10). `DockConfig::darkAppearanceSelfApplied()` (claves `darkModeColorSchemeSelf` / `darkModeIconThemeSelf`) recuerda el id que kdock empujó al sistema la última vez, en las dos direcciones; al entrar en oscuro, una lectura viva que coincida con ese valor —o con el propio valor de modo oscuro— **se descarta** en vez de guardarse como "lo que había antes". Es lo que hace confiable al snapshot: las herramientas son `startDetached`, así que salir del modo y volver a entrar enseguida lee un sistema que todavía tiene el esquema oscuro recién escrito, y guardarlo envenenaba el modo normal **para siempre** (bug real: el `darkModeColorSchemePrev` del usuario terminó con un esquema oscuro y salir de dark mode "restauraba" oscuro). El snapshot ya no depende de que el ítem esté habilitado: guardarlo es contabilidad gratis, y sin eso prender la casilla *estando ya en oscuro* dejaba nada que restaurar.
+    - **Y la reentrada no toca nada**: la guarda `dark == darkAppearanceApplied()` de `sync()` no es una optimización, es la fuente de verdad. Mientras diga que el modo está puesto, más clics en "modo oscuro" no ejecutan `apply()` y por lo tanto no pueden reescribir el valor de modo normal — eso queda como decisión del usuario, desde la solapa DarkMode.
   - **Se disparan por "algún dock está en oscuro"** (`DockConfig::anyDarkModeActive()`), no por dock: un esquema de KDE no es por monitor. Con dos docks, pasar uno a normal no restaura nada hasta que el otro también lo haga.
   - **`darkAppearanceApplied` está persistido**, no es un miembro: describe el estado del *sistema*, que sobrevive al proceso. Sin él, arrancar con el modo ya prendido re-aplicaría, y arrancar con el modo apagado **saltearía el restore** y dejaría el escritorio oscuro para siempre.
   - **Una señal aparte para esto**: `DockConfig::darkModeNotifier()` (clase `DarkModeNotifier`) emite **una vez** por cambio, mientras que `darkModeChanged()` se emite por instancia. Aplicar un esquema de KDE quince veces son quince procesos `plasma-apply-colorscheme`.
