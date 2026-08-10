@@ -81,6 +81,7 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
     connect(m_config, &CmConfig::windowChanged, this, [this] {
         applyLayerProperties();
         applySize();
+        emit windowFrameChanged();
     });
     connect(qGuiApp, &QGuiApplication::screenAdded, this, &CmWindow::scheduleApplyScreen);
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, &CmWindow::scheduleApplyScreen);
@@ -229,29 +230,53 @@ void CmWindow::applySize()
     resize(m_config->panelWidthFor(geo.width()), m_config->panelHeightFor(geo.height()));
 }
 
-void CmWindow::applyLayerProperties()
+uint CmWindow::layerAnchors(QMargins *margins) const
 {
     uint anchor = AnchorTop;
-    QMargins margins;
+    QMargins m4;
     const int m = m_config->screenMargin();
     const bool horizontal = m_config->edge() == CmConfig::Top
                             || m_config->edge() == CmConfig::Bottom;
     switch (m_config->edge()) {
-    case CmConfig::Top:    anchor = AnchorTop;    margins.setTop(m);    break;
-    case CmConfig::Bottom: anchor = AnchorBottom; margins.setBottom(m); break;
-    case CmConfig::Left:   anchor = AnchorLeft;   margins.setLeft(m);   break;
-    case CmConfig::Right:  anchor = AnchorRight;  margins.setRight(m);  break;
+    case CmConfig::Top:    anchor = AnchorTop;    m4.setTop(m);    break;
+    case CmConfig::Bottom: anchor = AnchorBottom; m4.setBottom(m); break;
+    case CmConfig::Left:   anchor = AnchorLeft;   m4.setLeft(m);   break;
+    case CmConfig::Right:  anchor = AnchorRight;  m4.setRight(m);  break;
     }
 
     // Alignment along the anchored edge. A single-edge anchor already centers
     // the surface, so Center adds nothing.
     if (m_config->alignment() == CmConfig::Start) {
         anchor |= horizontal ? AnchorLeft : AnchorTop;
-        if (horizontal) margins.setLeft(m); else margins.setTop(m);
+        if (horizontal) m4.setLeft(m); else m4.setTop(m);
     } else if (m_config->alignment() == CmConfig::End) {
         anchor |= horizontal ? AnchorRight : AnchorBottom;
-        if (horizontal) margins.setRight(m); else margins.setBottom(m);
+        if (horizontal) m4.setRight(m); else m4.setBottom(m);
     }
+
+    if (margins)
+        *margins = m4;
+    return anchor;
+}
+
+qreal CmWindow::originShift(bool horizontal) const
+{
+    const uint a = layerAnchors();
+    const uint near = horizontal ? AnchorLeft : AnchorTop;
+    const uint far = horizontal ? AnchorRight : AnchorBottom;
+    const bool n = a & near;
+    const bool f = a & far;
+    if (n && !f)
+        return 0.0;   // left/top edge pinned: the surface only grows away from it
+    if (f && !n)
+        return -1.0;  // far edge pinned: the origin backs off pixel per pixel
+    return -0.5;      // free (or stretched) on this axis: it grows both ways
+}
+
+void CmWindow::applyLayerProperties()
+{
+    QMargins margins;
+    const uint anchor = layerAnchors(&margins);
 
     setProperty("kdock.anchors", anchor);
     setProperty("kdock.margins", QVariant::fromValue(margins));

@@ -892,6 +892,22 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   que no cargaba. **`qmllint` no lo reporta** (es un chequeo en runtime del motor); la única
   reja es el log del proceso (`qrc:/qml/...: Type X unavailable` + `Cannot override FINAL
   property`). Nombrar `isLeft`/`isTop` y seguir.
+- **Un control que se mueve con lo que arrastra no puede medir el arrastre contra sí mismo**
+  (2026-08-10, los agarres de esquina del panel de control). El `MouseArea` daba coordenadas
+  relativas al agarre, y el agarre está anclado a la esquina que redimensiona: cada resize lo
+  desplaza, el evento siguiente lee ese desplazamiento como movimiento del puntero y la cosa se
+  realimenta — el panel se iba al mínimo o al máximo en un puñado de eventos, con un arrastre
+  que se siente errático. Va medido en coordenadas de **escena** (`mapToItem(null, m.x, m.y)`),
+  que no se mueven con el hijo. Y en layer-shell hay una segunda mitad: la superficie **también
+  se re-emplaza** al cambiar de tamaño (centrada, o anclada al borde opuesto), y el cliente no
+  sabe dónde quedó. Esa parte no se mide: se deduce del ancla (`CmWindow::originShift()`) y se
+  suma al delta. Corolario que vale para cualquier superficie anclada: **el borde clavado no
+  puede seguir al puntero**, así que ese eje va 1:1 y no hay fórmula que lo arregle.
+  Y el bug de al lado, del mismo día: el handler decía `grip.left`/`grip.top` cuando las
+  propiedades se llaman `isLeft`/`isTop` — pero `left`/`top` **existen** en `Item` (son las
+  anchor lines), son objetos, y por lo tanto siempre truthy: los dos ejes tomaban el signo
+  invertido, sin un error ni una advertencia. Si renombrás una property por chocar con una FINAL
+  de `Item`, `grep` por el nombre viejo.
 - **KWin no deduce el borde exclusivo de un ancla de esquina** (2026-08-08): `LayerSurfaceV1Interface::exclusiveEdge()` (kwin `src/wayland/layershell_v1.cpp`, verificado en 6.6.6) solo devuelve un borde para ancla de **un solo borde** o de **un borde + las dos esquinas**. Una superficie anclada a un borde más UNA esquina (el caso de `dockLength>0` con alineación Start/End, y el flotante alineado a una esquina) no tiene strut: las ventanas maximizadas pasan por debajo del dock. kdock lo arregla por dos puntas: `applyLayerProperties()` ancla el **lado completo** cuando el dock cubre el borde entero (`dockLength==100` o panel 100%), y la integración envía el request v5 `set_exclusive_edge` (protocolo vendored actualizado a v5, versión del template a 5) para los docks parciales con esquina. Sin v5 (sway) los parciales con esquina siguen sin strut — por diseño, no es un bug de kdock. Diagnóstico: `qdbus6 org.kde.KWin /VirtualDesktopManager ...` + `kdock-previews --dump-captures` para leer la geometría de las maximizadas (la del dock derecho salía 1848x1080+72+0, la del superior pasaba por y=0).
 - **Grosor del dock**: hay una sola fórmula, `DockConfig::dockThickness()`. `Dock.qml`
   la lee (`config.dockThickness`) y `DockWindow::thickness()` la devuelve para la

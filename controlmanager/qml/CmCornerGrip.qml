@@ -64,25 +64,58 @@ Item {
         hoverEnabled: true
         cursorShape: grip.isLeft === grip.isTop ? Qt.SizeFDiagCursor : Qt.SizeBDiagCursor
 
+        // The size at the press, and the size that was last applied: the drag is
+        // absolute (every event recomputes from the press), so a delta that got
+        // clamped by setPanelSize does not accumulate.
         property int startW: 0
         property int startH: 0
+        property int appliedW: 0
+        property int appliedH: 0
+        // The press point in SCENE coordinates, i.e. relative to the surface,
+        // not to this grip. Measuring against the grip is what made the drag
+        // erratic: the grip is anchored to the corner it resizes, so it moves
+        // with every resize it causes and the next delta reads the panel's own
+        // motion as pointer motion — the size ran away to the minimum or the
+        // maximum in a handful of events.
         property point startPos: Qt.point(0, 0)
 
         onPressed: (m) => {
             gripMouse.startW = grip.currentW
             gripMouse.startH = grip.currentH
-            gripMouse.startPos = Qt.point(m.x, m.y)
+            gripMouse.appliedW = grip.currentW
+            gripMouse.appliedH = grip.currentH
+            gripMouse.startPos = gripMouse.mapToItem(null, m.x, m.y)
         }
         onPositionChanged: (m) => {
             if (!gripMouse.pressed)
                 return
-            const dx = m.x - gripMouse.startPos.x
-            const dy = m.y - gripMouse.startPos.y
-            // The sign of each axis follows the corner being dragged: pulling a
-            // right-side corner right grows the width, pulling a top corner up
-            // grows the height, and so on.
-            win.setPanelSize(grip.left ? gripMouse.startW - dx : gripMouse.startW + dx,
-                             grip.top ? gripMouse.startH - dy : gripMouse.startH + dy)
+            const p = gripMouse.mapToItem(null, m.x, m.y)
+            // Surface-local motion is the pointer's screen motion MINUS however
+            // far the compositor moved the surface while resizing it, and that
+            // second part is exactly originShift * (size applied so far). A
+            // layer-shell client is never told where its surface is, but this it
+            // can reconstruct, so the pointer delta comes back exact.
+            const dx = (p.x - gripMouse.startPos.x)
+                       + win.originShiftX * (gripMouse.appliedW - gripMouse.startW)
+            const dy = (p.y - gripMouse.startPos.y)
+                       + win.originShiftY * (gripMouse.appliedH - gripMouse.startH)
+            // Keep the grabbed corner under the pointer: the edge being dragged
+            // travels (originShift + 1) px per px of growth on the right/bottom
+            // side and originShift on the left/top one. When that factor is ~0
+            // the edge is the pinned one and simply cannot follow the pointer —
+            // there the panel grows away from it, one pixel per pixel, which is
+            // the old 1:1 behaviour.
+            const kx = win.originShiftX + (grip.isLeft ? 0 : 1)
+            const ky = win.originShiftY + (grip.isTop ? 0 : 1)
+            const w = gripMouse.startW
+                      + (Math.abs(kx) < 0.25 ? (grip.isLeft ? -dx : dx) : dx / kx)
+            const h = gripMouse.startH
+                      + (Math.abs(ky) < 0.25 ? (grip.isTop ? -dy : dy) : dy / ky)
+            win.setPanelSize(Math.round(w), Math.round(h))
+            // What setPanelSize actually stored, which is clamped: the next
+            // event has to compensate for the size the panel really has.
+            gripMouse.appliedW = cmConfig.panelWidth
+            gripMouse.appliedH = cmConfig.panelHeight
         }
     }
 }

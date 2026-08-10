@@ -41,6 +41,13 @@ class CmWindow : public QQuickView
     // plus the icon set that reads on this background. Every icon goes through
     // it — see iconSuffix().
     Q_PROPERTY(QString iconSuffix READ iconSuffix NOTIFY iconSuffixChanged)
+    // How far the surface's top-left corner travels on screen per pixel of
+    // growth, one factor per axis (0 = that edge is pinned, -1 = the far edge
+    // is, -0.5 = centered). A layer-shell client is never told where its
+    // surface ended up, so the corner grips use these to turn the pointer
+    // position they DO see — surface-local — back into screen movement.
+    Q_PROPERTY(qreal originShiftX READ originShiftX NOTIFY windowFrameChanged)
+    Q_PROPERTY(qreal originShiftY READ originShiftY NOTIFY windowFrameChanged)
 public:
     CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *model,
              const CmBackends &backends);
@@ -53,6 +60,9 @@ public:
     // has the same problem and reuses the same two settings, so both follow the
     // user's choice without a second pair of options.
     QString iconSuffix() const;
+
+    qreal originShiftX() const { return originShift(true); }
+    qreal originShiftY() const { return originShift(false); }
 
     // screenName is the connector of the dock that asked. Unlike a toplevel, a
     // layer surface really is bound to that output — the name is authoritative
@@ -97,8 +107,15 @@ signals:
     void currentTabChanged();
     void sectionsChanged();
     void iconSuffixChanged();
+    void windowFrameChanged();
 
 private:
+    // The layer-shell anchor mask for the configured edge and alignment, plus
+    // the margins that go with it. applyLayerProperties() commits it and
+    // originShift() reads it: both have to agree or the grips compensate for a
+    // placement the compositor is not doing.
+    uint layerAnchors(QMargins *margins = nullptr) const;
+    qreal originShift(bool horizontal) const;
     void applyLayerProperties();
     void applyScreen();
     void scheduleApplyScreen();

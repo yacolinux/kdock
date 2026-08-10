@@ -1189,6 +1189,26 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
    (las anchor lines) y redefinirlas hace fallar la carga de TODO el panel — la superficie
    quedaba en blanco y el diálogo de configuración, abierto debajo, inalcanzable (mordió
    2026-08-09, y `qmllint` no lo reporta).
+   **El arrastre se mide en coordenadas de escena y compensa el re-emplazamiento de la
+   superficie** (2026-08-10, arreglando un arrastre errático que terminaba siempre en el
+   mínimo o el máximo). Dos cosas lo rompían: el handler leía `grip.left`/`grip.top` en vez de
+   `isLeft`/`isTop` —o sea las anchor lines, que son objetos y por lo tanto **siempre**
+   verdaderos, así que los dos ejes tomaban el signo invertido—; y medía el delta contra su
+   propio origen, que se mueve con cada resize que él mismo provoca, o sea realimentación
+   positiva. Ahora el punto se toma con `mapToItem(null, …)` (coordenadas de la superficie) y
+   se le suma `win.originShiftX/Y * (tamaño aplicado − tamaño al presionar)`: un cliente
+   layer-shell nunca sabe dónde quedó su superficie, pero **cuánto se corre al crecer** sí es
+   deducible del ancla (`CmWindow::originShift()`: 0 si ese borde está clavado, −1 si lo está
+   el opuesto, −0,5 si el eje va centrado), y con eso el delta del puntero en pantalla se
+   reconstruye exacto. El tamaño se calcula dividiendo por la velocidad del borde arrastrado
+   (`originShift + 1` para derecha/abajo, `originShift` para izquierda/arriba) para que la
+   esquina siga al cursor; cuando esa velocidad es ~0 el borde es justo el clavado y **no
+   puede** seguirlo, así que se cae al 1:1 de siempre (el panel crece hacia el lado contrario).
+   Y el tamaño de referencia de cada evento es `cmConfig.panelWidth/panelHeight` releído
+   después de `setPanelSize`, que es lo que quedó **tras el clamp**, no lo que se pidió.
+   Se verifica bajo Xvfb con `alignment=Start` (ahí el modelo coincide con una ventana X, cuya
+   esquina superior izquierda tampoco se mueve): arrastrar el agarre inferior derecho +200/+96
+   da 1000×520 → 1200×616 exacto, y el inferior izquierdo +200 da 800 de ancho.
 - **Fuente única para todo el panel** (`cmConfig.fontSize`, 2026-08-08): un spinbox en
   **Apariencia** ("Tamaño de fuente:", 0 = Predeterminado, 12 px efectivos) del que cuelga el
   `fontScale` read-only (`fontSize/12`, 1.0 con 0). **Cada** `font.pixelSize` del QML del
@@ -1469,7 +1489,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural), `fontSize` (0 = predeterminado 12 px) + `fontScale` read-only (multiplica cada `font.pixelSize` del panel), `iconTheme` (iconset propio; vacío = el par por luminancia). Grilla: `columns` (0=según el ancho), `cellSize`, `cellHeight` (fijo; las celdas pueden ser más altas que anchas), `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
 | `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`label`/`showTitle`), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
 | `CmModel` | `cards` (model) | Roles `cardId`, `name`, `icon`, `col`, `row`, `span`/`vspan`, `background`, `showTitle`; prop `rows`; `get(row)` |
-| `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`) + los modales `pickColor`, `promptText`, `confirm` |
+| `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`), `setPanelSize(w,h)` + **`originShiftX`/`originShiftY`** (cuánto se corre el origen de la superficie por píxel de crecimiento, según el ancla: lo que usan los `CmCornerGrip` para reconstruir el movimiento del puntero en pantalla) + los modales `pickColor`, `promptText`, `confirm` |
 | `ScreenBrightness` | `screens` | `available`, `count`, `displays()` (→ `{name, label, internal, value 0..1, brightness, max}`), `setBrightness(name, ratio)`, `setAll(ratio)`, `refresh()`. Brillo **por monitor** vía PowerDevil; los nombres de los objetos son volátiles y no se cachean |
 | `MprisControl` | `mpris` | `available`, `playerId`, `identity`, `title`, `artist`, `album`, `artUrl`, `status`, `playing`, `canGoNext`/`canGoPrevious`/`canPause`/`canSeek`, `position`/`length` (µs), `players()`, `setPlayer(id)`, `playPause()`/`play()`/`pause()`/`stop()`/`next()`/`previous()`, `seekToRatio(r)`, `raisePlayer()`, `setMonitoring(on)` (el sondeo de posición solo mientras se mira) |
 | `DockLink` | `dock` | `available`, `darkMode` (rw), `toggleDarkMode()`, `openSettings(dockId)`, `restartDock()`, `docks()`. Cliente de `org.kdock.Dock`; `available` en false es normal (kdock apagado) y las tarjetas lo usan como reja |
