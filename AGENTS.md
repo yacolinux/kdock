@@ -1260,6 +1260,15 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
 - **Solo la cabecera arrastra.** El cuerpo de una tarjeta está lleno de sliders y botones; un
   `drag.target` sobre toda la tarjeta se los comería. La cabecera es el asa (y el clic derecho
   abre el menú, el doble clic va a la solapa completa).
+- **Y achica su texto hasta que entra** (2026-08-11). Su tamaño siempre salió de la tarjeta
+  (`card.height*0.42`, `card.width*0.30`), pero el `fontScale` del panel lo multiplica y lo
+  empujaba fuera de una tarjeta que no cambia de tamaño: con `fontSize` en 20 la hora salía
+  cortada al medio de un dígito y la fecha perdía las puntas. Ahora hay dos rejas, distintas a
+  propósito: el **alto** se acota con un presupuesto por línea (46 % de la tarjeta para la hora,
+  22 % para la fecha), y el **ancho** lo resuelve `fontSizeMode: Text.HorizontalFit`, que baja
+  el `pixelSize` hasta que la cadena dibujada entra — la hora tiene 5 caracteres y la fecha
+  veintipico, así que una sola fórmula para las dos desperdiciaría la tarjeta en una de ellas.
+  Con `fontSize` en 0 (el default) no cambia nada; verificado hasta 40 px, que es el tope.
 - **La tarjeta del reloj lleva al calendario con un clic** (`ClockCard.qml`, 2026-08-10):
   emula el reflejo que entrena el widget del dock, donde el clic izquierdo sobre la hora abre
   `kdock-calendar`. Acá el calendario es una solapa, así que el clic hace `win.currentTab =

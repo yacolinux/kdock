@@ -45,32 +45,62 @@ Item {
         onClicked: win.currentTab = "calendar"
     }
 
+    // The size the card can afford for a line, before the user's font scale is
+    // applied. The scale still grows the text on a card that has room, but it
+    // cannot push it past the card: this is a fixed 1x1…6x3 grid, so "bigger
+    // font" has to mean "as big as fits" once the card runs out.
+    //
+    // The height budget is a cap; the width is left to Qt's HorizontalFit, which
+    // shrinks the string that is actually drawn (the time is 5 characters and
+    // the date is twenty-odd, so a single formula for both would waste the card
+    // on one of them).
+    function fitted(natural, heightBudget) {
+        return Math.max(7, Math.round(Math.min(Math.max(natural, 7) * cmConfig.fontScale,
+                                               heightBudget)))
+    }
+
     Column {
         anchors.centerIn: parent
+        width: card.width - 8
         spacing: card.compact ? 0 : 6
 
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             text: Qt.formatDateTime(card.now, "HH:mm")
             color: card.fg
-            font.pixelSize: Math.max(7, Math.round((Math.max(20, Math.min(card.height * 0.42, card.width * 0.30))) * cmConfig.fontScale))
+            // HorizontalFit: pixelSize is the *maximum*, and Qt walks it down to
+            // minimumPixelSize until the string fits the width it was given.
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 7
+            font.pixelSize: card.fitted(Math.max(20, Math.min(card.height * 0.42,
+                                                              card.width * 0.30)),
+                                        card.height * (card.compact ? 0.52 : 0.46))
             font.bold: true
         }
         Text {
-            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             text: Qt.formatDateTime(card.now, "ddd d MMM yyyy")
             color: card.fg
             opacity: 0.7
-            font.pixelSize: Math.max(7, Math.round((Math.max(10, Math.min(card.height * 0.13, card.width * 0.10))) * cmConfig.fontScale))
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 7
+            font.pixelSize: card.fitted(Math.max(10, Math.min(card.height * 0.13,
+                                                              card.width * 0.10)),
+                                        card.height * 0.22)
             font.bold: cmConfig.labelBold
         }
         Text {
             visible: !card.compact && card.height > 150
-            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
             text: Qt.formatDateTime(card.now, "ss") + " s"
             color: card.fg
             opacity: 0.45
-            font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
+            fontSizeMode: Text.HorizontalFit
+            minimumPixelSize: 7
+            font.pixelSize: card.fitted(12, card.height * 0.14)
         }
     }
 }
