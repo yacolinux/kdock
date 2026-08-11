@@ -47,7 +47,6 @@ Item {
                 spacing: 6
 
                 CmButton {
-
                     fg: card.fg
                     compact: card.compact
                     icon: "preferences-system"
@@ -107,7 +106,6 @@ Item {
                 visible: !card.compact
 
                 CmButton {
-
                     fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Dock")
@@ -170,6 +168,7 @@ Item {
                         { ic: "system-shutdown",    act: "shutdown", label: qsTr("Apagar"), tip: qsTr("Apagar…") }
                     ]
                     delegate: CmButton {
+                        fg: card.fg
                         required property var modelData
                         compact: card.compact
                         icon: modelData.ic

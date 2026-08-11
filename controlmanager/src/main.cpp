@@ -2,6 +2,7 @@
 #include <QTextStream>
 #include <QtPlugin>
 
+#include "appearancecontrol.h"
 #include "audiocontrol.h"
 #include "batterycontrol.h"
 #include "brightnesscontrol.h"
@@ -19,6 +20,7 @@
 #include "screenbrightness.h"
 #include "theme.h"
 #include "translations.h"
+#include "virtualdesktops.h"
 #include "wallpapercontrol.h"
 
 // In-tree layer-shell integration, shared verbatim with kdock (src/layershell.cpp).
@@ -101,6 +103,37 @@ int runDumpSections(QApplication &app)
                    .arg(mpris.identity(), mpris.title(), mpris.artist())
             << Qt::endl;
     }
+
+    VirtualDesktops desktops;
+    out << Qt::endl << "== escritorios virtuales ==" << Qt::endl;
+    if (desktops.count() == 0) {
+        out << "  KWin no responde (X11, otro compositor, o el arnés de Xvfb)" << Qt::endl;
+    } else {
+        for (int i = 1; i <= desktops.count(); ++i) {
+            out << QStringLiteral("  %1  %2%3")
+                       .arg(i)
+                       .arg(desktops.nameOf(i).leftJustified(24),
+                            i == desktops.currentPosition() ? QStringLiteral("  (actual)")
+                                                            : QString())
+                << Qt::endl;
+        }
+    }
+
+    Theme dumpTheme;
+    AppearanceControl appearance(&dumpTheme);
+    appearance.refreshIfStale();
+    const QVariantList icons = appearance.iconThemes();
+    const QVariantList schemes = appearance.colorSchemes();
+    out << Qt::endl << "== apariencia del escritorio ==" << Qt::endl;
+    out << QStringLiteral("  iconset actual: %1  (%2 instalados)")
+               .arg(appearance.currentIconTheme())
+               .arg(icons.size())
+        << Qt::endl;
+    out << QStringLiteral("  esquema actual: %1  (%2 instalados)")
+               .arg(appearance.currentColorScheme().isEmpty()
+                        ? QStringLiteral("(sin definir)") : appearance.currentColorScheme())
+               .arg(schemes.size())
+        << Qt::endl;
 
     DockLink dock;
     out << Qt::endl << "== kdock ==" << Qt::endl;
@@ -207,6 +240,10 @@ int main(int argc, char *argv[])
     PowerControl power;
     MprisControl mpris;
     DockLink dockLink;
+    // System-wide icon theme and colour scheme; the same class the dock's own
+    // pickers use, so favourites and "keep the picker open" are shared.
+    AppearanceControl appearance(&theme);
+    VirtualDesktops desktops;
 
     CmBackends backends;
     backends.apps = &apps;
@@ -219,6 +256,8 @@ int main(int argc, char *argv[])
     backends.power = &power;
     backends.mpris = &mpris;
     backends.dock = &dockLink;
+    backends.appearance = &appearance;
+    backends.desktops = &desktops;
 
     CmWindow window(&config, &theme, &layout, &model, backends);
     QObject::connect(&translations, &Translations::changed, &window,

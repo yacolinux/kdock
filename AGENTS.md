@@ -1083,6 +1083,38 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   y le pasa `compact`: la tarjeta de Principal y la solapa completa son **el mismo** `.qml`.
   Por eso cada `cards/*.qml` tiene dos bloques (`visible: card.compact` / `visible:
   !card.compact`) en vez de dos archivos que se desincronizarían.
+- **Una sección nueva se enciende sola una vez, y una apagada no revive**
+  (`knownSections`, 2026-08-10). `reconcileSections()` podaba `enabledSections` contra la tabla
+  pero nunca le agregaba nada, así que una sección agregada por una versión nueva quedaba
+  **apagada para siempre** en el `.conf` de cualquiera que ya lo tuviera — y prenderlas todas
+  en cada arranque resucitaría las que el usuario apagó. El `.conf` guarda ahora qué ids ya
+  vio: lo que no está en esa lista es nuevo, se le prende la solapa y se anota. Mismo idioma
+  que el `knownScreens` del dock. Se verifica en dos corridas de `--dump-sections` sobre una
+  copia del `.conf` del usuario: la primera prende las nuevas, y apagando una a mano la segunda
+  la respeta.
+- **Apariencia (`appearance`): iconset y esquema de color del ESCRITORIO** (2026-08-10). El
+  backend es el mismo `AppearanceControl` que usan los dos widgets del dock y los selectores
+  del diálogo, así que los favoritos, el orden (favoritos primero) y *mantener el selector
+  abierto* son compartidos. Dos modos en la misma lista (Iconos / Colores) en vez de dos
+  columnas, porque en una tarjeta de 2×2 no entran: la vista previa son tres íconos
+  **resueltos contra ese tema** o las tres muestras de color del esquema. Es la **única** URL
+  del panel que no sale de `win.iconSuffix` (`name@rev@tema`, igual que `ThemeListPopup`): acá
+  el tema es justamente el dato. Aplicar es fire-and-forget —las herramientas de Plasma son
+  `startDetached`—, así que el tilde se mueve cuando KDE contesta, por la señal `changed`.
+  **Deliberadamente no toca nada de kdock**: ni el iconset del dock, ni el de sus widgets, ni
+  sus colores; eso vive en la configuración del dock y duplicarlo sería una segunda fuente de
+  verdad. Y la lista se posiciona sola en lo aplicado (`Qt.callLater`: en el mismo tick el
+  modelo ya cambió pero la vista todavía no tiene delegates y el pedido se pierde), que con
+  ~450 esquemas es la diferencia entre "ordenada" y "no encuentro dónde estoy".
+- **Escritorios (`desktops`): el paginador, como sección** (2026-08-10). Reusa
+  `VirtualDesktops` tal cual —posiciones **1-based**, las que ve el usuario— y dibuja un
+  `CmButton` por escritorio, el actual `checked`. El nombre solo se muestra si el usuario le
+  puso uno propio: el "Escritorio N" que devuelve KWin repetiría el número en cada botón.
+  `count === 0` es "KWin no contesta" (X11, otro compositor, o el arnés) y ahí la tarjeta lo
+  dice en vez de quedar vacía. **El arnés sí lo prueba de punta a punta**, porque el clic va
+  por XTEST y el cambio de escritorio va por D-Bus al KWin de verdad — pero entonces hay que
+  anotar el escritorio original y restaurarlo, y correr **sin** `dbus-run-session` (con un bus
+  propio la sección sale con su mensaje de "no responde", que es lo correcto).
 - **La tarjeta de fondo: un botón por monitor conectado más *Todos***
   (`cards/WallpaperCard.qml`). Los de cada monitor van a `wallpaperControl.nextWallpaper(name)`
   y *Todos* a `nextWallpaperAll()`; `cmConfig.wallpaperScript`, si está definido, **reemplaza**
@@ -1526,7 +1558,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 
 | C++ Class | QML Property / Method | Notes |
 |-----------|----------------------|-------|
-| `AppearanceControl` | `appearance.*` | `iconThemes()`, `colorSchemes()` (listas de mapas con id/name/current/**fav**, + bg/fg/sel en los esquemas, favoritos primero), `refreshIfStale()`, `applyIconTheme(id)`, `applyColorScheme(id)`, `isFavorite(kind,id)`/`setFavorite(kind,id,on)` (kind = `"icons"`/`"colors"`) + `currentIconTheme`/`currentColorScheme`, `keepPickerOpen` (lectura/escritura, compartida por todos los pickers) y las señales `changed`/`favoritesChanged`/`keepPickerOpenChanged` |
+| `AppearanceControl` | `appearance.*` | `iconThemes()`, `colorSchemes()` (listas de mapas con id/name/current/**fav**, + bg/fg/sel en los esquemas, favoritos primero), `refreshIfStale()`, `applyIconTheme(id)`, `applyColorScheme(id)`, `isFavorite(kind,id)`/`setFavorite(kind,id,on)` (kind = `"icons"`/`"colors"`) + `currentIconTheme`/`currentColorScheme`, `keepPickerOpen` (lectura/escritura, compartida por todos los pickers) y las señales `changed`/`favoritesChanged`/`keepPickerOpenChanged`. Desde 2026-08-10 también está en `kdock-controlmanager` (sección *Apariencia*), con los mismos favoritos porque los lee del `kdock.conf` compartido |
 | `DockConfig` | `config.*` | Exposed as context property; many `Q_PROPERTY` values. Section layout: `widgetOrder` (QStringList), `moveSection(from,to)`, `insertSpring(at)`, `insertSeparator(at)` (static `sep` token), `removeSectionAt(at)`, `separatorSize` (px, both kinds of static separator). Dock length: `dockLength` (int 0-100, 0=auto, >0=% of screen edge). App-icon labels: `iconLabelMode` (0=icon only/default, 1=name below, 2=name at right, 3=name only, 4=name above, 5=name at left), `iconLabelWidth` (a **cap**), `iconLabelFontSize` (0=auto) + read-only `iconLabelFontPx`/`iconLabelLineHeight`/`iconLabelGap`/`dockThickness`/`effectiveLabelWidth`, and `setMeasuredLabelWidth(px)` (QML reports the widest name it draws; see App-icon labels). Section labels: `widgetLabelMode` (same values, no 3), `widgetName(token)`, `setWidgetName(token,name)` + read-only `widgetNamesRevision`. Auto-shrink: `autoShrinkIcons` (bool), `autoShrinkMinIconSize` (px). Ocultamiento: `hideMode` (0 siempre visible / 1 auto-hide / 2 intelligent hide / 3 las ventanas pasan abajo) + `autohide` (atajo de dos estados sobre él) — ver *Modos de ocultamiento*. Negritas: `labelBold` (bool, todos los nombres del dock). Renglones: `labelLines` (1 o 2 — con 2 los nombres se envuelven en vez de elidirse) + read-only `iconLabelBoxHeight`. Modo oscuro: `darkModeActive` (bool **resuelto**, read-only — el que QML tiene que leer), `darkMode` (flag propio del dock, solo vale cuando el alcance es por dock), `darkAccent`/`darkBackground` (QColor, app-wide), `setDarkModeActive(on)`, `showDarkMode` — todas notifican con `darkModeChanged`. Íconos de apps: `showAppIcons` (bool, default true — en false el dock es una barra de solo widgets y la sección `apps` sale de `dockThickness()`). Pickers de apariencia: `showIconThemes`, `showColorSchemes`. Widget Control Manager: `showControlManager`, `controlManagerIcon`, `controlManagerDisplay` (0 solo ícono / 1 ícono+texto / 2 solo texto), `controlManagerText` (vacío = el reloj, con `controlManagerFormat`), `controlManagerFontSize` (0 = automático: la fuente del reloj y, si no, una fracción del ícono; independiente de los modos de etiqueta — ver *Control Manager*). App menu (all in the shared-when-enabled menu group): `menuIcon`, `menuPopupWidth`/`menuPopupHeight`, `menuColumns` (1-8), `menuAppIconSize` (px, both list layouts), `menuGridSpacing` (px), `menuEditorApp` (.desktop id or command), `showMenuPower`, `menuFavorites` |
 | `Theme` | `theme.background`, `theme.foreground`, `theme.highlight`, `theme.revision` | Live-reloading color scheme |
 | `Translations` | (sin context property) | La capa de traducciones se sirve a QML a través del `QTranslator` instalado: los `qsTr()` no cambian. Lo único que QML ve del tema es `config.widgetName(token)` (ya traducido) y `config.widgetNamesRevision`, que se bumpea también al cambiar de idioma |
@@ -1554,7 +1586,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `DockLink` | `dock` | `available`, `darkMode` (rw), `toggleDarkMode()`, `openSettings(dockId)`, `restartDock()`, `docks()`. Cliente de `org.kdock.Dock`; `available` en false es normal (kdock apagado) y las tarjetas lo usan como reja |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
-| `VirtualDesktops` | `virtualDesktops` | `count`, `current` (posición **1-based**, 0 = KWin no contesta), `names`, `nameOf(position)`, `switchTo(position)`. Lo usan el widget `pager` y el submenú *Escritorio* de los íconos de apps |
+| `VirtualDesktops` | `virtualDesktops` | `count`, `current` (posición **1-based**, 0 = KWin no contesta), `names`, `nameOf(position)`, `switchTo(position)`. Lo usan el widget `pager`, el submenú *Escritorio* de los íconos de apps y —desde 2026-08-10, en `kdock-controlmanager`— la sección *Escritorios* |
 | `WindowMonitor` | `showdesktop` | `showDesktopSupported`, `showDesktopActive`, `toggleShowDesktop()`; null on X11 |
 | `BrightnessControl` | `brightness` | `available`, `brightness`, `setBrightness(v)`, `increase()`, `decrease()` |
 | `ClockWidget` | `clock` | `timeString`, `dateString`, `format24h`, `showDate`, `showSeconds` |

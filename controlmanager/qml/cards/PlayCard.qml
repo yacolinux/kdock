@@ -106,7 +106,6 @@ Item {
             spacing: 6
 
             CmButton {
-
                 fg: card.fg
                 compact: card.compact
                 icon: "media-skip-backward"
@@ -186,6 +185,7 @@ Item {
             Repeater {
                 model: mpris ? mpris.players() : []
                 delegate: CmButton {
+                    fg: card.fg
                     required property var modelData
                     compact: true
                     label: modelData.identity

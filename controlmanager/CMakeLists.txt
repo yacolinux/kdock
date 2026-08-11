@@ -47,6 +47,8 @@ qt_add_executable(kdock-controlmanager
     # theme lists + favorites it reads).
     ${KDOCK_SHARED_SRC}/themepicker.cpp      ${KDOCK_SHARED_SRC}/themepicker.h
     ${KDOCK_SHARED_SRC}/appearancecontrol.cpp ${KDOCK_SHARED_SRC}/appearancecontrol.h
+    # Los escritorios virtuales de KWin, para la sección Escritorios.
+    ${KDOCK_SHARED_SRC}/virtualdesktops.cpp  ${KDOCK_SHARED_SRC}/virtualdesktops.h
     # DockConfig comes along for two reasons: Theme asks it where the shared
     # settings file lives (icon-theme override), and the card colour menu offers
     # the same eight quick colours the dock's own submenu does.
@@ -82,6 +84,8 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/cards/NetworkCard.qml
         qml/cards/WallpaperCard.qml
         qml/cards/SystemCard.qml
+        qml/cards/AppearanceCard.qml
+        qml/cards/DesktopsCard.qml
 )
 
 # kdock's IconMenuItem, verbatim. BASE lands it on :/qml/IconMenuItem.qml, i.e.

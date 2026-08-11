@@ -24,6 +24,8 @@ const QList<CmSectionInfo> &table()
         {QStringLiteral("network"),   QStringLiteral("network-wireless"),               2, 2, 2, 1, true},
         {QStringLiteral("wallpaper"), QStringLiteral("preferences-desktop-wallpaper"),  1, 1, 1, 1, true},
         {QStringLiteral("system"),    QStringLiteral("preferences-system"),             2, 2, 1, 1, true},
+        {QStringLiteral("appearance"),QStringLiteral("preferences-desktop-theme"),       2, 2, 2, 1, true},
+        {QStringLiteral("desktops"),  QStringLiteral("virtual-desktops"),                2, 1, 1, 1, true},
     };
     return t;
 }
@@ -85,6 +87,10 @@ QString CmSections::label(const QString &id)
         return QCoreApplication::translate("CmSections", "Fondo de escritorio");
     if (id == QLatin1String("system"))
         return QCoreApplication::translate("CmSections", "Sistema");
+    if (id == QLatin1String("appearance"))
+        return QCoreApplication::translate("CmSections", "Apariencia");
+    if (id == QLatin1String("desktops"))
+        return QCoreApplication::translate("CmSections", "Escritorios");
     return id;
 }
 
@@ -112,6 +118,12 @@ QString CmSections::description(const QString &id)
     if (id == QLatin1String("system"))
         return QCoreApplication::translate("CmSections",
                                            "Las cuatro configuraciones, reinicios y sesión.");
+    if (id == QLatin1String("appearance"))
+        return QCoreApplication::translate("CmSections",
+                                           "Iconset y esquema de color de todo el escritorio.");
+    if (id == QLatin1String("desktops"))
+        return QCoreApplication::translate("CmSections",
+                                           "Cambiar de escritorio virtual.");
     return QString();
 }
 

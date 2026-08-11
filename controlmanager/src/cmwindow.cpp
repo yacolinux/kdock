@@ -20,6 +20,7 @@
 #include "powercontrol.h"
 #include "screenbrightness.h"
 #include "theme.h"
+#include "virtualdesktops.h"
 #include "wallpapercontrol.h"
 
 #include <QColorDialog>
@@ -112,6 +113,10 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
     rootContext()->setContextProperty(QStringLiteral("power"), m_backends.power);
     rootContext()->setContextProperty(QStringLiteral("mpris"), m_backends.mpris);
     rootContext()->setContextProperty(QStringLiteral("dock"), m_backends.dock);
+    // Same names the dock's own QML uses for these two, so the popups and the
+    // cards read alike.
+    rootContext()->setContextProperty(QStringLiteral("appearance"), m_backends.appearance);
+    rootContext()->setContextProperty(QStringLiteral("virtualDesktops"), m_backends.desktops);
 
     applyScreen();
     applySize();

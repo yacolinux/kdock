@@ -8,6 +8,7 @@
 
 #pragma once
 
+class AppearanceControl;
 class AudioControl;
 class BatteryControl;
 class BrightnessControl;
@@ -16,6 +17,7 @@ class DockLink;
 class MprisControl;
 class NetworkControl;
 class PowerControl;
+class VirtualDesktops;
 class ScreenBrightness;
 class WallpaperControl;
 
@@ -31,4 +33,6 @@ struct CmBackends
     PowerControl *power = nullptr;
     MprisControl *mpris = nullptr;
     DockLink *dock = nullptr;
+    AppearanceControl *appearance = nullptr;
+    VirtualDesktops *desktops = nullptr;
 };

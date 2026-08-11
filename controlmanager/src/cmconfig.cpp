@@ -76,12 +76,24 @@ void CmConfig::load()
                            ? m_settings.value(QStringLiteral("principalCards")).toStringList()
                            : QStringList{QStringLiteral("clock"), QStringLiteral("audio"),
                                          QStringLiteral("video"), QStringLiteral("play")};
+    // Sections this file has already seen. Without it there is no way to tell
+    // "the user turned this one off" from "this build has a section the file
+    // predates", and a new section would either never appear or come back on
+    // every start. Same idiom as the dock's knownScreens.
+    m_knownSections = m_settings.contains(QStringLiteral("knownSections"))
+                          ? m_settings.value(QStringLiteral("knownSections")).toStringList()
+                          : m_enabledSections;
     m_rememberTab = readBool("rememberTab", true);
     m_lastTab = m_settings.value(QStringLiteral("lastTab")).toString();
     m_wallpaperScript = m_settings.value(QStringLiteral("wallpaperScript"),
                                          QStringLiteral("/usr/local/bin/next-wall.sh")).toString();
 
     reconcileSections();
+    // Persist what the reconciliation decided (the new sections it just turned
+    // on, and the seen-list): otherwise every start would call them new again.
+    m_settings.setValue(QStringLiteral("sectionOrder"), m_sectionOrder);
+    m_settings.setValue(QStringLiteral("enabledSections"), m_enabledSections);
+    m_settings.setValue(QStringLiteral("knownSections"), m_knownSections);
 }
 
 void CmConfig::reconcileSections()
@@ -100,6 +112,16 @@ void CmConfig::reconcileSections()
             order.append(id);
     }
     m_sectionOrder = order;
+
+    // A section the file has never seen is new: turn its tab on, so a user who
+    // upgrades finds it instead of having to go looking in Configuración.
+    for (const QString &id : known) {
+        if (!m_knownSections.contains(id) && CmSections::byId(id).hasTab
+            && !m_enabledSections.contains(id)) {
+            m_enabledSections.append(id);
+        }
+    }
+    m_knownSections = known;
 
     const auto prune = [&known](QStringList list) {
         QStringList out;
@@ -138,6 +160,7 @@ void CmConfig::storeSections()
 {
     m_settings.setValue(QStringLiteral("sectionOrder"), m_sectionOrder);
     m_settings.setValue(QStringLiteral("enabledSections"), m_enabledSections);
+    m_settings.setValue(QStringLiteral("knownSections"), m_knownSections);
     m_settings.setValue(QStringLiteral("principalCards"), m_principalCards);
     m_settings.sync();
     emit sectionsChanged();

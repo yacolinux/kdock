@@ -39,10 +39,11 @@ for path in cards:
         if "theme.foreground" in line and DEFAULT not in line:
             errors.append(f"{path.name}:{n}: usa theme.foreground en vez de card.fg")
 
-    # Un CmButton/CmSlider abre bloque en su propia línea; el `fg:` va adentro,
-    # así que alcanza con mirar las líneas hasta que la indentación vuelve.
+    # Un CmButton/CmSlider abre bloque en su propia línea (suelto o como
+    # `delegate:` de un Repeater); el `fg:` va adentro, así que alcanza con
+    # mirar las líneas hasta que la indentación vuelve.
     for n, line in enumerate(lines):
-        m = re.match(r"^(\s*)(CmButton|CmSlider) \{\s*$", line)
+        m = re.match(r"^(\s*)(?:delegate: )?(CmButton|CmSlider) \{\s*$", line)
         if not m:
             continue
         indent, kind = m.group(1), m.group(2)

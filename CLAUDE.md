@@ -339,6 +339,31 @@ XDG_DATA_HOME=/tmp/cm ./build/controlmanager/kdock-controlmanager --dump-section
 XDG_DATA_HOME=/tmp/cm ./build/controlmanager/kdock-controlmanager --dump-sections | head -12
 ```
 
+**La sección *Escritorios* del panel sí se prueba entera bajo Xvfb**, igual que el widget
+paginador del dock: el clic va por XTEST y el cambio de escritorio va por D-Bus al KWin **de
+verdad**. Pero hay que correr **sin** `dbus-run-session` (con un bus propio la sección sale con
+su "KWin no informa escritorios virtuales", que es lo correcto y no un bug), anotar el
+escritorio original y restaurarlo:
+
+```bash
+ORIG=$(busctl --user get-property org.kde.KWin /VirtualDesktopManager \
+       org.kde.KWin.VirtualDesktopManager current | sed 's/^s "//;s/"$//')
+# ... arnés + xdotool mousemove <x> <y> click 1 ...
+busctl --user set-property org.kde.KWin /VirtualDesktopManager \
+       org.kde.KWin.VirtualDesktopManager current s "$ORIG"
+```
+
+Y ojo con la otra mitad: sin `dbus-run-session` el proceso **toma el nombre en el bus real**,
+así que si el panel del usuario está corriendo tu `--show` se le reenvía a *él* (y le abre el
+panel en la pantalla), y si no está, el próximo clic del widget abre **el tuyo, dentro del
+Xvfb**. Bajalo con `qdbus6 org.kdock.ControlManager /ControlManager quit` antes y matá el del
+arnés al terminar.
+
+**Y la sección *Apariencia* le cambia el iconset y el esquema al escritorio de verdad**: es
+`AppearanceControl`, o sea las herramientas de Plasma, y `XDG_DATA_HOME` no aísla nada de eso.
+En el arnés, o no le hacés clic a ninguna fila, o corrés con el `PATH` falso de más abajo — que
+para este binario ya hacía falta por el brillo.
+
 **El panel de configuración se maneja desde código**, como el del dock: linkeá los `.o` del
 target (menos `main.cpp.o`), instanciá `CmConfig` + `CmLayout` + `CmSettingsDialog`, buscá los
 controles y hacéles `->click()`. **Desambiguá por el `QGroupBox` que los contiene**, nunca por

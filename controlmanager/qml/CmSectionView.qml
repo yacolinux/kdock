@@ -26,6 +26,8 @@ Loader {
         case "network":   return "cards/NetworkCard.qml"
         case "wallpaper": return "cards/WallpaperCard.qml"
         case "system":    return "cards/SystemCard.qml"
+        case "appearance": return "cards/AppearanceCard.qml"
+        case "desktops":  return "cards/DesktopsCard.qml"
         }
         return ""
     }

@@ -255,6 +255,9 @@ private:
     int m_cellSpacing = 8;
 
     QStringList m_sectionOrder;
+    // Ids the .conf has already seen; anything outside it is a section this
+    // build added and gets its tab turned on once.
+    QStringList m_knownSections;
     QStringList m_enabledSections;
     QStringList m_principalCards;
     bool m_rememberTab = true;

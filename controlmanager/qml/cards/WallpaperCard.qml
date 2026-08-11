@@ -42,6 +42,7 @@ Item {
             Repeater {
                 model: card.screenList
                 delegate: CmButton {
+                    fg: card.fg
                     required property var modelData
                     compact: card.compact
                     icon: "preferences-desktop-wallpaper"

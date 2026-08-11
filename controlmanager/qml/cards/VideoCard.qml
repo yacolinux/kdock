@@ -54,7 +54,6 @@ Item {
         visible: card.compact
 
         CmSlider {
-
             fg: card.fg
             width: parent.width
             compact: true
@@ -133,6 +132,7 @@ Item {
                 Repeater {
                     model: card.perMonitor ? card.displays : []
                     delegate: CmSlider {
+                        fg: card.fg
                         required property var modelData
                         width: full.width
                         icon: card.brightnessIcon(modelData.value)
@@ -190,6 +190,7 @@ Item {
                     Repeater {
                         model: battery ? battery.profiles : []
                         delegate: CmButton {
+                            fg: card.fg
                             required property string modelData
                             label: modelData === "power-saver" ? qsTr("Ahorro")
                                  : modelData === "balanced" ? qsTr("Equilibrado")

@@ -38,7 +38,6 @@ Item {
             height: 24
 
             CmButton {
-
                 fg: card.fg
                 id: prev
                 anchors.left: parent.left

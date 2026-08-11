@@ -74,7 +74,6 @@ Item {
         }
 
         CmSlider {
-
             fg: card.fg
             width: parent.width
             compact: true
@@ -200,7 +199,6 @@ Item {
                             }
 
                             CmButton {
-
                                 fg: card.fg
                                 id: muteBtn
                                 anchors.right: parent.right
@@ -215,7 +213,6 @@ Item {
                             }
 
                             CmSlider {
-
                                 fg: card.fg
                                 anchors.left: devName.left
                                 anchors.right: muteBtn.left
