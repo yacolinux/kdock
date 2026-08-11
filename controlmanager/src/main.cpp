@@ -163,8 +163,9 @@ int runDumpSections(QApplication &app)
 int main(int argc, char *argv[])
 {
     // Must be decided before QGuiApplication builds the platform integration.
-    // Our shell integration falls back to xdg-shell for every window that is not
-    // the panel (the settings dialog, menus, popups). The key comes from
+    // Our shell integration falls back to xdg-shell for every window that does
+    // not ask for a layer (menus, popups; the dialogs ask for the overlay layer,
+    // see showAsOverlay() in cmwindow.cpp). The key comes from
     // src/kdock-layershell.json, shared with kdock: same code, compiled in here.
     if (qEnvironmentVariableIsSet("WAYLAND_DISPLAY")
         && !qEnvironmentVariableIsSet("QT_WAYLAND_SHELL_INTEGRATION")) {

@@ -49,6 +49,35 @@ constexpr uint AnchorLeft = 4;
 constexpr uint AnchorRight = 8;
 // Focus can bounce for a frame or two while the compositor maps the surface.
 constexpr qint64 kFocusGraceMs = 400;
+
+// Puts a Qt Widgets dialog *above* the panel.
+//
+// The panel is a layer surface on the top layer, and an ordinary xdg toplevel
+// (which is what every QDialog is) is stacked below that layer by protocol — no
+// amount of raise()/activateWindow() moves it, so the colour picker, the rename
+// prompt and the settings dialog all opened behind a panel that covered them.
+// The fix is to make the dialog a layer surface too, one layer higher
+// (overlay), which the in-tree integration already supports: it only looks at
+// these dynamic properties, and they have to be in place before the surface
+// gets its shell role — which Qt Wayland gives it on the first show(), not when
+// the QWindow appears, so a winId() here (the public way to force the handle)
+// is early enough. Keyboard interactivity is what lets the user type a hex
+// colour or a name; the panel keeps its own grab, and the compositor routes
+// keys to the surface on top.
+//
+// A no-op off Wayland (the Xvfb harnesses), where dialogs behave normally.
+void showAsOverlay(QWidget *w)
+{
+    if (!w || !QGuiApplication::platformName().startsWith(QLatin1String("wayland")))
+        return;
+    w->winId();
+    QWindow *handle = w->windowHandle();
+    if (!handle)
+        return;
+    handle->setProperty("kdock.layershell", true);
+    handle->setProperty("kdock.layer", 3u); // overlay: one above the panel
+    handle->setProperty("kdock.keyboardInteractivity", 1u);
+}
 } // namespace
 
 CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *model,
@@ -361,8 +390,13 @@ void CmWindow::setPanelSize(int w, int h)
 }
 
 void CmWindow::openSettings()
-{    if (!m_settingsDialog)
+{    if (!m_settingsDialog) {
         m_settingsDialog = new CmSettingsDialog(m_config, m_layout, m_appearance);
+        // Same reason as the modal dialogs: an ordinary toplevel opens *under*
+        // the panel's layer surface, which is how this one used to end up
+        // unreachable behind it.
+        showAsOverlay(m_settingsDialog);
+    }
     m_settingsDialog->show();
     m_settingsDialog->raise();
     m_settingsDialog->activateWindow();
@@ -435,22 +469,37 @@ void CmWindow::retranslate()
         openSettings();
 }
 
+// The three dialogs below build their widget instead of calling the static
+// convenience function: showAsOverlay() needs the QWidget to exist before it is
+// shown, and the statics show it themselves.
+
 QString CmWindow::pickColor(const QString &current)
 {
     ++m_modalDepth;
-    const QColor chosen = QColorDialog::getColor(QColor(current), nullptr,
-                                                 tr("Color de la tarjeta"));
+    QColorDialog dialog;
+    dialog.setWindowTitle(tr("Color de la tarjeta"));
+    if (QColor(current).isValid())
+        dialog.setCurrentColor(QColor(current));
+    showAsOverlay(&dialog);
+    const bool accepted = dialog.exec() == QDialog::Accepted;
+    const QColor chosen = dialog.selectedColor();
     --m_modalDepth;
     requestActivate();
-    return chosen.isValid() ? chosen.name() : QString();
+    return accepted && chosen.isValid() ? chosen.name() : QString();
 }
 
 QString CmWindow::promptText(const QString &title, const QString &label, const QString &current)
 {
     ++m_modalDepth;
-    bool ok = false;
-    const QString text = QInputDialog::getText(nullptr, title, label, QLineEdit::Normal, current,
-                                               &ok);
+    QInputDialog dialog;
+    dialog.setWindowTitle(title);
+    dialog.setLabelText(label);
+    dialog.setTextValue(current);
+    dialog.setTextEchoMode(QLineEdit::Normal);
+    dialog.setInputMode(QInputDialog::TextInput);
+    showAsOverlay(&dialog);
+    const bool ok = dialog.exec() == QDialog::Accepted;
+    const QString text = dialog.textValue();
     --m_modalDepth;
     requestActivate();
     return ok ? text : QString();
@@ -459,9 +508,11 @@ QString CmWindow::promptText(const QString &title, const QString &label, const Q
 bool CmWindow::confirm(const QString &title, const QString &text)
 {
     ++m_modalDepth;
-    const auto answer = QMessageBox::question(nullptr, title, text,
-                                              QMessageBox::Yes | QMessageBox::No,
-                                              QMessageBox::No);
+    QMessageBox box(QMessageBox::Question, title, text,
+                    QMessageBox::Yes | QMessageBox::No);
+    box.setDefaultButton(QMessageBox::No);
+    showAsOverlay(&box);
+    const auto answer = static_cast<QMessageBox::StandardButton>(box.exec());
     --m_modalDepth;
     requestActivate();
     return answer == QMessageBox::Yes;

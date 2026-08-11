@@ -57,6 +57,14 @@ void DockService::openSettings(const QString &dockId)
         window->openSettings();
 }
 
+void DockService::openNetworkSettings(const QString &dockId)
+{
+    if (!m_manager)
+        return;
+    if (DockWindow *window = m_manager->windowFor(dockId))
+        window->openNetworkSettings();
+}
+
 void DockService::restart()
 {
     // Same thing DockWindow::restart() does — accessories included. Reached

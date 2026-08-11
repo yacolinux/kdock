@@ -42,6 +42,10 @@ public slots:
     // Empty dockId = the primary dock (and, if that one is not on screen right
     // now, whichever dock is).
     Q_SCRIPTABLE void openSettings(const QString &dockId);
+    // The same dialog, opened straight on the Redes tab: the control panel's
+    // network section offers "Configurar redes…" and the full connection editor
+    // lives here, in the dock's process.
+    Q_SCRIPTABLE void openNetworkSettings(const QString &dockId);
     // Restarts the whole kdock process, i.e. every dock it draws.
     Q_SCRIPTABLE void restart();
 

@@ -972,6 +972,26 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   sacar el `qInfo()`. Y para medir la posición real, `spectacle-custom` + un recorte con una
   regla de coordenadas dibujada encima vale más que un diff de imágenes (el fondo cambia entre
   capturas y el bbox sale de pantalla completa).
+- **Un `QDialog` de un cliente layer-shell se abre DEBAJO de su propio panel** (2026-08-11). Es
+  el protocolo, no un problema de foco ni de `raise()`: la capa **top** está por encima de todos
+  los toplevels, y un diálogo de Qt Widgets es un xdg toplevel común. En `kdock-controlmanager`
+  eso tapaba el selector de color, el *Renombrar…*, el confirm y el propio diálogo de
+  Configuración — se ve como "la app se colgó", porque el panel sigue arriba y el diálogo modal
+  no deja hacer nada. La cura es una función de cuatro líneas (`showAsOverlay()` en
+  `controlmanager/src/cmwindow.cpp`): `winId()` y las tres propiedades que la integración ya
+  lee (`kdock.layershell`, `kdock.layer`=3, `kdock.keyboardInteractivity`=1). Tres cosas que
+  hacen falta saber si agregás otro diálogo:
+  - **Construí el widget, no llames a la estática.** `QColorDialog::getColor()` /
+    `QInputDialog::getText()` / `QMessageBox::question()` muestran la ventana ellas mismas, y
+    para entonces ya es tarde.
+  - **Esto no se puede probar bajo Xvfb** (no hay layer-shell) **ni con `xdotool` en la sesión
+    real** (XTEST no llega a un cliente Wayland nativo: los clics sobre el panel no hacen
+    absolutamente nada y parece que la UI está muerta). Lo que funcionó fue un hook temporal en
+    `controlmanager/src/main.cpp` —un `QTimer::singleShot` que llama al diálogo, detrás de un
+    flag `--probe-dialog`— más `spectacle-custom`; y **acordate de sacarlo**.
+  - **El teclado se verifica con `QGuiApplication::focusWindow()`**, no mirando la captura: si
+    devuelve el `QWidgetWindow` del diálogo, el compositor le dio el `wl_keyboard`. El panel
+    conserva su propio grab y no hay que quitárselo.
 - **`left`/`top`/`right`/`bottom` son propiedades FINAL de `Item`** (2026-08-09): declarar
   `property bool left` en un componente QML propio es *"Cannot override FINAL property"* y
   **la carga de TODO el archivo falla** — `CmCornerGrip` tenía `left`/`top` y el panel de

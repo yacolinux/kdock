@@ -194,6 +194,154 @@ QVariantList NetworkControl::accessPoints() const
     return m_accessPoints;
 }
 
+namespace {
+
+// Reads an aa{sv} property (AddressData / NameserverData). Same helper as the
+// settings editor's (networksettings.cpp); the QDBusArgument is const because
+// beginArray()/beginStructure() have a *writing* non-const overload that
+// desynchronizes the stream and aborts the process (see CLAUDE.md).
+QList<QVariantMap> nmMapList(const QVariant &value)
+{
+    QList<QVariantMap> out;
+    if (value.canConvert<QDBusArgument>()) {
+        const QDBusArgument arg = value.value<QDBusArgument>();
+        arg >> out;
+        return out;
+    }
+    const QVariantList list = value.toList();
+    for (const QVariant &v : list)
+        out.append(v.toMap());
+    return out;
+}
+
+// 24 -> "255.255.255.0". NM reports the prefix, but a netmask is what the user
+// is used to reading (and what every other network dialog shows).
+QString netmaskFromPrefix(int prefix)
+{
+    if (prefix < 0 || prefix > 32)
+        return {};
+    const quint32 mask = prefix == 0 ? 0u : (0xFFFFFFFFu << (32 - prefix));
+    return QStringLiteral("%1.%2.%3.%4")
+        .arg((mask >> 24) & 0xFF).arg((mask >> 16) & 0xFF)
+        .arg((mask >> 8) & 0xFF).arg(mask & 0xFF);
+}
+
+QString deviceStateLabel(uint state)
+{
+    if (state >= 100) return NetworkControl::tr("conectado");
+    if (state >= 90)  return NetworkControl::tr("comprobando conectividad");
+    if (state >= 40)  return NetworkControl::tr("conectando");
+    if (state >= 30)  return NetworkControl::tr("desconectado");
+    if (state >= 20)  return NetworkControl::tr("no disponible");
+    return NetworkControl::tr("sin gestionar");
+}
+
+} // namespace
+
+QVariantList NetworkControl::deviceDetails() const
+{
+    QVariantList result;
+    if (!m_available)
+        return result;
+
+    const QList<QDBusObjectPath> devices =
+        NM::objectPaths(NM::getProp(NM::Path, NM::Iface, QStringLiteral("Devices")));
+
+    for (const QDBusObjectPath &d : devices) {
+        const QVariantMap dev = NM::getAll(d.path(), NM::DeviceIface);
+        if (dev.isEmpty())
+            continue;
+        // Only devices that are actually carrying a connection: a list of every
+        // tun/bridge/loopback NM knows about is noise, not information.
+        const QString activePath = dev.value(QStringLiteral("ActiveConnection"))
+                                       .value<QDBusObjectPath>().path();
+        if (activePath.isEmpty() || activePath == QLatin1String("/"))
+            continue;
+
+        // The housekeeping devices are always "connected" and always would be
+        // listed: loopback, the libvirt bridge, dummies. Same noise (and the
+        // same call to leave it out) as connections() makes by connection type.
+        const uint type = dev.value(QStringLiteral("DeviceType")).toUInt();
+        static const QList<uint> hiddenTypes = {13,  // bridge
+                                                14,  // generic
+                                                22,  // dummy
+                                                32}; // loopback
+        if (hiddenTypes.contains(type))
+            continue;
+
+        QVariantMap v;
+        v[QStringLiteral("iface")] = dev.value(QStringLiteral("Interface")).toString();
+        v[QStringLiteral("mac")] = dev.value(QStringLiteral("HwAddress")).toString();
+        v[QStringLiteral("wifi")] = type == NM::DeviceWifi;
+        v[QStringLiteral("typeLabel")] = type == NM::DeviceWifi ? tr("Wi-Fi")
+                                       : type == NM::DeviceEthernet ? tr("Ethernet")
+                                                                    : tr("Otro");
+        v[QStringLiteral("stateLabel")] =
+            deviceStateLabel(dev.value(QStringLiteral("State")).toUInt());
+        v[QStringLiteral("connection")] =
+            NM::getProp(activePath, NM::ActiveIface, QStringLiteral("Id")).toString();
+
+        // --- IPv4: first address + netmask, gateway, nameservers ---
+        QString ip4, mask, gateway, extraIp4;
+        int prefix = -1;
+        QStringList dns;
+        const QString ip4Path = dev.value(QStringLiteral("Ip4Config"))
+                                    .value<QDBusObjectPath>().path();
+        if (!ip4Path.isEmpty() && ip4Path != QLatin1String("/")) {
+            const QVariantMap props = NM::getAll(ip4Path, NM::Ip4ConfigIface);
+            const QList<QVariantMap> addresses =
+                nmMapList(props.value(QStringLiteral("AddressData")));
+            QStringList extras;
+            for (int i = 0; i < addresses.size(); ++i) {
+                const QString addr = addresses.at(i).value(QStringLiteral("address")).toString();
+                if (i == 0) {
+                    ip4 = addr;
+                    prefix = int(addresses.at(i).value(QStringLiteral("prefix")).toUInt());
+                    mask = netmaskFromPrefix(prefix);
+                } else {
+                    extras.append(addr);
+                }
+            }
+            extraIp4 = extras.join(QStringLiteral(", "));
+            gateway = props.value(QStringLiteral("Gateway")).toString();
+            for (const QVariantMap &s : nmMapList(props.value(QStringLiteral("NameserverData"))))
+                dns.append(s.value(QStringLiteral("address")).toString());
+        }
+
+        // --- IPv6: the first non link-local address, which is the useful one ---
+        QString ip6;
+        const QString ip6Path = dev.value(QStringLiteral("Ip6Config"))
+                                    .value<QDBusObjectPath>().path();
+        if (!ip6Path.isEmpty() && ip6Path != QLatin1String("/")) {
+            const QVariantMap props = NM::getAll(ip6Path, NM::Ip6ConfigIface);
+            for (const QVariantMap &a : nmMapList(props.value(QStringLiteral("AddressData")))) {
+                const QString addr = a.value(QStringLiteral("address")).toString();
+                if (addr.startsWith(QLatin1String("fe80")))
+                    continue;
+                ip6 = QStringLiteral("%1/%2").arg(addr)
+                          .arg(a.value(QStringLiteral("prefix")).toUInt());
+                break;
+            }
+            for (const QVariantMap &s : nmMapList(props.value(QStringLiteral("NameserverData")))) {
+                const QString addr = s.value(QStringLiteral("address")).toString();
+                if (!addr.isEmpty() && !dns.contains(addr))
+                    dns.append(addr);
+            }
+        }
+
+        v[QStringLiteral("ip4")] = ip4;
+        v[QStringLiteral("prefix")] = prefix;
+        v[QStringLiteral("mask")] = mask;
+        v[QStringLiteral("extraIp4")] = extraIp4;
+        v[QStringLiteral("gateway")] = gateway;
+        v[QStringLiteral("dns")] = dns.join(QStringLiteral(", "));
+        v[QStringLiteral("ip6")] = ip6;
+        result.append(v);
+    }
+
+    return result;
+}
+
 QString NetworkControl::savedConnectionFor(const QString &ssid) const
 {
     QDBusMessage call = QDBusMessage::createMethodCall(

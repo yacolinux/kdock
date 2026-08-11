@@ -1080,9 +1080,11 @@ QWidget *SettingsDialog::createColoresTab()
         const auto refreshAccent = makeColorButton(accentBtn, &DockConfig::darkAccentColor,
                                                    &DockConfig::setDarkAccentColor,
                                                    tr("Color de resaltado"));
-        accentBtn->setToolTip(tr("Color de los nombres de apps y widgets, y del resaltado de "
-                                 "las apps que están corriendo (que en modo oscuro deja de "
-                                 "usar el color de cada ícono y pasa a este único color)."));
+        accentBtn->setToolTip(tr("Color del resaltado de las apps que están corriendo (que en "
+                                 "modo oscuro deja de usar el color de cada ícono y pasa a este "
+                                 "único color). Los nombres de apps y widgets también lo usan, "
+                                 "salvo que no contraste con el fondo del dock: ahí el dock cae "
+                                 "a blanco o negro para que se puedan leer."));
         auto *accentRow = new QHBoxLayout;
         auto *accentReset = new QPushButton(tr("Breeze Dark"), box);
         connect(accentReset, &QPushButton::clicked, this, [refreshAccent] {
@@ -2632,9 +2634,11 @@ QWidget *SettingsDialog::createDarkModeTab()
     const auto refreshAccent = makeColorButton(accentBtn, &DockConfig::darkAccentColor,
                                                &DockConfig::setDarkAccentColor,
                                                tr("Color de resaltado"));
-    accentBtn->setToolTip(tr("Color de los nombres de apps y widgets, y del resaltado de "
-                             "las apps que están corriendo (que en modo oscuro deja de "
-                             "usar el color de cada ícono y pasa a este único color)."));
+    accentBtn->setToolTip(tr("Color del resaltado de las apps que están corriendo (que en "
+                             "modo oscuro deja de usar el color de cada ícono y pasa a este "
+                             "único color). Los nombres de apps y widgets también lo usan, "
+                             "salvo que no contraste con el fondo del dock: ahí el dock cae "
+                             "a blanco o negro para que se puedan leer."));
     auto *accentRow = new QHBoxLayout;
     auto *accentReset = new QPushButton(tr("Breeze Dark"), tab);
     connect(accentReset, &QPushButton::clicked, this, [refreshAccent] {

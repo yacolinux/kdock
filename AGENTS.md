@@ -499,8 +499,9 @@ que saber para tocar código:
 
 ### Modo Dark (`config.darkModeActive`, solapa DarkMode, token `darkmode`)
 - **La idea central: es un override de lectura, no una reescritura.** El modo oscuro **nunca** escribe sobre `panelColor`, `iconRunningBackground` ni ningún otro color que el usuario haya configurado; los tres bindings de `Dock.qml` (`dockBaseColor`, `dockTextColor` y los colores que salían de `iconColors`) eligen el valor oscuro **en el momento de dibujar**. Por eso volver a Normal restituye el esquema exacto sin snapshot ni restore, y por eso no hay nada que migrar. Verificado: tras una corrida en modo oscuro el `.conf` conserva su `panelColor` intacto.
-- **Qué cambia mientras está activo**: el fondo del dock pasa a `darkBackground` (`config.opacity` se sigue aplicando igual, así que la transparencia configurada no se toca); los nombres pasan a `darkAccent`; el resaltado de las apps que corren deja de usar el color dominante de cada ícono y usa ese mismo acento; y `root.widgetIconTheme` fuerza `widgetIconThemeDarkBg` sin mirar `widgetIconThemeMode` (con el panel oscuro por definición, el set claro sería un ícono negro sobre negro).
+- **Qué cambia mientras está activo**: el fondo del dock pasa a `darkBackground` (`config.opacity` se sigue aplicando igual, así que la transparencia configurada no se toca); los nombres pasan a `darkAccent` **si contrasta con el fondo** (ver abajo); el resaltado de las apps que corren deja de usar el color dominante de cada ícono y usa ese mismo acento; y `root.widgetIconTheme` fuerza `widgetIconThemeDarkBg` sin mirar `widgetIconThemeMode` (con el panel oscuro por definición, el set claro sería un ícono negro sobre negro).
   - Los puntos y la línea de borde son la excepción de una sola línea: sobre el relleno de acento (`iconRunningBackground` prendido) se pintan con `darkBackground`, porque el acento sobre el acento no se ve. Es la misma lógica que ya tenía `iconColors.contrasting()`.
+- **El acento es un color de *resaltado*, y el texto solo lo usa si se lee** (2026-08-11). `darkAccent` está pensado para el relleno/los puntos de las apps corriendo, así que nada impide que sea tan oscuro como el fondo: con el `#00007f` de un usuario sobre `darkBackground=#000000` los nombres de las apps quedaron invisibles, en negrita y sin ningún indicio de por qué. Ahora `dockTextColor` compara la luminancia percibida del acento con la del fondo (`root.darkAccentLum` vs `root.dockBaseLum`) y, por debajo de 0.35 de diferencia, cae al mismo `dockContrastColor` (`#141414`/`#F2F2F2`) que usa el modo normal. El acento **sigue intacto** para el resaltado de las apps corriendo, que es su propósito. Sin clave nueva ni migración: es una decisión en tiempo de lectura, como todo el resto del modo. Se comprueba en dos corridas del arnés de Xvfb comparando el color de los píxeles del nombre: con `#00007f` salen grises (`186,186,186`), con `#40ff40` siguen verdes (`49,196,49`).
 - **Dónde vive el estado.** Por dock, en su `.conf`: `darkMode` (el on/off cuando el alcance es por dock) y `showDarkMode` (el widget). App-wide, en el `kdock.conf` compartido: `darkModeAllDocks` (**alcance**), `darkModeOn` (**on/off** cuando el alcance es app-wide), `darkModeExceptions` (lista de dockIds), `darkAccent` y `darkBackground` (los dos colores son **únicos para toda la app**, no por dock).
 - **Alcance y estado son dos claves distintas, y esa separación es el diseño.** `darkModeAllDocks` es una *preferencia* ("prender/apagar desde cualquier lado vale para todos") que sobrevive a que el modo se apague; `darkModeOn` es el interruptor. Fundirlas en una sola clave fue el bug 2026-08-02: apagar el modo bajaba el alcance con él, así que volver a prenderlo solo alcanzaba al dock desde el que se hizo clic. `darkModeOn` **defaultea a `darkModeAllDocks()`**, que es la migración de las configs escritas antes de que la clave existiera (donde "el alcance es app-wide" quería decir "y está prendido").
 - **La resolución es una sola función**, `DockConfig::darkModeActive()`: con alcance app-wide, `darkModeGlobal() && !darkModeExceptions().contains(m_dockId)`; si no, el flag propio del dock. Resolver en vez de propagar es lo que hace que una excepción **no necesite ninguna escritura** en el `.conf` del dock exceptuado — incluidos los docks que no están corriendo.
@@ -1066,6 +1067,20 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   - **Cierre**: Esc, la ✕, perder el foco y (opcional, apagado) salir el puntero — los cuatro
     anulados por **Ventana permanente** (`keepOpen`), que es el pedido original de "puede
     convertirse en ventana permanente con un checkbox".
+  - **Los diálogos van una capa más arriba, o el panel los tapa** (`showAsOverlay()`, en
+    `controlmanager/src/cmwindow.cpp`, 2026-08-11). El panel vive en la capa **top** y un
+    `QDialog` es un xdg toplevel común, que por protocolo se apila **debajo** de esa capa: el
+    selector de color, el "Renombrar…", el confirm y el propio diálogo de Configuración se
+    abrían atrás del panel, invisibles e inalcanzables — y ningún `raise()`/`activateWindow()`
+    lo cambia, porque no es una cuestión de orden dentro de una capa. El arreglo es hacerlos
+    también superficies layer-shell, en la capa **overlay** (3): un `winId()` para forzar el
+    handle y las tres propiedades que la integración ya lee (`kdock.layershell`, `kdock.layer`,
+    `kdock.keyboardInteractivity`). Sin ancla, el compositor los centra. Dos detalles: los tres
+    modales **construyen su widget** en vez de llamar a la función estática de conveniencia
+    (`QColorDialog::getColor` y compañía muestran la ventana ellas mismas, y las propiedades
+    tienen que estar antes); y el helper es un no-op fuera de Wayland, así que los arneses de
+    Xvfb no cambian. Verificado en la sesión real: el diálogo se dibuja encima del panel y
+    `QGuiApplication::focusWindow()` es el diálogo, o sea que el compositor le da el teclado.
 - **Las secciones son una tabla estática** (`controlmanager/src/cmsections.cpp`): id, ícono,
   tamaño inicial en celdas, tamaño mínimo y si tiene solapa propia. Es lo que leen la barra de
   solapas, el motor de la grilla, el panel de ajustes y `--dump-sections`. **Agregar una
@@ -1183,6 +1198,16 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   `widgetIconThemeLightBg` del `kdock.conf` compartido, o sea la misma elección que el dock)
   según la luminancia del fondo **del panel**, y lleva el `theme.revision` que invalida la
   caché de pixmaps de QML.
+- **La sección Red muestra lo mismo que el widget del dock** (2026-08-11), y por la misma razón
+  por la que comparten backend: dos vistas de `NetworkControl` que dicen cosas distintas son dos
+  fuentes de verdad. La vista completa (`controlmanager/qml/cards/NetworkCard.qml`) tiene las
+  mismas tres mini-solapas que `qml/NetworkPopup.qml` —**Wi-Fi** (con la fila de contraseña para
+  unirse, y *Olvidar* en el clic derecho), **Guardadas** y **Detalles** (`deviceDetails()`)— más
+  el botón *Configurar redes…*, que sale por `DockLink::openNetworkSettings()` y se pone gris si
+  kdock no contesta. Dos diferencias a propósito: una red **abierta** pide confirmación
+  (`win.confirm()`) antes de conectarse, porque un clic accidental dejaba una conexión guardada
+  nueva; y **la tarjeta compacta de Principal no cambia** —resumen, Wi-Fi y el botón que salta a
+  la sección—, porque en 2x2 no entra nada de esto y el botón ya lleva a donde sí.
 - **Backends**: reusa `AudioControl`, `BatteryControl`, `BrightnessControl`, `NetworkControl`,
   `WallpaperControl`, `PowerControl` y `DesktopEntryIndex` tal cual, y agrega tres propios:
   - **`ScreenBrightness`** (`org.kde.ScreenBrightness`, PowerDevil): brillo **por monitor**, que
@@ -1200,8 +1225,11 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   tres cosas no se pueden hacer desde afuera del proceso del dock: **el modo oscuro** (escribir
   `darkModeOn` en el `.conf` no repinta nada — no hay watcher de archivos, y el modo se
   resuelve al dibujar), **el diálogo de Configuración** (se abre solo desde el menú del dock) y
-  **el reinicio**. Métodos: `openSettings(dockId)`, `restart()`, `darkMode()`/`setDarkMode(b)`/
-  `toggleDarkMode()`, `dockIds()`/`dockScreens()`/`primaryDockId()`, señal `darkModeChanged(b)`.
+  **el reinicio**. Métodos: `openSettings(dockId)`, **`openNetworkSettings(dockId)`** (el mismo
+  diálogo abierto derecho en la solapa Redes, para el *Configurar redes…* de la sección Red del
+  panel: el editor de conexiones vive en el proceso del dock y en ningún otro), `restart()`,
+  `darkMode()`/`setDarkMode(b)`/`toggleDarkMode()`, `dockIds()`/`dockScreens()`/`primaryDockId()`,
+  señal `darkModeChanged(b)`.
   - **Tres `as` paralelas en vez de un `a(ssb)`**: `as` no necesita `qDBusRegisterMetaType` de
     ningún lado (ver la trampa de los structs de D-Bus en `CLAUDE.md`).
   - **No tiene `quit()` a propósito**: dejar al usuario sin dock y sin forma de volver no es
@@ -1542,9 +1570,29 @@ still render and work; they just can't be toggled from the UI anymore).
   - `setApTrackingEnabled(bool)` — the popup turns it on while open. Without it every rescan would do ~40 blocking round trips with nobody looking.
   - `requestScan()` + the `scanning` property (derived from `Device.Wireless.LastScan`).
   - `connectToAccessPoint(ssid, password, apPath)` — **joining a new network needs no secret agent**: an already-saved SSID is just activated, otherwise `AddAndActivateConnection` carries the settings *and* the secret inline with `psk-flags=0`, so NM stores it itself (what `nmcli device wifi connect` does). The key management comes from the AP's own flags, so a WPA3-only network gets `sae` and a WEP one gets `wep-key0` + `wep-key-type=2` instead of a psk.
+  - `deviceDetails()` (2026-08-11) — the "what is my address" half: one entry per managed device that has an **active** connection (`ActiveConnection != "/"`, minus the housekeeping device types — loopback, bridge, generic, dummy — which are always "connected" and pure noise), with `iface`, `typeLabel`, `stateLabel`, `connection` (the active connection's `Id`), `mac` (`Device.HwAddress`), `ip4` + `prefix` + `mask` (the prefix rendered as a dotted netmask, the only computation of its own), `extraIp4`, `gateway`, `dns` (IPv4 `NameserverData` plus the IPv6 ones) and `ip6` (the first non `fe80` address). Several round trips per device, so it is a **call**, not a property: only the view showing it pays, the same deal as `accessPoints()`. Deliberately not reusing `NetworkSettings::deviceIpSummary()` — that file is not compiled into `kdock-controlmanager`, `networkcontrol.cpp` is.
   - `forgetConnection(path)` and an `errorOccurred(QString)` signal — every call goes through `QDBusPendingCallWatcher` and a rejection (bad password, no authorization) is shown in the popup instead of vanishing.
 
-UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qml`: header (primary connection + Wi-Fi `Switch`), then **nearby networks** with signal bars, a lock icon, `Conectado`/`Guardada`/band and a *Escanear* button — picking a secured network that is not saved opens a password field with a *Conectar* button right under its row — and below them the **saved connections that are not in range** (Ethernet, networks elsewhere), filtered by AP `connPath` so nothing appears twice. Right-click on a saved network offers *Olvidar esta red*; a red strip shows the last NM error. The popup is `modal: true` + `dockWindow.setKeyboardInteractive(true/false)` + the `focusRetry` timer, the same keyboard dance as `ClipboardPopup` — the password field needs key events and the layer surface is inert. **Right click on the widget** (blocks never reach `secMouse`, so this is its own `Menu`, like the clipboard's) offers *Configurar redes…* → `dockWindow.openNetworkSettings()` → `SettingsDialog::showNetworkTab()`, *Buscar redes Wi-Fi* and a checkable *Wi-Fi*.
+UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qml`, a small window
+with **three mini-tabs** (pills, the same gesture as the control panel's tab bar; 2026-08-11):
+
+- **Wi-Fi** — nearby networks with signal bars, a lock icon, `Conectado`/`Guardada`/band and an
+  *Escanear* button. Picking a secured network that is not saved opens a password field with a
+  *Conectar* button right under its row; right-click on a saved one offers *Olvidar esta red*.
+- **Guardadas** — the saved connections that are **not** in range (Ethernet, networks elsewhere),
+  filtered by AP `connPath` so nothing appears twice.
+- **Detalles** — `network.deviceDetails()`: address, netmask, gateway, DNS, IPv6 and MAC per active
+  device. The values are read-only `TextEdit`s (`selectByMouse`), because an IP is something people
+  copy.
+
+Outside the tabs, because they belong to all three: the header (primary connection + Wi-Fi `Switch`),
+the red strip with the last NM error, and a **Configurar redes…** button that calls
+`dockWindow.openNetworkSettings()` — the same thing the widget's right-click menu offers, now one
+click away from the list. The popup is `modal: true` + `dockWindow.setKeyboardInteractive(true/false)`
++ the `focusRetry` timer, the same keyboard dance as `ClipboardPopup` — the password field needs key
+events and the layer surface is inert. **Right click on the widget** (blocks never reach `secMouse`,
+so this is its own `Menu`, like the clipboard's) offers *Configurar redes…*, *Buscar redes Wi-Fi* and
+a checkable *Wi-Fi*.
 
 **Settings → Redes** is the full editor, modeled on KDE's network KCM and reached the same way the mixer is (widget right-click). `NetworkSettings` (`src/networksettings.{h,cpp}`) is the GUI-free backend: `devices()` (Ethernet + Wi-Fi only), `connections()`, `settings()`/`secrets()`, `addConnection()`/`updateConnection()`/`deleteConnection()`/`activate()`/`deactivate()` (each returning the D-Bus error message or an empty string), `deviceIpSummary()` for the read-only device page, and the two **pure** conversions `ipFromSettings()`/`ipToSettings()` between an NM ipv4/ipv6 group and an `IpConfig` struct. Those write the modern `address-data` / `route-data` (`aa{sv}`) + `gateway` + **`dns-data`** (`as`) and strip the legacy `addresses`/`routes`/`dns` so there is only one source of truth — verified by round-tripping a real connection: NM 1.54 accepts `dns-data` and mirrors it into the legacy numeric `dns` itself, so no network-byte-order conversion is needed. `NetworkSettingsWidget` (`src/networksettingswidget.{h,cpp}`) is the tab: a `QTreeWidget` of *Dispositivos* + *Conexiones* with Agregar (Wi-Fi/Ethernet) / Borrar / Conectar on the left, and on the right either a read-only device page or `ConnectionEditor` (`src/connectioneditor.{h,cpp}`) — an inner horizontal `QTabWidget` with **General / Wi-Fi / Seguridad / Ethernet / IPv4 / IPv6** (the middle pages swap with the connection type) plus Aplicar/Descartar, where the two IP pages are one reusable `IpConfigPage` and *Rutas…* opens `RoutesDialog` (`src/routesdialog.{h,cpp}`). Security covers WPA/WPA2-Personal (`wpa-psk`), WPA3 (`sae`), WEP and open; the saved password is seeded from `GetSecrets` (system-owned secrets come back without a polkit prompt, agent-owned ones — plasma-nm's, in KWallet — come back empty and the field is left blank). A connection carrying an `802-1x` group is shown but not saved, so the editor cannot silently drop it. `collect()` starts from the loaded map so groups the editor does not model survive a save. **Ruta C complete (disks + network).**
 
@@ -1583,7 +1631,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`), `setPanelSize(w,h)` + **`originShiftX`/`originShiftY`** (cuánto se corre el origen de la superficie por píxel de crecimiento, según el ancla: lo que usan los `CmCornerGrip` para reconstruir el movimiento del puntero en pantalla) + los modales `pickColor`, `promptText`, `confirm` |
 | `ScreenBrightness` | `screens` | `available`, `count`, `displays()` (→ `{name, label, internal, value 0..1, brightness, max}`), `setBrightness(name, ratio)`, `setAll(ratio)`, `refresh()`. Brillo **por monitor** vía PowerDevil; los nombres de los objetos son volátiles y no se cachean |
 | `MprisControl` | `mpris` | `available`, `playerId`, `identity`, `title`, `artist`, `album`, `artUrl`, `status`, `playing`, `canGoNext`/`canGoPrevious`/`canPause`/`canSeek`, `position`/`length` (µs), `players()`, `setPlayer(id)`, `playPause()`/`play()`/`pause()`/`stop()`/`next()`/`previous()`, `seekToRatio(r)`, `raisePlayer()`, `setMonitoring(on)` (el sondeo de posición solo mientras se mira) |
-| `DockLink` | `dock` | `available`, `darkMode` (rw), `toggleDarkMode()`, `openSettings(dockId)`, `restartDock()`, `docks()`. Cliente de `org.kdock.Dock`; `available` en false es normal (kdock apagado) y las tarjetas lo usan como reja |
+| `DockLink` | `dock` | `available`, `darkMode` (rw), `toggleDarkMode()`, `openSettings(dockId)`, `openNetworkSettings(dockId)` (el mismo diálogo, abierto en la solapa Redes), `restartDock()`, `docks()`. Cliente de `org.kdock.Dock`; `available` en false es normal (kdock apagado) y las tarjetas lo usan como reja |
 | `ThumbnailImageProvider` | `image://thumb/<thumbId>@<rev>` | Captura escalada de una ventana; `rev` (de `thumbRevision`) invalida la caché de QtQuick. 1×1 transparente cuando todavía no hay captura, y un aviso por stderr si la clave no resuelve. **`thumbId`, no `uuid`** (QUrl percent-codifica las llaves) |
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
 | `VirtualDesktops` | `virtualDesktops` | `count`, `current` (posición **1-based**, 0 = KWin no contesta), `names`, `nameOf(position)`, `switchTo(position)`. Lo usan el widget `pager`, el submenú *Escritorio* de los íconos de apps y —desde 2026-08-10, en `kdock-controlmanager`— la sección *Escritorios* |
@@ -1604,7 +1652,7 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `AppMenu` | `appMenu` | `sections()` (`{key,label,icon,depth}`; replaced `categories()`), `appsInCategory(key)`, `search(query)`, `favorites()`, `launch(id)`, `launchMenuEditor()`, `isFavorite(id)`, `addFavorite(id)`, `removeFavorite(id)`, `toggleFavorite(id)`, `moveFavorite(from,to)` |
 | `BatteryControl` | `battery` | `available`, `profilesAvailable`, `percent`, `charging`, `iconName`, `profile`, `setProfile(id)` (UPower + power-profiles-daemon, system bus) |
 | `DisksControl` | `disks` | `available`, `volumes()` (→ removable drives), `mount(path)`, `unmount(path)`, `eject(path)`, `openMount(path)` (UDisks2) |
-| `NetworkControl` | `network` | `available`, `iconName`, `primaryName`, `wifiEnabled`, `wifiAvailable`, `scanning`, `connections()`, `accessPoints()` (→ `{ssid, strength, security, secure, saved, active, path, connPath, band}`), `activate(path)`, `deactivate(path)`, `requestScan()`, `connectToAccessPoint(ssid, password, apPath)`, `forgetConnection(path)`, `setApTrackingEnabled(on)`, `setWifiEnabled(on)`, signal `errorOccurred(msg)` (NetworkManager). Joining a new Wi-Fi by password needs **no** secret agent: the psk travels inline with `psk-flags=0` |
+| `NetworkControl` | `network` | `available`, `iconName`, `primaryName`, `wifiEnabled`, `wifiAvailable`, `scanning`, `connections()`, `accessPoints()` (→ `{ssid, strength, security, secure, saved, active, path, connPath, band}`), `deviceDetails()` (→ `{iface, typeLabel, stateLabel, connection, wifi, mac, ip4, prefix, mask, extraIp4, gateway, dns, ip6}`, una entrada por dispositivo con conexión activa), `activate(path)`, `deactivate(path)`, `requestScan()`, `connectToAccessPoint(ssid, password, apPath)`, `forgetConnection(path)`, `setApTrackingEnabled(on)`, `setWifiEnabled(on)`, signal `errorOccurred(msg)` (NetworkManager). Joining a new Wi-Fi by password needs **no** secret agent: the psk travels inline with `psk-flags=0` |
 | `ScriptRunnersManager` | `scriptRunners` | `count`, `get(id)`, `removeScriptRunner(id)`, `visibleIds(isPrimary, hidden, shown)`, `run(id)` |
 | `ClipboardHistory` | `clipboardHistory` | `count`, `captureImages`, `entries(query)` (→ `{text, preview, isImage, file, imageUrl, width, height}`), `setClipboard(text)`, `setClipboardImage(file)`, `clearHistory()`, `openInEditor()`, `saveHistoryDialog()`; shared singleton, text + images, 50-entry / 20-image cap, JSON index + PNGs (plus a plain-text export). Captured in the background over `ext-data-control-v1` |
 

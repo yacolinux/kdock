@@ -114,6 +114,16 @@ void DockLink::openSettings(const QString &dockId)
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
+void DockLink::openNetworkSettings(const QString &dockId)
+{
+    if (!m_available)
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("openNetworkSettings"));
+    msg.setArguments({dockId});
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
+
 void DockLink::restartDock()
 {
     if (!m_available)

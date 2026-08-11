@@ -517,10 +517,23 @@ Item {
     readonly property color dockBaseColor: config.darkModeActive ? config.darkBackground
                                            : config.panelColorSet ? config.panelColor
                                                                   : theme.background
-    readonly property bool dockBaseIsLight:
-        (0.299 * dockBaseColor.r + 0.587 * dockBaseColor.g + 0.114 * dockBaseColor.b) > 0.5
-    readonly property color dockTextColor: config.darkModeActive ? config.darkAccent
-                                           : dockBaseIsLight ? "#141414" : "#F2F2F2"
+    readonly property real dockBaseLum:
+        0.299 * dockBaseColor.r + 0.587 * dockBaseColor.g + 0.114 * dockBaseColor.b
+    readonly property bool dockBaseIsLight: dockBaseLum > 0.5
+    // In dark mode the text takes the accent, but only while the accent is
+    // readable over the dark background: the accent is a *highlight* color
+    // (running apps, indicators) and nothing stops it from being as dark as the
+    // panel — a #00007f accent over a #000000 background left every app name
+    // invisible. Below the threshold it falls back to the same plain contrast
+    // answer the non-dark path uses.
+    readonly property real darkAccentLum:
+        0.299 * config.darkAccent.r + 0.587 * config.darkAccent.g + 0.114 * config.darkAccent.b
+    readonly property color dockContrastColor: dockBaseIsLight ? "#141414" : "#F2F2F2"
+    readonly property color dockTextColor:
+        config.darkModeActive
+            ? (Math.abs(darkAccentLum - dockBaseLum) > 0.35 ? config.darkAccent
+                                                            : dockContrastColor)
+            : dockContrastColor
 
     // Same idea for the widgets' icons: the standard icons (volume, network,
     // session…) are monochrome and drawn in a color meant for one background,

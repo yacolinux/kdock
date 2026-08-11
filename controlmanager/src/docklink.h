@@ -33,6 +33,9 @@ public:
     Q_INVOKABLE void toggleDarkMode() { setDarkMode(!m_darkMode); }
     // Empty dockId = the primary dock.
     Q_INVOKABLE void openSettings(const QString &dockId = QString());
+    // The dock's settings dialog, opened on its Redes tab (the connection
+    // editor: static IP, DNS, routes). Nothing of that lives in this process.
+    Q_INVOKABLE void openNetworkSettings(const QString &dockId = QString());
     // Restarts the kdock *process*, i.e. every dock it draws. The UI says so.
     Q_INVOKABLE void restartDock();
     // [{ id, screen, primary }]

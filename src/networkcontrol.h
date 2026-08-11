@@ -54,6 +54,16 @@ public:
     // Empty unless access-point tracking is on (see setApTrackingEnabled).
     Q_INVOKABLE QVariantList accessPoints() const;
 
+    // Live IP data of every managed device that has an active connection, the
+    // "what is my address" half of the widget. Each element:
+    //   iface, typeLabel, mac, stateLabel, connection (active connection id),
+    //   wifi (bool), ip4 (first address), mask (ip4 prefix as a netmask),
+    //   prefix (int), gateway, dns (comma-joined), ip6, extraIp4 (the further
+    //   IPv4 addresses of the device, comma-joined; usually empty).
+    // Several D-Bus round trips per device, so it is a call and not a property:
+    // only the view that shows it pays for it (same deal as accessPoints()).
+    Q_INVOKABLE QVariantList deviceDetails() const;
+
     // Activate a saved connection (by its settings object path).
     Q_INVOKABLE void activate(const QString &connPath);
     // Deactivate an active connection (by its ActiveConnection object path).
