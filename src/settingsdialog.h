@@ -22,6 +22,7 @@ class AppearanceControl;
 class ColoredTabWidget;
 class IconColorProvider;
 class PreviewsLauncher;
+class WeatherConfig;
 class TileMenuLauncher;
 class ControlManagerLauncher;
 class Theme;
@@ -276,6 +277,10 @@ private:
     // Previews tab. The launcher outlives the tab widgets (buildTabs() recreates
     // them whenever another dock is selected).
     PreviewsLauncher *m_previewsLauncher = nullptr;
+    // Owned by the dialog: the Fuentes tab edits the weather window's font
+    // size, and going through the config object (not raw QSettings) is what
+    // makes a running kdock-weather notice — its config watches the file.
+    WeatherConfig *m_weatherConfig = nullptr;
     TileMenuLauncher *m_tileLauncher = nullptr;
     ControlManagerLauncher *m_cmLauncher = nullptr;
     QCheckBox *m_previewsEnabled = nullptr;

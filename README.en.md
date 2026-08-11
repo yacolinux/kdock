@@ -387,9 +387,14 @@ It is opened by the dock's *Weather* widget, by the panel card's button, or by r
   widget has a temperature in its very first frame after a dock restart. If the network drops it
   does not blank out: the old reading is dimmed, the footer says so, and it retries with a
   growing backoff.
+- **Configurable font size**: the whole window scales with it — icons follow the text — and the
+  window grows so nothing gets clipped. Set it in its own dialog or from the dock's
+  *Settings → Fonts*, which gathers the typography of all three surfaces.
 - **Single instance but not resident**: the widget's click opens it and the next one closes it,
   and closing quits the process. Like `kdock-tilemenu` and `kdock-calendar`, **it needs no
   special KWin permission**.
+- With no city configured the dock widget **still shows up**, with a generic icon: the click
+  takes you straight to picking one.
 
 ---
 

@@ -630,7 +630,10 @@ Item {
         case "clipboard": return config.showClipboard && clipboardHistory
         case "disks": return config.showDisks && disks && disks.available
         case "network": return config.showNetwork && network && network.available
-        case "weather": return config.showWeather && weather && weather.configured
+        // Sin ciudad configurada el widget se muestra igual, con un ícono neutro:
+        // esconderlo dejaba al usuario sin ningún lugar donde hacerle clic
+        // derecho para configurarlo, y sin forma de descubrir que existe.
+        case "weather": return config.showWeather && weather
         case "iconthemes": return config.showIconThemes && appearance
         case "colorschemes": return config.showColorSchemes && appearance
         case "volume": return config.showVolume && volume.available
@@ -740,7 +743,7 @@ Item {
         case "controlmanager": return qsTr("Control Manager")
         case "weather": return weather && weather.configured
                         ? weather.cityLabel + " — " + weather.conditionText
-                        : qsTr("Clima")
+                        : qsTr("Clima: elegí una ciudad")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
         case "gap": return qsTr("Transparent separator")
@@ -2810,7 +2813,8 @@ Item {
                 visible: config.showTooltips && wxMouse.containsMouse
                 delay: 400
                 text: {
-                    if (!weather || !weather.configured) return qsTr("Clima")
+                    if (!weather || !weather.configured)
+                        return qsTr("Clima: elegí una ciudad\nClic para configurarlo")
                     var t = weather.cityLabel + "\n" + weather.tempText + "  "
                             + weather.conditionText
                     if (weather.stale)
@@ -2830,8 +2834,15 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     width: root.widgetIconPx
                     height: width
-                    source: weather ? "image://icon/" + weather.iconName + root.widgetIconSuffix
-                                    : ""
+                    // Sin ciudad, el ícono genérico del clima (el mismo de la
+                    // sección del panel): el widget tiene que seguir estando
+                    // para poder configurarlo desde su menú. `weather-none-
+                    // available` sería lo literal, pero varios iconsets lo
+                    // dibujan como un "?" que no se lee como el clima.
+                    source: "image://icon/"
+                            + (weather && weather.configured ? weather.iconName
+                                                             : "weather-few-clouds")
+                            + root.widgetIconSuffix
                     sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                         root.widgetIconPx * Screen.devicePixelRatio)
                     // Old data is dimmed rather than hidden: a widget that goes
@@ -2846,9 +2857,14 @@ Item {
                     text: weather ? weather.tempText : ""
                     color: root.dockTextColor
                     opacity: weather && weather.stale ? 0.55 : 1.0
-                    font.pixelSize: config.clockFontSize > 0
-                                    ? root.clockFontPx
-                                    : Math.round(root.appIconPx * 0.40)
+                    // Own size when set; otherwise the clock font and, with
+                    // neither, a fraction of the icon size — same ladder as the
+                    // Control Manager widget's text.
+                    font.pixelSize: config.weatherFontSize > 0
+                                    ? Math.max(7, Math.round(config.weatherFontSize * fitScale))
+                                    : (config.clockFontSize > 0
+                                       ? root.clockFontPx
+                                       : Math.round(root.appIconPx * 0.40))
                     font.bold: config.labelBold
                 }
             }
@@ -2862,6 +2878,12 @@ Item {
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 onClicked: (mouse) => {
                     if (mouse.button === Qt.RightButton) { wxMenu.popup(); return }
+                    // Sin ciudad no hay pronóstico que mostrar: el clic va
+                    // derecho a elegirla.
+                    if (weather && !weather.configured) {
+                        weatherLauncher.openSettings()
+                        return
+                    }
                     weatherLauncher.toggle(config.screenName)
                 }
             }
@@ -2878,12 +2900,13 @@ Item {
                 IconMenuItem {
                     text: qsTr("Ver el pronóstico")
                     iconName: "weather-few-clouds"
+                    enabled: weather && weather.configured
                     onTriggered: weatherLauncher.toggle(config.screenName)
                 }
                 IconMenuItem {
                     text: qsTr("Actualizar ahora")
                     iconName: "view-refresh"
-                    enabled: weather && !weather.loading
+                    enabled: weather && weather.configured && !weather.loading
                     onTriggered: weather.refresh(true)
                 }
                 MenuSeparator {}

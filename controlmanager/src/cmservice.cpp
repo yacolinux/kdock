@@ -64,6 +64,11 @@ void CmService::callShowSection(const QString &sectionId, const QString &screenN
     call(QStringLiteral("showSection"), {sectionId, screenName});
 }
 
+void CmService::callReloadConfig()
+{
+    call(QStringLiteral("reloadConfig"));
+}
+
 void CmService::callQuit()
 {
     call(QStringLiteral("quit"));
@@ -121,6 +126,12 @@ void CmService::showSettings()
 {
     if (m_window)
         m_window->openSettings();
+}
+
+void CmService::reloadConfig()
+{
+    if (m_window)
+        m_window->reloadConfig();
 }
 
 void CmService::quit()

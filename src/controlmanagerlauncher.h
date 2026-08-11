@@ -36,6 +36,17 @@ public:
     static void quitRunning();
     // Whether kdock should bring the process up at startup instead of waiting
     // for the first click. Lives in the panel's own config file.
+    // The panel's own typography, edited from kdock's Fuentes tab so every font
+    // size of every surface sits in one place. They live in the panel's config
+    // file; a running panel is told over D-Bus, and one that is down reads them
+    // on its next start.
+    static int panelFontSize();
+    static void setPanelFontSize(int px);
+    static int buttonWidth();
+    static void setButtonWidth(int px);
+    static int buttonHeight();
+    static void setButtonHeight(int px);
+
     static bool preload();
     static void setPreload(bool on);
     static void startIfPreloading();

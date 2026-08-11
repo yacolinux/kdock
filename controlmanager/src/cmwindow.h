@@ -79,6 +79,9 @@ public:
     Q_INVOKABLE void setPanelSize(int w, int h);
 
     Q_INVOKABLE void openSettings();
+    // Somebody else edited controlmanager.conf (kdock's Fuentes tab): re-read it
+    // and repaint. Reaches here through org.kdock.ControlManager.reloadConfig.
+    void reloadConfig();
     Q_INVOKABLE void quitApp();
     // Relaunch with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restartSelf();

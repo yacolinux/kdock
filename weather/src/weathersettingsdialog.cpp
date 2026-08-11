@@ -165,6 +165,18 @@ WeatherSettingsDialog::WeatherSettingsDialog(WeatherConfig *config, WeatherContr
                 [this](int v) { m_config->setRefreshMinutes(v); });
         form->addRow(tr("Actualizar cada:"), refresh);
 
+        auto *font = new QSpinBox(box);
+        font->setRange(0, 40);
+        font->setSpecialValueText(tr("Automático"));
+        font->setSuffix(tr(" px"));
+        font->setValue(m_config->fontSize());
+        font->setToolTip(tr("Tamaño de fuente de toda la ventana del clima. Los íconos "
+                            "acompañan al texto, así que la ventana entera crece con él. "
+                            "Automático son los tamaños de siempre."));
+        connect(font, &QSpinBox::valueChanged, this,
+                [this](int v) { m_config->setFontSize(v); });
+        form->addRow(tr("Tamaño de fuente:"), font);
+
         auto *credit = new QLabel(tr("Los datos son de Open-Meteo.com (sin cuenta ni clave)."), box);
         credit->setWordWrap(true);
         form->addRow(credit);

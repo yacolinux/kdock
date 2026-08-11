@@ -1312,6 +1312,15 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   30 líneas que construye un backend por vez e imprime un marcador entre uno y otro
   (2026-08-08). Si ves ese mensaje en cualquier arnés, no lo ignores: buscá **cuál** de los
   backends lo emite antes de suponer que es del código que estás tocando.
+- **Un widget que se esconde cuando no está configurado se queda sin la puerta para
+  configurarlo** (2026-08-11, reportado por el usuario). El widget del clima salía de
+  `sectionVisible()` mientras no hubiera ciudad, y la única entrada a su configuración es el
+  menú de su propio clic derecho: sin ícono en el dock no hay dónde hacer clic, y desde afuera
+  se ve como "el widget no funciona". La regla: un widget cuya configuración vive **en su
+  propio menú** se dibuja siempre —con un ícono neutro y sin datos— y son sus *ítems* los que
+  se deshabilitan. Y ojo con el ícono neutro: `weather-none-available` es lo literal, pero
+  varios iconsets lo dibujan como un "?" morado; se elige mirando el dock renderizado, no el
+  nombre en disco.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú

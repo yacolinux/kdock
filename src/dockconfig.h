@@ -111,6 +111,11 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showDisks READ showDisks WRITE setShowDisks NOTIFY showDisksChanged)
     Q_PROPERTY(bool showNetwork READ showNetwork WRITE setShowNetwork NOTIFY showNetworkChanged)
     Q_PROPERTY(bool showWeather READ showWeather WRITE setShowWeather NOTIFY showWeatherChanged)
+    // Font size of the temperature the weather widget draws on the dock. 0 =
+    // follow the clock font and, with neither, a fraction of the icon size —
+    // same arrangement as controlManagerFontSize.
+    Q_PROPERTY(int weatherFontSize READ weatherFontSize WRITE setWeatherFontSize
+               NOTIFY weatherFontSizeChanged)
     // KDE appearance pickers (icon theme / color scheme), see AppearanceControl.
     Q_PROPERTY(bool showIconThemes READ showIconThemes WRITE setShowIconThemes NOTIFY showIconThemesChanged)
     Q_PROPERTY(bool showColorSchemes READ showColorSchemes WRITE setShowColorSchemes NOTIFY showColorSchemesChanged)
@@ -609,6 +614,7 @@ public:
     bool showDisks() const { return m_showDisks; }
     bool showNetwork() const { return m_showNetwork; }
     bool showWeather() const { return m_showWeather; }
+    int weatherFontSize() const { return m_weatherFontSize; }
     bool showIconThemes() const { return m_showIconThemes; }
     bool showColorSchemes() const { return m_showColorSchemes; }
     bool showOverview() const { return m_showOverview; }
@@ -725,6 +731,7 @@ public:
     void setShowDisks(bool show);
     void setShowNetwork(bool show);
     Q_INVOKABLE void setShowWeather(bool show);
+    Q_INVOKABLE void setWeatherFontSize(int px);
     void setShowIconThemes(bool show);
     void setShowColorSchemes(bool show);
     void setClipboardPopupWidth(int w);
@@ -844,6 +851,7 @@ signals:
     void showDisksChanged();
     void showNetworkChanged();
     void showWeatherChanged();
+    void weatherFontSizeChanged();
     void showIconThemesChanged();
     void showColorSchemesChanged();
     void clipboardPopupWidthChanged();
@@ -982,6 +990,7 @@ private:
     bool m_showDisks = false;
     bool m_showNetwork = false;
     bool m_showWeather = false;
+    int m_weatherFontSize = 0;
     bool m_showIconThemes = false;
     bool m_showColorSchemes = false;
     int m_clipboardPopupWidth = 360;

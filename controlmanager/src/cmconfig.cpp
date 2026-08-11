@@ -166,6 +166,15 @@ void CmConfig::storeSections()
     emit sectionsChanged();
 }
 
+void CmConfig::reloadFromDisk()
+{
+    m_settings.sync();
+    load();
+    emit settingsChanged();
+    emit windowChanged();
+    emit sectionsChanged();
+}
+
 QUrl CmConfig::backgroundImageUrl() const
 {
     return m_backgroundImage.isEmpty() ? QUrl() : QUrl::fromLocalFile(m_backgroundImage);

@@ -407,6 +407,11 @@ void CmWindow::openSettings()
     m_settingsDialog->activateWindow();
 }
 
+void CmWindow::reloadConfig()
+{
+    m_config->reloadFromDisk();
+}
+
 void CmWindow::quitApp()
 {
     QCoreApplication::quit();

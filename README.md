@@ -395,9 +395,14 @@ botón de la tarjeta del panel, o `kdock-weather` a secas.
 - **Muestra lo último que sabe y pregunta después.** La respuesta se guarda en disco, así que
   el widget tiene temperatura en el primer frame tras un reinicio del dock. Si se cae la red no
   se vacía: atenúa el dato viejo, lo dice en el pie y reintenta con espera creciente.
+- **Tamaño de fuente configurable**: toda la ventana escala con él —los íconos acompañan al
+  texto— y la ventana crece para que nada quede cortado. Se ajusta en su propio diálogo o desde
+  *Configuración → Fuentes* del dock, que junta la tipografía de las tres superficies.
 - **Instancia única pero no residente**: el clic del widget la abre y el siguiente la cierra, y
   al cerrarse el proceso termina. Como `kdock-tilemenu` y `kdock-calendar`, **no pide ningún
   permiso especial de KWin**.
+- Sin ciudad configurada el widget del dock **igual se muestra**, con un ícono genérico: el clic
+  lleva derecho a elegirla.
 
 ---
 

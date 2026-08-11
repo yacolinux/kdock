@@ -17,6 +17,8 @@
 #include "themepicker.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
+#include "weatherconfig.h"
+#include "weatherlauncher.h"
 #include "tilemenulauncher.h"
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
@@ -1179,6 +1181,27 @@ QWidget *SettingsDialog::createFuentesTab()
     syncCmFontEnabled();
     form->addRow(tr("Control Manager text size:"), cmFont);
 
+    // The weather widget draws a temperature next to its icon — again neither an
+    // app name nor a section name, so it gets its own size with the same ladder
+    // as the Control Manager text above (own value → clock font → icon size).
+    auto *weatherFont = new QSpinBox(tab);
+    weatherFont->setRange(0, 96);
+    weatherFont->setSpecialValueText(tr("Automatic"));
+    weatherFont->setSuffix(tr(" px"));
+    weatherFont->setValue(m_config->weatherFontSize());
+    weatherFont->setToolTip(tr("Tamaño de la temperatura que el widget del clima dibuja en "
+                               "el dock. Automático sigue a la fuente del reloj y, sin ella, "
+                               "a una fracción del tamaño del ícono."));
+    connect(weatherFont, &QSpinBox::valueChanged, m_config, &DockConfig::setWeatherFontSize);
+    connect(m_config, &DockConfig::weatherFontSizeChanged, weatherFont,
+            [this, weatherFont] { weatherFont->setValue(m_config->weatherFontSize()); });
+    const auto syncWeatherFontEnabled = [this, weatherFont] {
+        weatherFont->setEnabled(m_config->showWeather());
+    };
+    connect(m_config, &DockConfig::showWeatherChanged, tab, syncWeatherFontEnabled);
+    syncWeatherFontEnabled();
+    form->addRow(tr("Weather text size:"), weatherFont);
+
     // A separator before the name block, which only applies while some name is
     // shown (see the enable logic below).
     auto *nameHeader = new QLabel(tr("<b>Nombres de apps y widgets</b>"), tab);
@@ -1246,6 +1269,86 @@ QWidget *SettingsDialog::createFuentesTab()
 
     form->addRow(new QLabel(tr("<i>El modo de etiqueta (ícono solo / nombre abajo, etc.) "
                                "se elige en la solapa Widgets.</i>"), tab));
+
+    // --- Las otras dos superficies de kdock ---------------------------------
+    //
+    // El panel de control y la ventana del clima son procesos aparte con su
+    // propia configuración, y cada uno tiene estos mismos controles en su propio
+    // diálogo. Están acá porque "el tamaño de la letra" es lo que más se busca y
+    // nadie quiere adivinar en cuál de los tres diálogos vive.
+    //
+    // Los dos caminos para que el cambio se vea al instante son distintos, y esa
+    // diferencia es real: el clima vigila su archivo (lo leen tres procesos),
+    // mientras que el panel reescribe el suyo en cada arrastre de tarjeta, así
+    // que un watcher ahí dispararía todo el tiempo — se le avisa por D-Bus.
+    auto *othersHeader = new QLabel(tr("<b>Panel de control y ventana del clima</b>"), tab);
+    form->addRow(othersHeader);
+
+    auto *panelFont = new QSpinBox(tab);
+    panelFont->setRange(0, 40);
+    panelFont->setSpecialValueText(tr("Automatic"));
+    panelFont->setSuffix(tr(" px"));
+    panelFont->setValue(ControlManagerLauncher::panelFontSize());
+    panelFont->setToolTip(tr("Tamaño de fuente de TODO el panel de control (tarjetas, "
+                             "solapas y botones escalan con él). Se aplica en el acto si el "
+                             "panel está abierto."));
+    panelFont->setEnabled(ControlManagerLauncher::installed());
+    connect(panelFont, &QSpinBox::valueChanged, tab, [](int v) {
+        ControlManagerLauncher::setPanelFontSize(v);
+    });
+    form->addRow(tr("Control panel font size:"), panelFont);
+
+    auto *panelBtnW = new QSpinBox(tab);
+    panelBtnW->setRange(0, 400);
+    panelBtnW->setSingleStep(10);
+    panelBtnW->setSpecialValueText(tr("Automatic"));
+    panelBtnW->setSuffix(tr(" px"));
+    panelBtnW->setValue(ControlManagerLauncher::buttonWidth());
+    panelBtnW->setToolTip(tr("Ancho mínimo de los botones del panel de control. Automático "
+                             "es el ancho natural de cada botón."));
+    panelBtnW->setEnabled(ControlManagerLauncher::installed());
+    connect(panelBtnW, &QSpinBox::valueChanged, tab, [](int v) {
+        ControlManagerLauncher::setButtonWidth(v);
+    });
+    form->addRow(tr("Control panel button width:"), panelBtnW);
+
+    auto *panelBtnH = new QSpinBox(tab);
+    panelBtnH->setRange(0, 200);
+    panelBtnH->setSingleStep(2);
+    panelBtnH->setSpecialValueText(tr("Automatic"));
+    panelBtnH->setSuffix(tr(" px"));
+    panelBtnH->setValue(ControlManagerLauncher::buttonHeight());
+    panelBtnH->setToolTip(tr("Alto mínimo de los botones del panel de control."));
+    panelBtnH->setEnabled(ControlManagerLauncher::installed());
+    connect(panelBtnH, &QSpinBox::valueChanged, tab, [](int v) {
+        ControlManagerLauncher::setButtonHeight(v);
+    });
+    form->addRow(tr("Control panel button height:"), panelBtnH);
+
+    // Una instancia propia: escribir por el setter (y no a mano con QSettings)
+    // es lo que hace que el clima corriendo se entere, porque su config vigila
+    // el archivo.
+    if (!m_weatherConfig)
+        m_weatherConfig = new WeatherConfig(this);
+    auto *weatherWindowFont = new QSpinBox(tab);
+    weatherWindowFont->setRange(0, 40);
+    weatherWindowFont->setSpecialValueText(tr("Automatic"));
+    weatherWindowFont->setSuffix(tr(" px"));
+    weatherWindowFont->setValue(m_weatherConfig->fontSize());
+    weatherWindowFont->setToolTip(tr("Tamaño de fuente de la ventana del clima (los íconos "
+                                     "acompañan al texto, así que la ventana entera crece con "
+                                     "él). Es el mismo ajuste que su propio diálogo."));
+    weatherWindowFont->setEnabled(WeatherLauncher::installed());
+    connect(weatherWindowFont, &QSpinBox::valueChanged, tab, [this](int v) {
+        m_weatherConfig->setFontSize(v);
+    });
+    connect(m_weatherConfig, &WeatherConfig::changed, weatherWindowFont,
+            [this, weatherWindowFont] {
+                QSignalBlocker block(weatherWindowFont);
+                weatherWindowFont->setValue(m_weatherConfig->fontSize());
+            });
+    form->addRow(tr("Weather window font size:"), weatherWindowFont);
+
     return tab;
 }
 

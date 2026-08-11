@@ -30,6 +30,8 @@ public:
     static void callShowSettings();
     static void callShowSection(const QString &sectionId, const QString &screenName);
     static void callQuit();
+    // Tell a running panel that its .conf changed underneath it.
+    static void callReloadConfig();
 
     explicit CmService(CmWindow *window, QObject *parent = nullptr);
 
@@ -43,6 +45,7 @@ public slots:
     Q_SCRIPTABLE void toggle(const QString &screenName);
     Q_SCRIPTABLE void show(const QString &screenName);
     Q_SCRIPTABLE void hide();
+    Q_SCRIPTABLE void reloadConfig();
     // Open the panel straight on one section's tab.
     Q_SCRIPTABLE void showSection(const QString &sectionId, const QString &screenName);
     Q_SCRIPTABLE void showSettings();

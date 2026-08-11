@@ -102,6 +102,56 @@ void ControlManagerLauncher::openSettings()
         start({QStringLiteral("--settings")});
 }
 
+int ControlManagerLauncher::panelFontSize()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("fontSize"), 0).toInt(), 40);
+}
+
+void ControlManagerLauncher::setPanelFontSize(int px)
+{
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("fontSize"), qBound(0, px, 40));
+    }
+    // A running panel has the old value in memory: the file is not watched (it
+    // rewrites it on every card drag), so the change is announced.
+    if (running())
+        callPanel(QStringLiteral("reloadConfig"));
+}
+
+int ControlManagerLauncher::buttonWidth()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("buttonWidth"), 0).toInt(), 400);
+}
+
+void ControlManagerLauncher::setButtonWidth(int px)
+{
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("buttonWidth"), qBound(0, px, 400));
+    }
+    if (running())
+        callPanel(QStringLiteral("reloadConfig"));
+}
+
+int ControlManagerLauncher::buttonHeight()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("buttonHeight"), 0).toInt(), 200);
+}
+
+void ControlManagerLauncher::setButtonHeight(int px)
+{
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("buttonHeight"), qBound(0, px, 200));
+    }
+    if (running())
+        callPanel(QStringLiteral("reloadConfig"));
+}
+
 bool ControlManagerLauncher::preload()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

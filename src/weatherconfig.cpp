@@ -59,9 +59,11 @@ void WeatherConfig::onFileChanged()
         const int city = m_activeCity;
         const bool f = m_fahrenheit;
         const int wind = m_windUnit, mins = m_refreshMinutes, days = m_forecastDays;
+        const int font = m_fontSize;
         load();
         if (before != m_cities || city != m_activeCity || f != m_fahrenheit
-            || wind != m_windUnit || mins != m_refreshMinutes || days != m_forecastDays)
+            || wind != m_windUnit || mins != m_refreshMinutes || days != m_forecastDays
+            || font != m_fontSize)
             emit changed();
     });
 }
@@ -86,6 +88,7 @@ void WeatherConfig::load()
     m_windUnit = qBound(0, s.value(QStringLiteral("windUnit"), int(MetersPerSecond)).toInt(), 2);
     m_refreshMinutes = qBound(10, s.value(QStringLiteral("refreshMinutes"), 30).toInt(), 720);
     m_forecastDays = qBound(3, s.value(QStringLiteral("forecastDays"), 7).toInt(), 16);
+    m_fontSize = qBound(0, s.value(QStringLiteral("fontSize"), 0).toInt(), 40);
 }
 
 void WeatherConfig::save()
@@ -103,6 +106,7 @@ void WeatherConfig::save()
         s.setValue(QStringLiteral("windUnit"), m_windUnit);
         s.setValue(QStringLiteral("refreshMinutes"), m_refreshMinutes);
         s.setValue(QStringLiteral("forecastDays"), m_forecastDays);
+        s.setValue(QStringLiteral("fontSize"), m_fontSize);
     }
     // Long enough for our own write to land and its notification to arrive, so
     // this process does not re-read what it just wrote.
@@ -172,6 +176,15 @@ void WeatherConfig::setForecastDays(int days)
     if (days == m_forecastDays)
         return;
     m_forecastDays = days;
+    save();
+}
+
+void WeatherConfig::setFontSize(int px)
+{
+    px = qBound(0, px, 40);
+    if (px == m_fontSize)
+        return;
+    m_fontSize = px;
     save();
 }
 

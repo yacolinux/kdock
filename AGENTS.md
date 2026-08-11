@@ -399,6 +399,28 @@ que saber para tocar código:
 - **Trampa de los extras**: el seed de "normal" desde el valor vivo del sistema solo ocurre en el primer armado; la re-selección por `darkModeChanged` lee lo persistido y un valor vacío cae en "(no cambiar)". Es consistente con lo que el config dice y no toca el comportamiento del DarkMode original.
 - Posición en el diálogo: `buildTabs()` las inserta inmediatamente después de General. La barra en columna no cambió de ancho (las 14 solapas entran de sobra).
 
+**La solapa Fuentes junta la tipografía de las TRES superficies** (2026-08-11). Además de lo del
+dock (reloj, texto del widget Control Manager, **texto del widget del clima** y el bloque de
+nombres), tiene el tamaño de fuente y el tamaño mínimo de botón del **panel de control** y el
+tamaño de fuente de la **ventana del clima**. Los dos últimos viven en el `.conf` de *otro*
+proceso, y cada uno tiene además su control en el diálogo propio de ese binario; están acá
+porque "el tamaño de la letra" es lo que más se busca y nadie quiere adivinar en cuál de los
+tres diálogos vive.
+
+**Los dos caminos para que el cambio se vea en el acto son distintos, y la diferencia es real:**
+
+- **El clima vigila su archivo** (`WeatherConfig` tiene un `QFileSystemWatcher` porque lo leen
+  tres procesos), así que alcanza con escribir por el setter. El diálogo tiene su **propia
+  instancia** de `WeatherConfig` (`m_weatherConfig`): escribir a mano con `QSettings` funcionaría
+  para el archivo pero no avisaría a nadie.
+- **El panel de control NO puede vigilar el suyo**: reescribe `controlmanager.conf` en cada
+  arrastre de tarjeta y en cada ajuste, así que un watcher dispararía todo el tiempo. Se le avisa
+  por D-Bus: `org.kdock.ControlManager.reloadConfig` → `CmWindow::reloadConfig()` →
+  `CmConfig::reloadFromDisk()` (sync + `load()` + las tres señales de repintado). Del lado de
+  kdock, los getters/setters estáticos están en `ControlManagerLauncher` —donde ya vivía el mismo
+  patrón para `preload`— y llaman al método solo si el panel está corriendo; si está apagado, lo
+  lee en el próximo arranque.
+
 ### App Menu (`src/appmenu.cpp` + `qml/AppMenuPopup.qml`)
 - Kickoff-like application menu, exposed to QML as `appMenu` context property.
 - Groups installed `.desktop` apps by freedesktop main categories (Development, Games, Graphics, Internet, Multimedia, Office, Settings, System, Utilities, Other).
@@ -1095,6 +1117,22 @@ reusar de ahí es el dato: sus *ions* son KDE Frameworks y kdock no linkea ningu
   ciudades: buscador por nombre contra el geocodificador, lista de guardadas con *Usar
   esta*/*Quitar*, unidades y refresco. Con la lista vacía, un arranque normal abre ese diálogo
   solo: es lo único útil que se puede mostrar.
+- **Sin ciudad configurada el widget se muestra igual**, con el ícono genérico
+  `weather-few-clouds` y sin temperatura (2026-08-11). Esconderlo —que era lo que hacía
+  `sectionVisible` mirando `weather.configured`— dejaba al usuario sin **ningún** lugar donde
+  hacer clic derecho para configurarlo: la única entrada a *Configurar el clima…* es el menú del
+  propio widget, así que ocultarlo cerraba la puerta desde adentro. El clic izquierdo en ese
+  estado va derecho al selector de ciudad, y los dos ítems que no tienen sentido sin ciudad
+  (*Ver el pronóstico*, *Actualizar ahora*) salen deshabilitados. `weather-none-available`
+  sería lo literal, pero varios iconsets lo dibujan como un "?" morado que no se lee como el
+  clima.
+- **El tamaño de fuente de la ventana es configurable** (`fontSize` en `weather.conf`, 0 = los
+  tamaños de siempre; `fontScale()` es `fontSize/13`). Todo texto pasa por `root.px()` y **los
+  íconos que acompañan a un texto escalan con él**, incluida la flecha del viento — que es un
+  `Canvas` y necesita su `onWidthChanged: requestPaint()`, porque no se repinta solo. Y la
+  ventana **crece con la fuente** (`WeatherWindow::applySize()`, base 500x470 por la escala,
+  acotada a la pantalla): sin eso, a 20 px la fila del pronóstico quedaba cortada y el pie se
+  metía debajo del contenido.
 - **El widget del dock es delgado a propósito** (era el pedido: "un binario nuevo para
   simplificar el código del dock"): dibuja el ícono y la temperatura del `WeatherControl` de
   *este* proceso —no espera al otro binario— y el clic abre/cierra la mini-app por
@@ -1699,7 +1737,7 @@ a checkable *Wi-Fi*.
 | `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
 | `WeatherLauncher` | `weatherLauncher` (en kdock y en el panel) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento con `kdock-weather`: si el proceso corre, D-Bus; si no, lo lanza. A diferencia de los otros dos, ese proceso **no queda residente** |
 | `WeatherControl` | `weather` (en las tres superficies) | `configured`, `available`, `loading`, `stale`, `errorText`, `cityLabel`, `tempText`, `feelsLikeText`, `conditionText`, `iconName`, `windText`, `windDirection`, `updatedText`, `forecast()` (→ `{dayLabel, dateLabel, iconName, conditionText, precipProbability, maxText, minText}`), `details()` (→ `{label, text}`), `refresh(force)`, `searchCity(name)` + señal `citiesFound(list)`. Open-Meteo por HTTPS; los textos ya vienen formateados en las unidades configuradas |
-| `WeatherConfig` | `weatherConfig` (en `kdock-weather`) | `cities`, `activeCity` (rw), `fahrenheit` (rw), `windUnit` (rw), `refreshMinutes` (rw), `forecastDays` (rw), `addCity(map)`, `removeCity(i)`. Su `weather.conf` lo leen tres procesos, así que se vigila con un `QFileSystemWatcher` |
+| `WeatherConfig` | `weatherConfig` (en `kdock-weather`) | `cities`, `activeCity` (rw), `fahrenheit` (rw), `windUnit` (rw), `refreshMinutes` (rw), `forecastDays` (rw), **`fontSize` (rw) / `fontScale`** (0 = los tamaños de siempre), `addCity(map)`, `removeCity(i)`. Su `weather.conf` lo leen tres procesos, así que se vigila con un `QFileSystemWatcher` |
 | `DockService` | (sin context property) | `org.kdock.Dock` en `/Dock`: `openSettings(dockId)`, `restart()`, `darkMode()`, `setDarkMode(b)`, `toggleDarkMode()`, `dockIds()`, `dockScreens()`, `primaryDockId()` + señal `darkModeChanged(b)`. Lo consume `DockLink` desde el panel |
 | `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural), `fontSize` (0 = predeterminado 12 px) + `fontScale` read-only (multiplica cada `font.pixelSize` del panel), `iconTheme` (iconset propio; vacío = el par por luminancia). Grilla: `columns` (0=según el ancho), `cellSize`, `cellHeight` (fijo; las celdas pueden ser más altas que anchas), `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
 | `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`fg`/`label`/`showTitle`; `fg` vacío = color de texto automático), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |

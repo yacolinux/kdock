@@ -39,6 +39,11 @@ public:
     // hand, or a dark line-art icon lands on a dark panel.
     Q_INVOKABLE QString iconSuffix() const;
 
+    // Base size times the configured font scale, clamped to the screen. The
+    // window has no layout that can shrink text, so growing the font without
+    // growing the window clips the forecast row and slides the footer under it.
+    void applySize();
+
     // Language changed: re-evaluate the QML and rebuild the settings dialog,
     // which is Qt Widgets and baked its strings in when it was built.
     void retranslate();

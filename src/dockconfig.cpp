@@ -778,6 +778,7 @@ void DockConfig::load()
     m_showDisks = m_settings.value(QStringLiteral("showDisks"), false).toBool();
     m_showNetwork = m_settings.value(QStringLiteral("showNetwork"), false).toBool();
     m_showWeather = m_settings.value(QStringLiteral("showWeather"), false).toBool();
+    m_weatherFontSize = qBound(0, m_settings.value(QStringLiteral("weatherFontSize"), 0).toInt(), 96);
     m_showIconThemes = m_settings.value(QStringLiteral("showIconThemes"), false).toBool();
     m_showColorSchemes = m_settings.value(QStringLiteral("showColorSchemes"), false).toBool();
     m_clipboardPopupWidth = m_settings.value(QStringLiteral("clipboardPopupWidth"), 360).toInt();
@@ -1332,6 +1333,16 @@ void DockConfig::setShowWeather(bool show)
     m_showWeather = show;
     m_settings.setValue(QStringLiteral("showWeather"), show);
     emit showWeatherChanged();
+}
+
+void DockConfig::setWeatherFontSize(int px)
+{
+    px = qBound(0, px, 96);
+    if (m_weatherFontSize == px)
+        return;
+    m_weatherFontSize = px;
+    m_settings.setValue(QStringLiteral("weatherFontSize"), px);
+    emit weatherFontSizeChanged();
 }
 
 void DockConfig::setShowIconThemes(bool show)

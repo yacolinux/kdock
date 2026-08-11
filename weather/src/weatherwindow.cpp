@@ -26,7 +26,9 @@ WeatherWindow::WeatherWindow(WeatherConfig *config, WeatherControl *weather, The
     // Unlike the tile menu (which the compositor maximizes), this one has a size
     // of its own and the QML fills it.
     setResizeMode(QQuickView::SizeRootObjectToView);
-    resize(500, 470);
+    applySize();
+    if (m_config)
+        connect(m_config, &WeatherConfig::changed, this, &WeatherWindow::applySize);
 
     engine()->addImageProvider(QStringLiteral("icon"), new IconProvider);
     rootContext()->setContextProperty(QStringLiteral("theme"), m_theme);
@@ -35,6 +37,20 @@ WeatherWindow::WeatherWindow(WeatherConfig *config, WeatherControl *weather, The
     rootContext()->setContextProperty(QStringLiteral("win"), this);
 
     setSource(QUrl(QStringLiteral("qrc:/qml/Weather.qml")));
+}
+
+void WeatherWindow::applySize()
+{
+    const qreal scale = m_config ? m_config->fontScale() : 1.0;
+    int w = qRound(500 * scale);
+    int h = qRound(470 * scale);
+    if (QScreen *s = screen() ? screen() : QGuiApplication::primaryScreen()) {
+        const QRect avail = s->availableGeometry();
+        w = qMin(w, avail.width());
+        h = qMin(h, avail.height());
+    }
+    if (w != width() || h != height())
+        resize(w, h);
 }
 
 void WeatherWindow::showOn(const QString &screenName)

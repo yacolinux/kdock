@@ -31,6 +31,11 @@ class WeatherConfig : public QObject
     Q_PROPERTY(int windUnit READ windUnit WRITE setWindUnit NOTIFY changed)
     Q_PROPERTY(int refreshMinutes READ refreshMinutes WRITE setRefreshMinutes NOTIFY changed)
     Q_PROPERTY(int forecastDays READ forecastDays WRITE setForecastDays NOTIFY changed)
+    // Every text of the weather window, scaled by this. 0 = the historic fixed
+    // sizes, which is what fontScale() reports as 1.0 — same arrangement (and
+    // the same base of 13 px) as the control panel's fontSize.
+    Q_PROPERTY(int fontSize READ fontSize WRITE setFontSize NOTIFY changed)
+    Q_PROPERTY(qreal fontScale READ fontScale NOTIFY changed)
 
 public:
     // Wind is reported by the provider in km/h; these are display units only.
@@ -51,6 +56,8 @@ public:
     int windUnit() const { return m_windUnit; }
     int refreshMinutes() const { return m_refreshMinutes; }
     int forecastDays() const { return m_forecastDays; }
+    int fontSize() const { return m_fontSize; }
+    qreal fontScale() const { return m_fontSize > 0 ? m_fontSize / 13.0 : 1.0; }
 
     // The active city, or an empty map when nothing is configured yet.
     QVariantMap city() const;
@@ -63,6 +70,7 @@ public:
     Q_INVOKABLE void setWindUnit(int unit);
     Q_INVOKABLE void setRefreshMinutes(int minutes);
     Q_INVOKABLE void setForecastDays(int days);
+    Q_INVOKABLE void setFontSize(int px);
     // Appends (deduplicated by coordinates) and makes it active.
     Q_INVOKABLE void addCity(const QVariantMap &city);
     Q_INVOKABLE void removeCity(int index);
@@ -83,6 +91,7 @@ private:
     int m_windUnit = MetersPerSecond;
     int m_refreshMinutes = 30;
     int m_forecastDays = 7;
+    int m_fontSize = 0;
     bool m_writing = false;
     QFileSystemWatcher *m_watcher = nullptr;
 };

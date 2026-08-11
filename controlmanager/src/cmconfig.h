@@ -116,6 +116,12 @@ public:
     bool backgroundColorSet() const { return m_backgroundColor.isValid(); }
     qreal backgroundOpacity() const { return m_backgroundOpacity; }
     QString backgroundImage() const { return m_backgroundImage; }
+    // Re-reads the file after somebody *else* wrote it (kdock's Fuentes tab
+    // edits the panel's font size) and repaints. Not a watcher: the panel
+    // rewrites this file on every drag, so a watcher would fire constantly;
+    // whoever edits it from outside says so over D-Bus instead.
+    void reloadFromDisk();
+
     QUrl backgroundImageUrl() const;
     int cornerRadius() const { return m_cornerRadius; }
     bool labelBold() const { return m_labelBold; }

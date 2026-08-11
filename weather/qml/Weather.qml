@@ -13,6 +13,11 @@ Item {
     id: root
 
     readonly property int pad: 14
+    // Todo texto (y todo ícono que acompaña a un texto) pasa por acá: el tamaño
+    // de fuente de la ventana es configurable y 0 significa "los tamaños de
+    // siempre" — mismo trato que el fontSize del panel de control.
+    readonly property real fs: weatherConfig ? weatherConfig.fontScale : 1.0
+    function px(size) { return Math.max(7, Math.round(size * root.fs)) }
     readonly property color fg: theme.foreground
     readonly property color dim: Qt.rgba(theme.foreground.r, theme.foreground.g,
                                          theme.foreground.b, 0.6)
@@ -45,7 +50,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: qsTr("Todavía no elegiste una ciudad")
             color: root.fg
-            font.pixelSize: 16
+            font.pixelSize: root.px(16)
             wrapMode: Text.Wrap
         }
         Button {
@@ -59,7 +64,10 @@ Item {
         id: content
         anchors.fill: parent
         anchors.margins: root.pad
-        spacing: 10
+        // The credit/updated line is anchored to the bottom, so the content has
+        // to stop above it — at a large font size they used to overlap.
+        anchors.bottomMargin: root.pad + footer.height + 6
+        spacing: Math.round(10 * root.fs)
         visible: weather ? weather.configured : false
 
         // --- Encabezado: la ubicación --------------------------------------
@@ -71,7 +79,7 @@ Item {
                 width: parent.width - refreshButton.width - settingsButton.width - 16
                 text: weather ? weather.cityLabel : ""
                 color: root.fg
-                font.pixelSize: 17
+                font.pixelSize: root.px(17)
                 elide: Text.ElideRight
             }
             ToolButton {
@@ -107,7 +115,7 @@ Item {
         // --- Actual: temperatura, ícono, viento ----------------------------
         Item {
             width: parent.width
-            height: 96
+            height: Math.round(96 * root.fs)
 
             Column {
                 anchors.left: parent.left
@@ -119,7 +127,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     text: weather ? weather.tempText : ""
                     color: root.fg
-                    font.pixelSize: 30
+                    font.pixelSize: root.px(30)
                     font.bold: true
                 }
                 Text {
@@ -128,16 +136,17 @@ Item {
                     visible: weather && weather.feelsLikeText.length > 0
                     text: weather ? qsTr("ST %1").arg(weather.feelsLikeText) : ""
                     color: root.dim
-                    font.pixelSize: 11
+                    font.pixelSize: root.px(11)
                 }
             }
 
             Image {
                 anchors.centerIn: parent
-                width: 72
-                height: 72
+                width: Math.round(72 * root.fs)
+                height: width
                 source: weather ? "image://icon/" + weather.iconName + win.iconSuffix() : ""
-                sourceSize: Qt.size(72 * Screen.devicePixelRatio, 72 * Screen.devicePixelRatio)
+                sourceSize: Qt.size(width * Screen.devicePixelRatio,
+                                    width * Screen.devicePixelRatio)
             }
 
             Column {
@@ -153,8 +162,8 @@ Item {
                 Canvas {
                     id: windArrow
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: 24
-                    height: 24
+                    width: Math.round(24 * root.fs)
+                    height: width
                     rotation: weather ? weather.windDirection + 180 : 0
                     onPaint: {
                         const ctx = getContext("2d")
@@ -168,8 +177,10 @@ Item {
                         ctx.closePath()
                         ctx.fill()
                     }
-                    // The colour comes from the theme, so a scheme change has to
-                    // repaint it: a Canvas does not re-run onPaint on its own.
+                    // A Canvas does not re-run onPaint on its own: neither a
+                    // scheme change (the colour) nor a font-size change (the
+                    // size) would reach it otherwise.
+                    onWidthChanged: requestPaint()
                     Connections {
                         target: theme
                         function onChanged() { windArrow.requestPaint() }
@@ -180,7 +191,7 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     text: weather ? weather.windText : ""
                     color: root.dim
-                    font.pixelSize: 12
+                    font.pixelSize: root.px(12)
                 }
             }
         }
@@ -190,7 +201,7 @@ Item {
             horizontalAlignment: Text.AlignHCenter
             text: weather ? weather.conditionText : ""
             color: root.fg
-            font.pixelSize: 14
+            font.pixelSize: root.px(14)
         }
 
         // --- Solapas --------------------------------------------------------
@@ -203,13 +214,13 @@ Item {
                 required property string label
                 required property int index
                 width: (content.width) / 2
-                height: 30
+                height: Math.round(30 * root.fs)
 
                 Text {
                     anchors.centerIn: parent
                     text: pill.label
                     color: root.tab === pill.index ? root.fg : root.dim
-                    font.pixelSize: 13
+                    font.pixelSize: root.px(13)
                 }
                 Rectangle {
                     anchors.bottom: parent.bottom
@@ -252,14 +263,14 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData.dayLabel
                         color: root.fg
-                        font.pixelSize: 12
+                        font.pixelSize: root.px(12)
                     }
                     Image {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: 40; height: 40
+                        width: Math.round(40 * root.fs); height: width
                         source: "image://icon/" + modelData.iconName + win.iconSuffix()
-                        sourceSize: Qt.size(40 * Screen.devicePixelRatio,
-                                            40 * Screen.devicePixelRatio)
+                        sourceSize: Qt.size(width * Screen.devicePixelRatio,
+                                            width * Screen.devicePixelRatio)
                         ToolTip.visible: dayMouse.containsMouse
                         ToolTip.text: modelData.conditionText + "  ·  " + modelData.dateLabel
                         MouseArea {
@@ -274,17 +285,17 @@ Item {
                         visible: modelData.precipProbability >= 0
                         Image {
                             anchors.verticalCenter: parent.verticalCenter
-                            width: 11; height: 11
+                            width: root.px(11); height: width
                             source: "image://icon/weather-showers-scattered" + win.iconSuffix()
-                            sourceSize: Qt.size(11 * Screen.devicePixelRatio,
-                                                11 * Screen.devicePixelRatio)
+                            sourceSize: Qt.size(width * Screen.devicePixelRatio,
+                                                width * Screen.devicePixelRatio)
                             opacity: 0.8
                         }
                         Text {
                             anchors.verticalCenter: parent.verticalCenter
                             text: modelData.precipProbability + " %"
                             color: root.dim
-                            font.pixelSize: 11
+                            font.pixelSize: root.px(11)
                         }
                     }
                     Text {
@@ -292,14 +303,14 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData.maxText
                         color: root.fg
-                        font.pixelSize: 12
+                        font.pixelSize: root.px(12)
                     }
                     Text {
                         width: parent.width
                         horizontalAlignment: Text.AlignHCenter
                         text: modelData.minText
                         color: root.dim
-                        font.pixelSize: 12
+                        font.pixelSize: root.px(12)
                     }
                 }
             }
@@ -322,12 +333,12 @@ Item {
                         horizontalAlignment: Text.AlignRight
                         text: modelData.label
                         color: root.dim
-                        font.pixelSize: 13
+                        font.pixelSize: root.px(13)
                     }
                     Text {
                         text: modelData.text
                         color: root.fg
-                        font.pixelSize: 13
+                        font.pixelSize: root.px(13)
                     }
                 }
             }
@@ -336,6 +347,7 @@ Item {
 
     // --- Pie: procedencia del dato y su antigüedad ---------------------------
     Row {
+        id: footer
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
@@ -354,14 +366,14 @@ Item {
                                      : qsTr("Actualizado %1").arg(weather.updatedText)
             }
             color: root.dim
-            font.pixelSize: 10
+            font.pixelSize: root.px(10)
             elide: Text.ElideRight
         }
         Text {
             id: creditLabel
             text: "Open-Meteo.com"
             color: root.dim
-            font.pixelSize: 10
+            font.pixelSize: root.px(10)
         }
     }
 }
