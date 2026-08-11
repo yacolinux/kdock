@@ -630,6 +630,7 @@ Item {
         case "clipboard": return config.showClipboard && clipboardHistory
         case "disks": return config.showDisks && disks && disks.available
         case "network": return config.showNetwork && network && network.available
+        case "weather": return config.showWeather && weather && weather.configured
         case "iconthemes": return config.showIconThemes && appearance
         case "colorschemes": return config.showColorSchemes && appearance
         case "volume": return config.showVolume && volume.available
@@ -673,6 +674,7 @@ Item {
         case "clipboard": return clipboardComp
         case "disks": return disksComp
         case "network": return networkComp
+        case "weather": return weatherComp
         case "iconthemes": return iconThemesComp
         case "colorschemes": return colorSchemesComp
         case "volume": return volumeComp
@@ -712,7 +714,7 @@ Item {
                || token === "controlmanager"
                || token === "session"
                || token === "battery" || token === "clipboard" || token === "disks"
-               || token === "network" || token === "iconthemes"
+               || token === "network" || token === "weather" || token === "iconthemes"
                || token === "colorschemes"
     }
 
@@ -736,6 +738,9 @@ Item {
         case "settings": return qsTr("Configure kdock")
         case "tilemenu": return qsTr("Menú de mosaicos (pantalla completa)")
         case "controlmanager": return qsTr("Control Manager")
+        case "weather": return weather && weather.configured
+                        ? weather.cityLabel + " — " + weather.conditionText
+                        : qsTr("Clima")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
         case "gap": return qsTr("Transparent separator")
@@ -2784,6 +2789,108 @@ Item {
                         interval: 30000
                         onTriggered: netLoader.active = false
                     }
+                }
+            }
+        }
+    }
+
+    // Weather: the condition icon plus the temperature, and a click that opens
+    // the kdock-weather window. The data is this process' own WeatherControl
+    // (shared with the mini-app and the control panel through weather.conf and
+    // its cache), so the dock never waits on the other binary to draw.
+    Component {
+        id: weatherComp
+        Item {
+            id: wxRoot
+            implicitWidth: wxContent.implicitWidth
+            implicitHeight: Math.max(root.widgetIconPx, wxContent.implicitHeight)
+
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && wxMouse.containsMouse
+                delay: 400
+                text: {
+                    if (!weather || !weather.configured) return qsTr("Clima")
+                    var t = weather.cityLabel + "\n" + weather.tempText + "  "
+                            + weather.conditionText
+                    if (weather.stale)
+                        t += "\n" + qsTr("Sin conexión: último dato de las %1")
+                                        .arg(weather.updatedText)
+                    return t
+                }
+            }
+
+            Row {
+                id: wxContent
+                anchors.centerIn: parent
+                spacing: 5
+
+                Image {
+                    id: wxIcon
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: root.widgetIconPx
+                    height: width
+                    source: weather ? "image://icon/" + weather.iconName + root.widgetIconSuffix
+                                    : ""
+                    sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                        root.widgetIconPx * Screen.devicePixelRatio)
+                    // Old data is dimmed rather than hidden: a widget that goes
+                    // blank when the wifi drops reads as broken.
+                    opacity: weather && weather.stale ? 0.55 : 1.0
+                    scale: wxMouse.containsMouse ? 1.12 : 1.0
+                    Behavior on scale { NumberAnimation { duration: 120 } }
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: text.length > 0
+                    text: weather ? weather.tempText : ""
+                    color: root.dockTextColor
+                    opacity: weather && weather.stale ? 0.55 : 1.0
+                    font.pixelSize: config.clockFontSize > 0
+                                    ? root.clockFontPx
+                                    : Math.round(root.appIconPx * 0.40)
+                    font.bold: config.labelBold
+                }
+            }
+
+            MouseArea {
+                id: wxMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                // A block, so the section MouseArea is off and the right button
+                // is this widget's own menu.
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) { wxMenu.popup(); return }
+                    weatherLauncher.toggle(config.screenName)
+                }
+            }
+
+            Menu {
+                id: wxMenu
+                popupType: Popup.Window
+                // A translated label runs longer than the capabase one and a
+                // QtQuick Menu does not size itself to its widest item.
+                width: Math.max(implicitWidth + 64, 240)
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
+
+                IconMenuItem {
+                    text: qsTr("Ver el pronóstico")
+                    iconName: "weather-few-clouds"
+                    onTriggered: weatherLauncher.toggle(config.screenName)
+                }
+                IconMenuItem {
+                    text: qsTr("Actualizar ahora")
+                    iconName: "view-refresh"
+                    enabled: weather && !weather.loading
+                    onTriggered: weather.refresh(true)
+                }
+                MenuSeparator {}
+                IconMenuItem {
+                    text: qsTr("Configurar el clima…")
+                    iconName: "configure"
+                    onTriggered: weatherLauncher.openSettings()
                 }
             }
         }

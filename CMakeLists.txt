@@ -4,7 +4,9 @@ project(kdock VERSION 0.1.11 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick Widgets WaylandClient WaylandClientPrivate DBus)
+# Network is only for the weather backend (src/weathercontrol.cpp): plain HTTPS
+# against Open-Meteo, the one thing in kdock that is not local.
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick Widgets WaylandClient WaylandClientPrivate DBus Network)
 
 qt_standard_project_setup()
 
@@ -72,6 +74,9 @@ add_library(kdock_core OBJECT
     src/diskscontrol.cpp        src/diskscontrol.h
     src/nmdbus.cpp              src/nmdbus.h
     src/networkcontrol.cpp      src/networkcontrol.h
+    src/weathercontrol.cpp      src/weathercontrol.h
+    src/weatherconfig.cpp       src/weatherconfig.h
+    src/weatherlauncher.cpp     src/weatherlauncher.h
     src/networksettings.cpp     src/networksettings.h
     src/networksettingswidget.cpp src/networksettingswidget.h
     src/connectioneditor.cpp    src/connectioneditor.h
@@ -134,6 +139,7 @@ target_link_libraries(kdock_core PUBLIC
     Qt6::WaylandClient
     Qt6::WaylandClientPrivate
     Qt6::DBus
+    Qt6::Network
 )
 # Tests include headers as "dockconfig.h", same as the sources do.
 target_include_directories(kdock_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -160,6 +166,7 @@ add_subdirectory(previews)
 add_subdirectory(tilemenu)
 add_subdirectory(calendar)
 add_subdirectory(controlmanager)
+add_subdirectory(weather)
 
 # Test suite (tests/README.md). Off by default so a plain build of the dock
 # needs neither Qt6::Test nor the extra targets; tests/run.sh turns it on.

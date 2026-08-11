@@ -777,6 +777,7 @@ void DockConfig::load()
     m_showClipboard = m_settings.value(QStringLiteral("showClipboard"), false).toBool();
     m_showDisks = m_settings.value(QStringLiteral("showDisks"), false).toBool();
     m_showNetwork = m_settings.value(QStringLiteral("showNetwork"), false).toBool();
+    m_showWeather = m_settings.value(QStringLiteral("showWeather"), false).toBool();
     m_showIconThemes = m_settings.value(QStringLiteral("showIconThemes"), false).toBool();
     m_showColorSchemes = m_settings.value(QStringLiteral("showColorSchemes"), false).toBool();
     m_clipboardPopupWidth = m_settings.value(QStringLiteral("clipboardPopupWidth"), 360).toInt();
@@ -819,7 +820,7 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("controlmanager"),
             QStringLiteral("apps"),
             QStringLiteral("clipboard"),   QStringLiteral("disks"),
-            QStringLiteral("network"),
+            QStringLiteral("network"),    QStringLiteral("weather"),
             QStringLiteral("iconthemes"),  QStringLiteral("colorschemes"),
             QStringLiteral("volume"),      QStringLiteral("brightness"),
             QStringLiteral("battery"),
@@ -1322,6 +1323,15 @@ void DockConfig::setShowNetwork(bool show)
     m_showNetwork = show;
     m_settings.setValue(QStringLiteral("showNetwork"), show);
     emit showNetworkChanged();
+}
+
+void DockConfig::setShowWeather(bool show)
+{
+    if (m_showWeather == show)
+        return;
+    m_showWeather = show;
+    m_settings.setValue(QStringLiteral("showWeather"), show);
+    emit showWeatherChanged();
 }
 
 void DockConfig::setShowIconThemes(bool show)
@@ -1831,6 +1841,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("clipboard"),     QStringLiteral("Clipboard")},
         {QStringLiteral("disks"),         QStringLiteral("Disks")},
         {QStringLiteral("network"),       QStringLiteral("Network")},
+        {QStringLiteral("weather"),       QStringLiteral("Clima")},
         {QStringLiteral("iconthemes"),    QStringLiteral("Icon theme")},
         {QStringLiteral("colorschemes"),  QStringLiteral("Color scheme")},
         {QStringLiteral("volume"),        QStringLiteral("Volume")},

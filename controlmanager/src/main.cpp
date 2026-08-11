@@ -16,6 +16,9 @@
 #include "docklink.h"
 #include "mpriscontrol.h"
 #include "networkcontrol.h"
+#include "weatherconfig.h"
+#include "weathercontrol.h"
+#include "weatherlauncher.h"
 #include "powercontrol.h"
 #include "screenbrightness.h"
 #include "theme.h"
@@ -237,6 +240,9 @@ int main(int argc, char *argv[])
     BrightnessControl brightness;
     ScreenBrightness screenBrightness;
     NetworkControl network;
+    WeatherConfig weatherConfig;
+    WeatherControl weather(&weatherConfig);
+    WeatherLauncher weatherLauncher;
     WallpaperControl wallpaper;
     PowerControl power;
     MprisControl mpris;
@@ -253,6 +259,9 @@ int main(int argc, char *argv[])
     backends.brightness = &brightness;
     backends.screenBrightness = &screenBrightness;
     backends.network = &network;
+    backends.weather = &weather;
+    backends.weatherConfig = &weatherConfig;
+    backends.weatherLauncher = &weatherLauncher;
     backends.wallpaper = &wallpaper;
     backends.power = &power;
     backends.mpris = &mpris;

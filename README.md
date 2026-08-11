@@ -15,7 +15,7 @@
 
 kdock **no enlaza contra KDE Frameworks ni contra Plasma**. Los protocolos Wayland se
 generan directamente desde sus XML con `qtwaylandscanner`, y todo lo demás se resuelve por
-D-Bus o por CLI. El resultado son cinco binarios sueltos, sin plugins que instalar y sin
+D-Bus o por CLI. El resultado son seis binarios sueltos, sin plugins que instalar y sin
 arrastrar medio Plasma como dependencia.
 
 Probado a diario en **KDE Plasma 6 / KWin**; la barra de tareas también funciona en
@@ -227,7 +227,8 @@ Frameworks:
 | Brillo | Brillo de pantalla | `brightnessctl` |
 | Batería | Carga, estado y perfil de energía | UPower + power-profiles-daemon |
 | Discos | Unidades extraíbles: montar, desmontar, expulsar, abrir | UDisks2 |
-| Red | Redes Wi-Fi cercanas (unirse con contraseña), conexiones guardadas, switch de Wi-Fi; clic derecho abre el editor de redes | NetworkManager |
+| Red | Mini-ventana con tres solapas: **Wi-Fi** (redes cercanas, unirse con contraseña), **Guardadas** y **Detalles** (IP, máscara, puerta de enlace, DNS, MAC, IPv6). Botón *Configurar redes…* al editor completo | NetworkManager |
+| Clima | Ícono de la condición y temperatura; el clic abre la mini-app del pronóstico. Varias ciudades guardadas, con una activa | Open-Meteo (HTTPS, sin API key) |
 | Portapapeles | Historial de texto e imágenes con búsqueda, persistente, capturado en segundo plano | `ext-data-control-v1` |
 | Iconset de KDE | Cambia el iconset de todo el escritorio, dejando intacto el del propio dock | `plasma-changeicons` |
 | Esquema de color | Aplica un esquema de color de KDE a todo el escritorio | `plasma-apply-colorscheme` |
@@ -245,7 +246,7 @@ Frameworks:
 | Relanzadores | Mini-dock anidado: un ícono despliega una barra con otros lanzadores | — |
 | Script Runner | Ejecuta un script shell configurable | `sh` |
 | Menú de mosaicos | Abre y cierra el menú de pantalla completa | `kdock-tilemenu` (D-Bus) |
-| Control Manager | Abre el panel de control: audio, brillo por monitor, energía, calendario, reproducción, red, fondos y sistema. Puede dibujar texto propio (o el reloj) en el dock, con su fuente | `kdock-controlmanager` (D-Bus) |
+| Control Manager | Abre el panel de control: audio, brillo por monitor, energía, calendario, reproducción, red, clima, fondos y sistema. Puede dibujar texto propio (o el reloj) en el dock, con su fuente | `kdock-controlmanager` (D-Bus) |
 
 ### `kdock-previews` (binario accesorio)
 
@@ -340,7 +341,7 @@ widget del reloj no se toca: es un toplevel normal aparte, sin configuración pr
 
 **Panel de control anclado a un borde de la pantalla** — el lugar donde ver y tocar todo
 junto: audio, brillo por monitor, perfil de energía, modo oscuro, calendario, reproducción,
-red, fondo de escritorio y sistema. Quinto binario, con su propio árbol (`controlmanager/`),
+red, clima, fondo de escritorio y sistema. Con su propio árbol (`controlmanager/`),
 su propia configuración y su propio panel de ajustes; lo prende y lo apaga el widget
 *Control Manager* del dock.
 
@@ -355,7 +356,11 @@ su propia configuración y su propio panel de ajustes; lo prende y lo apaga el w
 - **Calendario**: mes navegable, con botón para abrir `kdock-calendar`.
 - **Reproducción**: carátula, título/artista, barra de progreso y transporte para cualquier
   reproductor MPRIS2.
-- **Red**: conexión actual, redes cercanas con su seguridad, activar/desactivar y olvidar.
+- **Red**: lo mismo que el widget del dock, solapa por solapa — redes cercanas (con la fila de
+  contraseña para unirse), conexiones guardadas y los datos de la conexión (IP, máscara,
+  puerta de enlace, DNS, MAC).
+- **Clima**: condición actual, pronóstico de N días y detalles, sobre la misma configuración
+  que el widget del dock y la mini-app.
 - **Fondo de escritorio**: avanza la presentación de cada monitor.
 - **Sistema**: las cuatro configuraciones (KDE, kdock, mosaicos, previews), reinicios y la
   fila de sesión con etiquetas (bloquear, suspender, cerrar sesión, reiniciar, apagar).
@@ -370,6 +375,30 @@ Es una superficie layer-shell como el dock: **no pide ningún permiso especial d
 `.desktop` solo da nombre e ícono, y no hace falta refrescar el índice de aplicaciones.
 
 
+### `kdock-weather` (binario accesorio)
+
+**El clima, en su propia ventana**: ubicación, temperatura grande, ícono de la condición,
+flecha de viento con su velocidad, y abajo dos solapas — **N días** (día, ícono, probabilidad
+de lluvia, máxima y mínima) y **Detalles** (sensación térmica, punto de rocío, humedad,
+presión, ráfaga, visibilidad, amanecer y atardecer). Lo abre el widget *Clima* del dock, el
+botón de la tarjeta del panel, o `kdock-weather` a secas.
+
+- **Los datos son de [Open-Meteo](https://open-meteo.com)**: HTTPS y JSON, **sin API key y sin
+  registro**. Su buscador de ciudades es parte del mismo servicio, así que kdock no empaqueta
+  ninguna lista de lugares: se escribe el nombre y se elige entre los resultados (con provincia
+  y país, que es lo que distingue las seis ciudades que se llaman igual).
+- **Varias ciudades guardadas, una activa.** La activa es la que muestran el widget del dock y
+  la tarjeta del panel; cambiarla en la mini-app llega a las otras dos superficies sin
+  reiniciar nada.
+- **Unidades a elección**: °C/°F y m/s, km/h o mph. Todo se pide en las unidades del proveedor
+  y se convierte al dibujar, así que cambiarlas es instantáneo y no gasta un pedido.
+- **Muestra lo último que sabe y pregunta después.** La respuesta se guarda en disco, así que
+  el widget tiene temperatura en el primer frame tras un reinicio del dock. Si se cae la red no
+  se vacía: atenúa el dato viejo, lo dice en el pie y reintenta con espera creciente.
+- **Instancia única pero no residente**: el clic del widget la abre y el siguiente la cierra, y
+  al cerrarse el proceso termina. Como `kdock-tilemenu` y `kdock-calendar`, **no pide ningún
+  permiso especial de KWin**.
+
 ---
 
 ## Requisitos
@@ -381,7 +410,8 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
                  qt6-wayland-private-dev cmake ninja-build
 ```
 
-Módulos de Qt: Core, Gui, Qml, Quick, Widgets, DBus y WaylandClient (más los headers
+Módulos de Qt: Core, Gui, Qml, Quick, Widgets, DBus, **Network** (solo para el clima) y
+WaylandClient (más los headers
 privados de WaylandClient, que la integración layer-shell necesita). En runtime hacen falta
 **dos módulos QML**: `QtQuick.Controls` y `Qt5Compat.GraphicalEffects` (paquete
 `qml6-module-qt5compat-graphicaleffects` en Debian/Ubuntu, `qt6-5compat` en Arch), que el
@@ -390,7 +420,8 @@ arranca**: el QML no carga y la ventana queda vacía.
 
 **En runtime**, cada dependencia es opcional y solo apaga su widget si falta: `wpctl` o
 `pactl` (volumen y mezclador), `brightnessctl` (brillo), UDisks2 (discos), NetworkManager
-(red), UPower (batería). Los widgets de Overview, mover-ventana y siguiente-fondo solo
+(red), UPower (batería). El clima es lo único que sale a internet, y solo si configurás una
+ciudad. Los widgets de Overview, mover-ventana y siguiente-fondo solo
 aparecen bajo KDE.
 
 ## Tests
@@ -416,7 +447,7 @@ Cada corrida usa un `XDG_DATA_HOME` descartable y herramientas de sistema falsas
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # instala los cinco binarios y sus .desktop
+sudo cmake --install build     # instala los seis binarios y sus .desktop
 ```
 
 > Si tu entorno exporta `CC="ccache gcc"` / `CXX="ccache g++"`, CMake AutoMoc falla:
@@ -531,6 +562,7 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
 | `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
 | `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
 | `controlmanager/` | Binario accesorio del panel de control (árbol propio, reusa 16 archivos de `src/`) |
+| `weather/` | Binario accesorio del clima (árbol propio, reusa 5 archivos de `src/`) |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | Las capas de traducción (`capabase.md` + un `.md` por idioma). Se copian al home en el primer arranque y se editan ahí |
 | `tests/` | La suite: `run.sh` y cuatro tiers en ctest (`static`, `unit`, `qml`, `live`). Ver `tests/README.md` |

@@ -14,7 +14,7 @@
 ![Wayland](https://img.shields.io/badge/Wayland-layer--shell-lightgrey)
 
 kdock **不链接 KDE Frameworks，也不链接 Plasma**。Wayland 协议直接从其 XML 用
-`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到五个独立的二进制文件，
+`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到六个独立的二进制文件，
 没有需要安装的插件，也不用拖带半个 Plasma 作为依赖。
 
 在 **KDE Plasma 6 / KWin** 上日常使用测试；任务栏部分在 wlroots 系合成器
@@ -191,7 +191,8 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
 | 亮度 | 屏幕亮度 | `brightnessctl` |
 | 电池 | 电量、状态和电源配置文件 | UPower + power-profiles-daemon |
 | 磁盘 | 可移动设备：挂载、卸载、弹出、打开 | UDisks2 |
-| 网络 | 附近 Wi-Fi 网络（带密码连接）、已保存的连接、Wi-Fi 开关；右键打开网络编辑器 | NetworkManager |
+| 网络 | 带三个标签页的小窗口：**Wi-Fi**（附近网络，可带密码连接）、**已保存**，以及**详情**（IP、子网掩码、网关、DNS、MAC、IPv6）。*配置网络…* 按钮打开完整编辑器 | NetworkManager |
+| 天气 | 天气图标和温度；点击打开天气预报小应用。可保存多个城市，其中一个为当前城市 | Open-Meteo（HTTPS，无需 API key） |
 | 剪贴板 | 文本和图片历史记录，支持搜索，持久化，后台捕获 | `ext-data-control-v1` |
 | KDE 图标集 | 切换整个桌面的图标集，保持 Dock 自身的图标集不变 | `plasma-changeicons` |
 | 配色方案 | 将 KDE 配色方案应用到整个桌面 | `plasma-apply-colorscheme` |
@@ -209,7 +210,7 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
 | 子启动器 | 嵌套小型 Dock：一个图标展开一个包含其他启动器的工具条 | — |
 | Script Runner | 执行可配置的 shell 脚本 | `sh` |
 | 磁贴菜单 | 打开和关闭全屏磁贴菜单 | `kdock-tilemenu`（D-Bus） |
-| Control Manager | 打开控制面板：音频、各显示器亮度、电源、日历、播放、网络、壁纸和系统。可以在 Dock 上绘制自己的文本（或时钟），并使用自己的字体 | `kdock-controlmanager`（D-Bus） |
+| Control Manager | 打开控制面板：音频、各显示器亮度、电源、日历、播放、网络、天气、壁纸和系统。可以在 Dock 上绘制自己的文本（或时钟），并使用自己的字体 | `kdock-controlmanager`（D-Bus） |
 
 ### `kdock-previews`（配套二进制文件）
 
@@ -286,7 +287,7 @@ Menu 小程序，名字也由此而来）。这是第三个独立的二进制文
 ### `kdock-controlmanager`（配套二进制文件）
 
 **锚定在屏幕边缘的控制面板**——在一个地方查看和操作所有内容：音频、各显示器亮度、电源
-配置文件、暗色模式、日历、播放、网络、壁纸和系统。第五个二进制文件，拥有自己的源码树
+配置文件、暗色模式、日历、播放、网络、天气、壁纸和系统。拥有自己的源码树
 （`controlmanager/`）、自己的配置和自己的设置对话框；由 Dock 的 *Control Manager* widget
 打开和关闭。
 
@@ -298,7 +299,9 @@ Menu 小程序，名字也由此而来）。这是第三个独立的二进制文
   暗色模式，通过 D-Bus 实时生效。
 - **日历**：可翻页的月份视图，带一个打开 `kdock-calendar` 的按钮。
 - **播放**：封面、标题/艺术家、进度条，以及对任何 MPRIS2 播放器的控制。
-- **网络**：当前连接、附近网络及其安全性，激活/停用和忘记。
+- **网络**：与 Dock 的 widget 完全一致，标签页一一对应——附近网络（带输入密码的一行）、
+  已保存的连接，以及连接本身的数据（IP、子网掩码、网关、DNS、MAC）。
+- **天气**：当前天气、N 天预报和详情，与 Dock widget 和小应用共用同一份配置。
 - **壁纸**：推进每台显示器的幻灯片。
 - **系统**：四个设置对话框（KDE、kdock、磁贴菜单、预览）、重启以及带标签的会话行
   （锁定、挂起、注销、重启、关机）。
@@ -311,6 +314,25 @@ Menu 小程序，名字也由此而来）。这是第三个独立的二进制文
 只提供名称和图标，无需刷新应用索引。
 
 
+### `kdock-weather`（配套二进制文件）
+
+**天气，独立成一个窗口**：地点、大号温度、天气图标、带风速的风向箭头，下方两个标签页——
+**N 天**（星期、图标、降水概率、最高和最低温度）和**详情**（体感温度、露点、湿度、气压、
+阵风、能见度、日出和日落）。由 Dock 的 *天气* widget、面板卡片上的按钮，或直接运行
+`kdock-weather` 打开。
+
+- **数据来自 [Open-Meteo](https://open-meteo.com)**：HTTPS + JSON，**无需 API key，也无需
+  注册**。城市搜索也是同一个服务的一部分，因此 kdock 不打包任何地点列表：输入名称，在结果
+  中选择（带省/州和国家，这正是区分同名城市的关键）。
+- **可保存多个城市，其中一个为当前城市。** 当前城市就是 Dock widget 和面板卡片显示的那个；
+  在小应用里切换城市，另外两个界面无需重启即可跟随。
+- **单位可选**：°C/°F，以及 m/s、km/h 或 mph。所有数据都按服务商自己的单位请求，绘制时再
+  换算，所以切换单位是瞬时的，也不会多花一次请求。
+- **先显示上次已知的数据，再去请求。** 响应会缓存到磁盘，所以 Dock 重启后 widget 在第一帧
+  就有温度。网络断开时不会变成空白：旧数据会变暗，底部会说明，并以递增的间隔重试。
+- **单实例但不常驻**：widget 点击一次打开，再点一次关闭，关闭时进程随之结束。与
+  `kdock-tilemenu` 和 `kdock-calendar` 一样，**不需要任何 KWin 特殊权限**。
+
 ---
 
 ## 依赖要求
@@ -322,7 +344,8 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
                  qt6-wayland-private-dev cmake ninja-build
 ```
 
-Qt 模块：Core、Gui、Qml、Quick、Widgets、DBus 和 WaylandClient（还需要
+Qt 模块：Core、Gui、Qml、Quick、Widgets、DBus、**Network**（仅天气用到）和
+WaylandClient（还需要
 WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。运行时需要**两个 QML 模块**：
 `QtQuick.Controls` 和 `Qt5Compat.GraphicalEffects`（Debian/Ubuntu 上的
 `qml6-module-qt5compat-graphicaleffects` 包，Arch 上的 `qt6-5compat`），Dock 与预览卡片的
@@ -330,7 +353,8 @@ WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。�
 
 **运行时**，每个依赖都是可选的，缺失时只会关闭对应的 widget：`wpctl` 或 `pactl`
 （音量和混音器）、`brightnessctl`（亮度）、UDisks2（磁盘）、NetworkManager（网络）、
-UPower（电池）。Overview、移动窗口和下一张壁纸这几个 widget 只在 KDE 下出现。
+UPower（电池）。天气是唯一会访问互联网的功能，而且只有在你配置了城市之后才会。
+Overview、移动窗口和下一张壁纸这几个 widget 只在 KDE 下出现。
 
 ## 测试
 
@@ -353,7 +377,7 @@ CI）。
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # 安装五个二进制文件及其 .desktop 文件
+sudo cmake --install build     # 安装六个二进制文件及其 .desktop 文件
 ```
 
 > 如果你的环境导出了 `CC="ccache gcc"` / `CXX="ccache g++"`，CMake 的 AutoMoc 会失败：
@@ -463,6 +487,7 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 | `tilemenu/` | 磁贴菜单配套二进制文件（独立源码树，复用 `src/` 中的 8 个文件） |
 | `calendar/` | 月历配套二进制文件（独立源码树，完全自包含） |
 | `controlmanager/` | 控制面板配套二进制文件（独立源码树，复用 `src/` 中的 16 个文件） |
+| `weather/` | 天气配套二进制文件（独立源码树，复用 `src/` 中的 5 个文件） |
 | `protocols/` | 内置的 Wayland 协议（layer-shell、foreign-toplevel、plasma-window、xdg-shell） |
 | `translations/` | 翻译层（`capabase.md` + 每种语言一个 `.md`）。首次启动时复制到 home 目录，并在那里编辑 |
 | `tests/` | 测试套件：`run.sh` 加四个 ctest 层级（`static`、`unit`、`qml`、`live`）。见 `tests/README.md` |

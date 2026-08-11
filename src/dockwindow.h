@@ -33,6 +33,8 @@ class ScriptRunnersManager;
 class ClipboardHistory;
 class DisksControl;
 class NetworkControl;
+class WeatherControl;
+class WeatherLauncher;
 class AppearanceControl;
 class WindowMonitor;
 class TileMenuLauncher;
@@ -63,7 +65,8 @@ public:
                DisksControl *disks = nullptr, NetworkControl *network = nullptr,
                AppearanceControl *appearance = nullptr,
                WindowMonitor *monitor = nullptr,
-               VirtualDesktops *desktops = nullptr);
+               VirtualDesktops *desktops = nullptr,
+               WeatherControl *weather = nullptr);
 
     // Called from QML when the autohide animation finishes: shrinks the
     // input region to a thin strip on the screen edge so clicks pass
@@ -177,6 +180,8 @@ private:
     TileMenuLauncher *m_tileLauncher = nullptr;
     // Same, for kdock-controlmanager (context property "cmLauncher").
     ControlManagerLauncher *m_cmLauncher = nullptr;
+    // Same, for kdock-weather (context property "weatherLauncher").
+    WeatherLauncher *m_weatherLauncher = nullptr;
     bool m_hidden = false;
     bool m_windowsOverlap = false;
     QList<QRect> m_gapRects; // transparent separators, see setGapRects()

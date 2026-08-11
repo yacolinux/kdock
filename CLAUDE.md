@@ -27,9 +27,12 @@ mano**, pero para verificar un cambio empezá por la suite. Tres cosas que impor
 - **Toda corrida es sandbox**: `XDG_DATA_HOME` descartable + herramientas falsas en el `PATH`
   (`tests/lib/`). Si escribís un test nuevo que arranca un binario, pasá por ahí o le vas a
   cambiar el brillo y el tema al usuario.
-- **Hay dos costuras de test en producción**, las dos apagadas por defecto y documentadas en
-  el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`) y
-  `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`).
+- **Hay tres costuras de test en producción**, las tres apagadas por defecto y documentadas en
+  el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`),
+  `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`) y
+  `KDOCK_WEATHER_FIXTURE` (una respuesta grabada del proveedor en vez de la red,
+  `src/weathercontrol.cpp`) — esta última es lo que hace que `tst_weather` corra en CI, que no
+  tiene internet.
 
 ## Build
 
@@ -42,7 +45,7 @@ cmake --build build -j
 `env -u CC -u CXX` es obligatorio: las variables apuntan a ccache y CMake falla si están
 seteadas.
 
-**Son cinco binarios**, los cinco los compila el mismo `cmake --build build`:
+**Son seis binarios**, los seis los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -58,6 +61,11 @@ seteadas.
   `controlmanager/`): el panel de control con solapas (audio, brillo por monitor, energía,
   calendario, reproducción, red, wallpaper, sistema) y su grilla de tarjetas. Lo prende el
   widget `controlmanager` del dock. Detalles en `AGENTS.md` → *Control Manager*.
+- `kdock-weather` (`build/weather/kdock-weather`, árbol `weather/`): el clima —condición
+  actual, pronóstico y detalles— con su propia configuración de ciudades. Lo prende el widget
+  `weather` del dock y el botón de la tarjeta *Clima* del panel. **Instancia única pero NO
+  residente**: cerrar la ventana termina el proceso, así que nunca se queda con el binario
+  viejo mapeado después de un `install`. Detalles en `AGENTS.md` → *Clima*.
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -98,11 +106,11 @@ ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(
 Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
 y el bug "seguía" (2026-08-10).
 
-El install escribe **diez** cosas: los cinco binarios y sus cinco `.desktop`. Después de
+El install escribe **doce** cosas: los seis binarios y sus seis `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
-tarjetas caen a ícono). **`kdock-tilemenu`, `kdock-calendar` y `kdock-controlmanager` no
-necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+tarjetas caen a ícono). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager` y
+`kdock-weather` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
 el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos tres, saltealo
 y evitás el riesgo de abajo. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier
@@ -557,6 +565,50 @@ y un `XDG_CONFIG_HOME` descartable (que es lo que aísla `kdeglobals`; `XDG_DATA
 alcanza), simulando la carrera a mano: escribir el valor oscuro en el `kdeglobals` falso entre
 paso y paso. El control positivo —sacar la guarda, recompilar, correr— pasa de `PASS` a
 `prev=DarkTest` en una corrida.
+
+### Arnés de `kdock-weather`
+
+El más barato de los seis: la ventana es un toplevel común, así que se corre desde `build/`, se
+maneja con `xdotool` y se captura entera. Dos herramientas, como en el panel de control.
+
+**`--dump` es la inocua**: imprime la ciudad, la condición actual, los N días y las filas de
+detalles, y sale sin abrir ninguna ventana. Sirve con una instancia corriendo (solo lee) y es
+la forma de comparar contra el proveedor:
+
+```bash
+./build/weather/kdock-weather --dump
+KDOCK_WEATHER_FIXTURE=tests/fixtures/weather/corrientes.json ./build/weather/kdock-weather --dump
+```
+
+**`KDOCK_WEATHER_FIXTURE` apunta a una respuesta grabada de Open-Meteo** y reemplaza a la red:
+sin ella, un arnés depende de que haya internet y de que el clima no cambie entre corridas, y
+las aserciones sobre "12 °C" fallan al día siguiente por una razón que no tiene nada que ver.
+Con ella no se toca ni la caché ni el timer, así que una corrida de prueba no deja nada.
+
+Y el arnés gráfico:
+
+```bash
+timeout 100 xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+  env -u WAYLAND_DISPLAY XDG_DATA_HOME=/tmp/w-home \
+      KDOCK_WEATHER_FIXTURE=$PWD/tests/fixtures/weather/corrientes.json \
+      QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software ./build/weather/kdock-weather --show \
+      > /tmp/w.log 2>&1 &
+  APP=$!; sleep 7; import -window root /tmp/weather.png; kill $APP'
+```
+
+Cuatro cosas:
+
+- **`dbus-run-session` es obligatorio**, igual que con el menú de mosaicos y el panel: el
+  candado de instancia única es el nombre en el bus, y `xvfb-run` hereda el del usuario. Sin
+  eso el `--show` se le reenvía a la instancia real y **le abre la ventana en la pantalla**.
+- **Enlazá `icons` dentro del `XDG_DATA_HOME` descartable** o los íconos del clima salen vacíos
+  y parece un bug de render.
+- **La ventana se puede manejar con `xdotool`** (bajo X los clics llegan): las dos solapas se
+  prueban con un clic y una captura. Ojo con las coordenadas — la ventana la ubica el WM, así
+  que leelas de la captura anterior en vez de fijarlas.
+- **El clic del widget del dock también se prueba de punta a punta** bajo Xvfb: dock con
+  `showWeather=true`, `xdotool click` sobre el ícono, y la ventana del clima aparece en la
+  misma captura (verificado 2026-08-11). También necesita `dbus-run-session`, por lo mismo.
 
 ### Arnés del portapapeles en la sesión real (klipper como control)
 

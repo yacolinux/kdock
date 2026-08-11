@@ -22,6 +22,7 @@ const QList<CmSectionInfo> &table()
         {QStringLiteral("calendar"),  QStringLiteral("office-calendar"),                2, 2, 2, 2, true},
         {QStringLiteral("play"),      QStringLiteral("applications-multimedia"),        2, 2, 2, 1, true},
         {QStringLiteral("network"),   QStringLiteral("network-wireless"),               2, 2, 2, 1, true},
+        {QStringLiteral("weather"),   QStringLiteral("weather-few-clouds"),             2, 2, 2, 1, true},
         {QStringLiteral("wallpaper"), QStringLiteral("preferences-desktop-wallpaper"),  1, 1, 1, 1, true},
         {QStringLiteral("system"),    QStringLiteral("preferences-system"),             2, 2, 1, 1, true},
         {QStringLiteral("appearance"),QStringLiteral("preferences-desktop-theme"),       2, 2, 2, 1, true},
@@ -83,6 +84,8 @@ QString CmSections::label(const QString &id)
         return QCoreApplication::translate("CmSections", "Reproducción");
     if (id == QLatin1String("network"))
         return QCoreApplication::translate("CmSections", "Red");
+    if (id == QLatin1String("weather"))
+        return QCoreApplication::translate("CmSections", "Clima");
     if (id == QLatin1String("wallpaper"))
         return QCoreApplication::translate("CmSections", "Fondo de escritorio");
     if (id == QLatin1String("system"))
@@ -112,6 +115,9 @@ QString CmSections::description(const QString &id)
     if (id == QLatin1String("network"))
         return QCoreApplication::translate("CmSections",
                                            "Conexiones guardadas y redes Wi-Fi cercanas.");
+    if (id == QLatin1String("weather"))
+        return QCoreApplication::translate("CmSections",
+                                           "Condición actual y pronóstico de la ciudad elegida.");
     if (id == QLatin1String("wallpaper"))
         return QCoreApplication::translate("CmSections",
                                            "Avanzar el fondo de un monitor o de todos.");

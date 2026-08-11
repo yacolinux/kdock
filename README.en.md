@@ -15,7 +15,7 @@
 
 kdock **does not link against KDE Frameworks or Plasma**. Wayland protocols are generated
 directly from their XML with `qtwaylandscanner`, and everything else is resolved over D-Bus
-or the CLI. The result is five standalone binaries, no plugins to install, and no need to
+or the CLI. The result is six standalone binaries, no plugins to install, and no need to
 drag half of Plasma along as a dependency.
 
 Used daily on **KDE Plasma 6 / KWin**; the taskbar also works on wlroots compositors (sway,
@@ -224,7 +224,8 @@ Frameworks:
 | Brightness | Screen brightness | `brightnessctl` |
 | Battery | Charge, status and power profile | UPower + power-profiles-daemon |
 | Disks | Removable drives: mount, unmount, eject, open | UDisks2 |
-| Network | Nearby Wi-Fi networks (join with password), saved connections, Wi-Fi switch; right-click opens the network editor | NetworkManager |
+| Network | A small window with three tabs: **Wi-Fi** (nearby networks, join with password), **Saved** and **Details** (IP, netmask, gateway, DNS, MAC, IPv6). A *Configure networks…* button opens the full editor | NetworkManager |
+| Weather | Condition icon and temperature; the click opens the forecast mini-app. Several saved cities, one of them current | Open-Meteo (HTTPS, no API key) |
 | Clipboard | Text and image history with search, persistent, captured in the background | `ext-data-control-v1` |
 | KDE iconset | Changes the icon set for the whole desktop, leaving the dock's own untouched | `plasma-changeicons` |
 | Color scheme | Applies a KDE color scheme to the whole desktop | `plasma-apply-colorscheme` |
@@ -242,7 +243,7 @@ Frameworks:
 | Sub-launchers | Nested mini-dock: an icon opens a bar with other launchers | — |
 | Script Runner | Runs a configurable shell script | `sh` |
 | Tile menu | Opens and closes the fullscreen menu | `kdock-tilemenu` (D-Bus) |
-| Control Manager | Opens the control panel: audio, per-monitor brightness, power, calendar, playback, network, wallpapers and system. Can draw its own text (or the clock) on the dock, with its own font | `kdock-controlmanager` (D-Bus) |
+| Control Manager | Opens the control panel: audio, per-monitor brightness, power, calendar, playback, network, weather, wallpapers and system. Can draw its own text (or the clock) on the dock, with its own font | `kdock-controlmanager` (D-Bus) |
 
 ### `kdock-previews` (companion binary)
 
@@ -334,7 +335,7 @@ its own.
 
 **Control panel anchored to a screen edge** — the one place to see and touch everything at
 once: audio, per-monitor brightness, power profile, dark mode, calendar, playback, network,
-wallpaper and system. Fifth binary, with its own tree (`controlmanager/`), its own
+weather, wallpaper and system. With its own tree (`controlmanager/`), its own
 configuration and its own settings dialog; the dock's *Control Manager* widget opens and
 closes it.
 
@@ -348,8 +349,11 @@ closes it.
   and the dock's dark mode, live over D-Bus.
 - **Calendar**: navigable month, with a button to open `kdock-calendar`.
 - **Playback**: cover, title/artist, progress bar and transport for any MPRIS2 player.
-- **Network**: current connection, nearby networks with their security, activate/deactivate
-  and forget.
+- **Network**: the same as the dock's widget, tab for tab — nearby networks (with the password
+  row to join one), saved connections, and the connection's own data (IP, netmask, gateway,
+  DNS, MAC).
+- **Weather**: current conditions, an N-day forecast and the details, on the same configuration
+  the dock widget and the mini-app use.
 - **Wallpaper**: advances each monitor's slideshow.
 - **System**: the four settings dialogs (KDE, kdock, tile menu, previews), the restarts and
   the labelled session row (lock, suspend, log out, reboot, shut down).
@@ -363,6 +367,30 @@ Like the dock, it is a layer-shell surface: **it needs no special KWin permissio
 `.desktop` only provides the name and icon, and no application index refresh is needed.
 
 
+### `kdock-weather` (companion binary)
+
+**The weather, in a window of its own**: place, big temperature, condition icon, a wind arrow
+with its speed, and two tabs below — **N days** (day, icon, chance of rain, high and low) and
+**Details** (feels-like, dew point, humidity, pressure, gust, visibility, sunrise and sunset).
+It is opened by the dock's *Weather* widget, by the panel card's button, or by running
+`kdock-weather`.
+
+- **Data comes from [Open-Meteo](https://open-meteo.com)**: HTTPS and JSON, **no API key and no
+  sign-up**. Its city search is part of the same service, so kdock ships no list of places: you
+  type a name and pick from the results (with region and country, which is what tells apart the
+  six cities that share a name).
+- **Several saved cities, one current.** The current one is what the dock widget and the panel
+  card show; changing it in the mini-app reaches the other two surfaces with no restart.
+- **Units are yours**: °C/°F and m/s, km/h or mph. Everything is requested in the provider's own
+  units and converted when drawing, so switching is instant and costs no request.
+- **It shows what it last knew and asks afterwards.** The response is cached on disk, so the
+  widget has a temperature in its very first frame after a dock restart. If the network drops it
+  does not blank out: the old reading is dimmed, the footer says so, and it retries with a
+  growing backoff.
+- **Single instance but not resident**: the widget's click opens it and the next one closes it,
+  and closing quits the process. Like `kdock-tilemenu` and `kdock-calendar`, **it needs no
+  special KWin permission**.
+
 ---
 
 ## Requirements
@@ -374,7 +402,8 @@ sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
                  qt6-wayland-private-dev cmake ninja-build
 ```
 
-Qt modules: Core, Gui, Qml, Quick, Widgets, DBus and WaylandClient (plus WaylandClient's
+Qt modules: Core, Gui, Qml, Quick, Widgets, DBus, **Network** (weather only) and
+WaylandClient (plus WaylandClient's
 private headers, needed by the layer-shell integration). At runtime you need **two QML
 modules**: `QtQuick.Controls` and `Qt5Compat.GraphicalEffects` (package
 `qml6-module-qt5compat-graphicaleffects` on Debian/Ubuntu, `qt6-5compat` on Arch), used for
@@ -383,7 +412,8 @@ start**: the QML fails to load and the window comes up empty.
 
 **At runtime**, every dependency is optional and only disables its widget if missing:
 `wpctl` or `pactl` (volume and mixer), `brightnessctl` (brightness), UDisks2 (disks),
-NetworkManager (network), UPower (battery). The Overview, move-window and next-wallpaper
+NetworkManager (network), UPower (battery). The weather is the only thing that goes out to the
+internet, and only once you configure a city. The Overview, move-window and next-wallpaper
 widgets only show up under KDE.
 
 ## Tests
@@ -408,7 +438,7 @@ touch your brightness, theme or configuration**. Details in [`tests/README.md`](
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # installs the five binaries and their .desktop files
+sudo cmake --install build     # installs the six binaries and their .desktop files
 ```
 
 > If your environment exports `CC="ccache gcc"` / `CXX="ccache g++"`, CMake's AutoMoc fails:
@@ -520,6 +550,7 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
 | `tilemenu/` | Companion tile-menu binary (own tree, reuses 8 files from `src/`) |
 | `calendar/` | Companion month-calendar binary (own tree, self-contained) |
 | `controlmanager/` | Companion control-panel binary (own tree, reuses 16 files from `src/`) |
+| `weather/` | Companion weather binary (own tree, reuses 5 files from `src/`) |
 | `protocols/` | Vendored Wayland protocols (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
 | `translations/` | The translation layers (`capabase.md` + one `.md` per language). Copied to the home directory on first run and edited there |
 | `tests/` | The test suite: `run.sh` plus four ctest tiers (`static`, `unit`, `qml`, `live`). See `tests/README.md` |

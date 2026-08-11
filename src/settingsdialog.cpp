@@ -1545,6 +1545,14 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showNetwork, &QCheckBox::toggled, m_config, &DockConfig::setShowNetwork);
     form->addRow(tr("Network:"), showNetwork);
 
+    auto *showWeather = new QCheckBox(tr("Mostrar el clima (ícono y temperatura)"), tab);
+    showWeather->setChecked(m_config->showWeather());
+    showWeather->setToolTip(tr("El clima se configura en su propia ventana (clic derecho sobre "
+                               "el widget → Configurar el clima…): la ciudad, las unidades y "
+                               "cada cuánto se actualiza. Los datos son de Open-Meteo."));
+    connect(showWeather, &QCheckBox::toggled, m_config, &DockConfig::setShowWeather);
+    form->addRow(tr("Clima:"), showWeather);
+
     auto *showIconThemes = new QCheckBox(tr("Show icon-theme picker"), tab);
     showIconThemes->setChecked(m_config->showIconThemes());
     showIconThemes->setToolTip(tr("Applies the icon theme to the whole desktop. kdock's own "

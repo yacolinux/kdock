@@ -29,7 +29,11 @@ function(kdock_add_unit_test name)
         LABELS "unit"
         # offscreen keeps it headless; the fake PATH is the safety net that stops
         # a backend from changing the real brightness / colour scheme / audio.
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PATH=${CMAKE_CURRENT_BINARY_DIR}/fakebin:$ENV{PATH}"
+        # KDOCK_FIXTURES travels in the environment and not as a compile
+        # definition: this repo's path has a '#' in it and CMake silently drops
+        # any -D that contains one (it warns and moves on, so the test would
+        # fail to compile for a reason that has nothing to do with the test).
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PATH=${CMAKE_CURRENT_BINARY_DIR}/fakebin:$ENV{PATH};KDOCK_FIXTURES=${KDOCK_TESTS_DIR}/fixtures"
         SKIP_RETURN_CODE 77)
 endfunction()
 
@@ -39,6 +43,7 @@ kdock_add_unit_test(tst_dockmanager)
 kdock_add_unit_test(tst_desktopentry)
 kdock_add_unit_test(tst_translations)
 kdock_add_unit_test(tst_qmlload)
+kdock_add_unit_test(tst_weather)
 
 # The fake tools have to exist before any test runs, so they are generated at
 # build time by a target every unit test depends on.
@@ -48,7 +53,7 @@ add_custom_command(
     COMMENT "Generating the fake system tools used by the tests")
 add_custom_target(kdock_fakebin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp)
 foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations
-          tst_qmlload)
+          tst_qmlload tst_weather)
     add_dependencies(${t} kdock_fakebin)
 endforeach()
 

@@ -22,6 +22,8 @@
 #include "theme.h"
 #include "virtualdesktops.h"
 #include "wallpapercontrol.h"
+#include "weathercontrol.h"
+#include "weatherlauncher.h"
 
 #include <QColorDialog>
 #include <QCoreApplication>
@@ -138,6 +140,9 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
     rootContext()->setContextProperty(QStringLiteral("brightness"), m_backends.brightness);
     rootContext()->setContextProperty(QStringLiteral("screens"), m_backends.screenBrightness);
     rootContext()->setContextProperty(QStringLiteral("network"), m_backends.network);
+    rootContext()->setContextProperty(QStringLiteral("weather"), m_backends.weather);
+    rootContext()->setContextProperty(QStringLiteral("weatherLauncher"),
+                                      m_backends.weatherLauncher);
     rootContext()->setContextProperty(QStringLiteral("wallpaperControl"), m_backends.wallpaper);
     rootContext()->setContextProperty(QStringLiteral("power"), m_backends.power);
     rootContext()->setContextProperty(QStringLiteral("mpris"), m_backends.mpris);

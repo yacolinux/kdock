@@ -24,6 +24,7 @@ Loader {
         case "calendar":  return "cards/CalendarCard.qml"
         case "play":      return "cards/PlayCard.qml"
         case "network":   return "cards/NetworkCard.qml"
+        case "weather":   return "cards/WeatherCard.qml"
         case "wallpaper": return "cards/WallpaperCard.qml"
         case "system":    return "cards/SystemCard.qml"
         case "appearance": return "cards/AppearanceCard.qml"

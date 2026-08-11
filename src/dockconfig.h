@@ -110,6 +110,7 @@ class DockConfig : public QObject
     Q_PROPERTY(int clipboardPopupHeight READ clipboardPopupHeight WRITE setClipboardPopupHeight NOTIFY clipboardPopupHeightChanged)
     Q_PROPERTY(bool showDisks READ showDisks WRITE setShowDisks NOTIFY showDisksChanged)
     Q_PROPERTY(bool showNetwork READ showNetwork WRITE setShowNetwork NOTIFY showNetworkChanged)
+    Q_PROPERTY(bool showWeather READ showWeather WRITE setShowWeather NOTIFY showWeatherChanged)
     // KDE appearance pickers (icon theme / color scheme), see AppearanceControl.
     Q_PROPERTY(bool showIconThemes READ showIconThemes WRITE setShowIconThemes NOTIFY showIconThemesChanged)
     Q_PROPERTY(bool showColorSchemes READ showColorSchemes WRITE setShowColorSchemes NOTIFY showColorSchemesChanged)
@@ -607,6 +608,7 @@ public:
     int clipboardPopupHeight() const { return m_clipboardPopupHeight; }
     bool showDisks() const { return m_showDisks; }
     bool showNetwork() const { return m_showNetwork; }
+    bool showWeather() const { return m_showWeather; }
     bool showIconThemes() const { return m_showIconThemes; }
     bool showColorSchemes() const { return m_showColorSchemes; }
     bool showOverview() const { return m_showOverview; }
@@ -722,6 +724,7 @@ public:
     void setShowClipboard(bool show);
     void setShowDisks(bool show);
     void setShowNetwork(bool show);
+    Q_INVOKABLE void setShowWeather(bool show);
     void setShowIconThemes(bool show);
     void setShowColorSchemes(bool show);
     void setClipboardPopupWidth(int w);
@@ -840,6 +843,7 @@ signals:
     void showClipboardChanged();
     void showDisksChanged();
     void showNetworkChanged();
+    void showWeatherChanged();
     void showIconThemesChanged();
     void showColorSchemesChanged();
     void clipboardPopupWidthChanged();
@@ -977,6 +981,7 @@ private:
     bool m_showClipboard = false;
     bool m_showDisks = false;
     bool m_showNetwork = false;
+    bool m_showWeather = false;
     bool m_showIconThemes = false;
     bool m_showColorSchemes = false;
     int m_clipboardPopupWidth = 360;

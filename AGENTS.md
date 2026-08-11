@@ -1040,6 +1040,79 @@ engancharlo nunca implica editar el QML del dock. Es un **cuarto binario**, con 
 - **Lo que se toca en kdock, y es nada**: solo `add_subdirectory(calendar)` en el
   `CMakeLists.txt` raíz. No comparte ningún archivo de `src/`.
 
+### Clima — binario accesorio `kdock-weather` (`weather/`, 2026-08-11)
+
+El clima en **tres superficies**, todas sobre el mismo backend: el widget `weather` del dock
+(ícono + temperatura), la sección/tarjeta *Clima* del panel de control, y una mini-app propia
+que es la vista completa —ubicación, temperatura grande, ícono, flecha de viento, condición, y
+las dos solapas *N días* / *Detalles*—. El modelo de diseño es el applet de KDE
+(`kdeplasma-addons/applets/weather`, cuyo código está en esta máquina); lo que **no** se puede
+reusar de ahí es el dato: sus *ions* son KDE Frameworks y kdock no linkea ninguno.
+
+- **El proveedor es Open-Meteo** (`api.open-meteo.com`): HTTPS + JSON, **sin API key y sin
+  registro**, con un endpoint de geocodificación que convierte "Corrientes" en coordenadas —
+  o sea que kdock no tiene que empaquetar ninguna lista de ciudades. Es la única cosa de todo
+  el proyecto que habla con algo que no es la máquina local, y por eso `Qt6::Network` aparece
+  ahora en los tres targets que compilan el backend.
+- **Todo se pide en las unidades del proveedor (°C y km/h) y se convierte al dibujar.** Así la
+  caché no depende de la elección del usuario: pasar de m/s a mph es un repintado, no un
+  pedido. Es también la razón por la que `formatTemp()`/`formatWind()` viven en el backend y no
+  en cada QML.
+- **`WeatherConfig` (`src/weatherconfig.{h,cpp}`) es un archivo propio, `weather.conf`**, con
+  las ciudades (una clave JSON, no una sección por ciudad: `QSettings` mapea a sección solo el
+  **primer** `/`, así que un nombre de ciudad como clave termina en las reglas de escapado),
+  la activa, las unidades, los días y los minutos de refresco. **Lo leen tres procesos y
+  ninguno le avisa a los otros**, así que la clase vigila el archivo con un `QFileSystemWatcher`
+  (el directorio también: `QSettings` reemplaza el archivo al guardar y eso se lleva puesta una
+  vigilancia solo-archivo) y emite `changed()`. Sin eso, elegir otra ciudad en la mini-app no
+  llega al dock hasta reiniciarlo.
+- **`WeatherControl` (`src/weathercontrol.{h,cpp}`) muestra la caché primero y pregunta
+  después.** El último `.json` recibido se guarda con su timestamp (`weather-cache.json`) y se
+  vuelve a leer al arrancar: por eso el widget del dock tiene temperatura **en el primer
+  frame** tras un reinicio, y por eso tres procesos no piden tres veces lo mismo. Un fallo de
+  red no vacía nada: lo que estaba sigue, marcado `stale` (el ícono y el texto se atenúan), que
+  es una respuesta mucho mejor a "se cayó el wifi" que un widget en blanco. El reintento va con
+  **backoff** (1, 2, 4… hasta 16 intervalos), la misma regla que el respawn de `pactl subscribe`.
+- **El mapeo código WMO → ícono y → texto es C++** (`iconForCode()`/`textForCode()`, estáticas y
+  por lo tanto testeables sin red ni config), porque es exactamente lo que las tres superficies
+  tienen que decir igual. Ojo con una asimetría de breeze que ya está cubierta por el test: hay
+  variantes `-night` para *clear*, *few-clouds* y *clouds*, y **no** para lluvia, nieve o
+  tormenta; pedir `weather-showers-night` da un ícono vacío. Un código desconocido cae en
+  `weather-none-available`, nunca en una URL vacía (que en QML es un hueco y se lee como un bug
+  de layout).
+- **Costura de test `KDOCK_WEATHER_FIXTURE`**: una respuesta grabada en vez de la red, sin tocar
+  la caché ni el timer. Es lo que hace determinístico a `tests/unit/tst_weather.cpp` (11 casos)
+  y lo que permite correrlo en CI, que no tiene internet. Control positivo hecho: sin la
+  variable el test **falla** en `initTestCase` en vez de pasar en silencio.
+- **La mini-app es un toplevel común** (`WeatherWindow`, `QQuickView`), como el menú de mosaicos
+  y el calendario: sin protocolos de Wayland, sin privilegios, sin ksycoca, y capturable entera
+  bajo Xvfb. **Instancia única por el nombre de D-Bus** (`org.kdock.Weather`, `WeatherService`,
+  calcado de `TileMenuService`) pero **no residente**: cerrar la ventana termina el proceso, así
+  que —a diferencia de los otros tres accesorios— no entra en `kdock::restartAll()` ni puede
+  quedarse ejecutando el binario que un `install` acaba de reemplazar.
+- **`--dump`** imprime la ciudad, lo actual, los N días y los detalles y sale sin abrir ventana
+  (el papel que `--dump-sections` juega para el panel). **`--settings`** abre el diálogo de
+  ciudades: buscador por nombre contra el geocodificador, lista de guardadas con *Usar
+  esta*/*Quitar*, unidades y refresco. Con la lista vacía, un arranque normal abre ese diálogo
+  solo: es lo único útil que se puede mostrar.
+- **El widget del dock es delgado a propósito** (era el pedido: "un binario nuevo para
+  simplificar el código del dock"): dibuja el ícono y la temperatura del `WeatherControl` de
+  *este* proceso —no espera al otro binario— y el clic abre/cierra la mini-app por
+  `WeatherLauncher` (`src/weatherlauncher.{h,cpp}`, calcado de `ControlManagerLauncher`). El
+  clic derecho es su propio menú (*Ver el pronóstico*, *Actualizar ahora*, *Configurar el
+  clima…*), así que el token va en `isBlock()`. Es un widget del checklist de siete archivos, con
+  su línea en **`knownWidgetTokens()`** y su casillero en Settings → Widgets; la configuración
+  del clima **no** está en el diálogo del dock, vive en la mini-app como la de los demás
+  accesorios.
+- **La flecha del viento se pinta con un `Canvas`, no con un ícono**: los `arrow-*` de breeze son
+  line-art de barra de herramientas y a 20 px se leen como un glifo roto (el applet de KDE
+  embarca su propio `wind-arrows.svgz` por lo mismo). Apunta a donde **va** el viento, o sea la
+  dirección informada + 180°.
+- **La tarjeta del panel repite la vista, no la lógica.** La compacta de 2x2 es un resumen con
+  el botón que salta a la sección; la completa tiene las mismas dos solapas que la mini-app. Los
+  dos `.qml` son distintos porque una grilla de 2x2 y una ventana de 500 px no son la misma
+  vista, pero íconos, unidades, nombres de día y textos de condición salen los dos del backend.
+
 ### Control Manager — binario accesorio `kdock-controlmanager` (`controlmanager/`, 2026-08-08)
 
 Panel de control con **solapas horizontales**: audio, brillo por monitor, perfil de energía,
@@ -1624,6 +1697,9 @@ a checkable *Wi-Fi*.
 | `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `currentGroup` (rw: la solapa visible), `searching`, `rows` (del grupo actual), `groups`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
 | `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
 | `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
+| `WeatherLauncher` | `weatherLauncher` (en kdock y en el panel) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento con `kdock-weather`: si el proceso corre, D-Bus; si no, lo lanza. A diferencia de los otros dos, ese proceso **no queda residente** |
+| `WeatherControl` | `weather` (en las tres superficies) | `configured`, `available`, `loading`, `stale`, `errorText`, `cityLabel`, `tempText`, `feelsLikeText`, `conditionText`, `iconName`, `windText`, `windDirection`, `updatedText`, `forecast()` (→ `{dayLabel, dateLabel, iconName, conditionText, precipProbability, maxText, minText}`), `details()` (→ `{label, text}`), `refresh(force)`, `searchCity(name)` + señal `citiesFound(list)`. Open-Meteo por HTTPS; los textos ya vienen formateados en las unidades configuradas |
+| `WeatherConfig` | `weatherConfig` (en `kdock-weather`) | `cities`, `activeCity` (rw), `fahrenheit` (rw), `windUnit` (rw), `refreshMinutes` (rw), `forecastDays` (rw), `addCity(map)`, `removeCity(i)`. Su `weather.conf` lo leen tres procesos, así que se vigila con un `QFileSystemWatcher` |
 | `DockService` | (sin context property) | `org.kdock.Dock` en `/Dock`: `openSettings(dockId)`, `restart()`, `darkMode()`, `setDarkMode(b)`, `toggleDarkMode()`, `dockIds()`, `dockScreens()`, `primaryDockId()` + señal `darkModeChanged(b)`. Lo consume `DockLink` desde el panel |
 | `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural), `fontSize` (0 = predeterminado 12 px) + `fontScale` read-only (multiplica cada `font.pixelSize` del panel), `iconTheme` (iconset propio; vacío = el par por luminancia). Grilla: `columns` (0=según el ancho), `cellSize`, `cellHeight` (fijo; las celdas pueden ser más altas que anchas), `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
 | `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`fg`/`label`/`showTitle`; `fg` vacío = color de texto automático), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |

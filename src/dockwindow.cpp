@@ -31,6 +31,8 @@
 #include "systraymodel.h"
 #include "systrayimageprovider.h"
 #include "controlmanagerlauncher.h"
+#include "weathercontrol.h"
+#include "weatherlauncher.h"
 #include "tilemenulauncher.h"
 #include "virtualdesktops.h"
 #include "theme.h"
@@ -69,7 +71,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        ClipboardHistory *clipboardHistory,
                        DisksControl *disks, NetworkControl *network,
                        AppearanceControl *appearance, WindowMonitor *monitor,
-                       VirtualDesktops *desktops)
+                       VirtualDesktops *desktops, WeatherControl *weather)
     : m_config(config)
     , m_theme(theme)
     , m_model(model)
@@ -165,6 +167,12 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // binary, so it is built here instead of travelling through Shared.
     m_cmLauncher = new ControlManagerLauncher(this);
     rootContext()->setContextProperty(QStringLiteral("cmLauncher"), m_cmLauncher);
+    // The weather window is another binary, but its *data* is this process':
+    // the widget draws the temperature from the shared WeatherControl and only
+    // uses the launcher when clicked.
+    m_weatherLauncher = new WeatherLauncher(this);
+    rootContext()->setContextProperty(QStringLiteral("weatherLauncher"), m_weatherLauncher);
+    rootContext()->setContextProperty(QStringLiteral("weather"), weather);
 
     // The autohide mask is a rectangle derived from the surface size, so it goes
     // stale whenever the dock resizes (an icon-size change, or coming back from

@@ -40,6 +40,9 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/batterycontrol.cpp   ${KDOCK_SHARED_SRC}/batterycontrol.h
     ${KDOCK_SHARED_SRC}/brightnesscontrol.cpp ${KDOCK_SHARED_SRC}/brightnesscontrol.h
     ${KDOCK_SHARED_SRC}/networkcontrol.cpp   ${KDOCK_SHARED_SRC}/networkcontrol.h
+    ${KDOCK_SHARED_SRC}/weathercontrol.cpp   ${KDOCK_SHARED_SRC}/weathercontrol.h
+    ${KDOCK_SHARED_SRC}/weatherconfig.cpp    ${KDOCK_SHARED_SRC}/weatherconfig.h
+    ${KDOCK_SHARED_SRC}/weatherlauncher.cpp  ${KDOCK_SHARED_SRC}/weatherlauncher.h
     ${KDOCK_SHARED_SRC}/nmdbus.cpp           ${KDOCK_SHARED_SRC}/nmdbus.h
     ${KDOCK_SHARED_SRC}/wallpapercontrol.cpp ${KDOCK_SHARED_SRC}/wallpapercontrol.h
     ${KDOCK_SHARED_SRC}/iconpickerdialog.cpp ${KDOCK_SHARED_SRC}/iconpickerdialog.h
@@ -82,6 +85,7 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/cards/CalendarCard.qml
         qml/cards/PlayCard.qml
         qml/cards/NetworkCard.qml
+        qml/cards/WeatherCard.qml
         qml/cards/WallpaperCard.qml
         qml/cards/SystemCard.qml
         qml/cards/AppearanceCard.qml
@@ -113,6 +117,7 @@ target_compile_definitions(kdock-controlmanager PRIVATE QT_STATICPLUGIN)
 target_link_libraries(kdock-controlmanager PRIVATE
     Qt6::CorePrivate
     Qt6::Gui
+    Qt6::Network
     Qt6::Qml
     Qt6::Quick
     Qt6::Widgets

@@ -54,6 +54,7 @@ class ScriptRunnersManager;
 class ClipboardHistory;
 class DisksControl;
 class NetworkControl;
+class WeatherControl;
 class AppearanceControl;
 class VirtualDesktops;
 class DesktopWallpapers;
@@ -83,6 +84,7 @@ public:
         ClipboardHistory *clipboardHistory = nullptr;
         DisksControl *disks = nullptr;
         NetworkControl *network = nullptr;
+        WeatherControl *weather = nullptr;
         AppearanceControl *appearance = nullptr;
         VirtualDesktops *desktops = nullptr;
         DesktopWallpapers *desktopWallpapers = nullptr;

@@ -42,6 +42,8 @@
 #include "appearancecontrol.h"
 #include "darkmodeappearance.h"
 #include "networkcontrol.h"
+#include "weatherconfig.h"
+#include "weathercontrol.h"
 #include "relanzadorconfig.h"
 #include "relanzadormodel.h"
 #include "relanzadoresmanager.h"
@@ -231,6 +233,11 @@ int main(int argc, char *argv[])
     DisksControl disks;
     NetworkControl network;
     AppearanceControl appearance(&theme);
+    // The weather widget draws from the same backend the mini-app and the
+    // control panel use; its own config file is watched, so a city picked in
+    // kdock-weather reaches the dock without a restart.
+    WeatherConfig weatherConfig;
+    WeatherControl weather(&weatherConfig);
 
     // One dock per enabled monitor; the manager handles hotplug and the
     // per-monitor config files (see DockManager). The clocks are created
@@ -256,6 +263,7 @@ int main(int argc, char *argv[])
     shared.clipboardHistory = &clipboardHistory;
     shared.disks = &disks;
     shared.network = &network;
+    shared.weather = &weather;
     shared.appearance = &appearance;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
