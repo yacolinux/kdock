@@ -655,6 +655,56 @@ creó la corrida anterior siguen ahí, así que la siguiente empieza en otro slo
 `assert` sobre "Dock 2" falla por una razón que no tiene nada que ver. `rm -rf` del directorio
 en cada corrida (me pasó, 2026-08-06).
 
+### Probar un cambio de fondo: la config miente, hay que mirar la pantalla
+
+**Que la clave cambie no quiere decir que el escritorio cambie**, y es exactamente el modo en
+que este bug se esconde (2026-08-10, *"el fondo cambia una vez y después ya no"*): el motor
+escribía la clave `Image` del slideshow, la releía distinta en cada clic y **el fondo no se
+movía**. Una verificación que lea el `.conf` o el `readConfig` da verde sobre una feature
+completamente rota.
+
+La medición son tres comandos, y ninguno necesita cambiar de escritorio ni cerrar ventanas
+(el escritorio está tapado, pero el fondo visible alcanza y sobra si contás píxeles):
+
+```bash
+spectacle-custom -b -n -f -o /tmp/a0.png     # (el `spectacle` de /usr/bin no está autorizado)
+<la acción>
+spectacle-custom -b -n -f -o /tmp/a1.png
+python3 -c "
+from PIL import Image
+a=Image.open('/tmp/a0.png').convert('RGB').crop(BOX); b=Image.open('/tmp/a1.png').convert('RGB').crop(BOX)
+print(sum(1 for p,q in zip(a.getdata(),b.getdata()) if p!=q))"
+```
+
+`BOX` es la geometría del monitor dentro de la captura, y **el mapeo conector → geometría sale
+de una sonda Qt de diez líneas** (`QGuiApplication::screens()`, `QT_QPA_PLATFORM=wayland`), no
+de `kscreen-doctor`, que en esta sesión no imprime nada. Los números se leen solos: un repintado
+son ~2,03 M de los 2,07 M píxeles de un 1920x1080; el fondo **sin** cambiar da ~31 k, que es el
+reloj del dock. Los índices de Plasma (`d.screen`) son los de `screenGeometry(i)`, así que el
+mismo mapeo sirve para el JS.
+
+Y dos cosas del dominio que costaron todo el diagnóstico:
+
+- **Los dos plugins de fondo se comportan al revés.** `org.kde.slideshow` **ignora** un `Image`
+  escrito + `reloadConfig()` (gestiona su propia rotación): lo único que lo hace avanzar es
+  ciclar el plugin —a `org.kde.image` y, en una llamada **separada**, de vuelta— sin
+  `reloadConfig()` en la ida, o repinta antes con la imagen vieja del otro grupo y se ve un
+  fondo de más. `org.kde.image` es lo contrario: respeta `writeConfig("Image")` +
+  `reloadConfig()` y repinta. Los dos flips dentro de **un** script no repintan nada.
+- **`busctl` no sirve acá y `qdbus6` sí**: el servicio es `org.kde.plasmashell` (minúscula) en
+  `/PlasmaShell`, y `busctl` te devuelve la salida con los `\n` escapados, ilegible para un
+  volcado de varias líneas.
+
+**Probar el backend sin UI son 20 líneas**: `moc` sobre `wallpapercontrol.h`, `g++` con
+`wallpapercontrol.cpp` y `Qt6Gui Qt6DBus`, un `main` que llame al método y un `singleShot` de
+4 s para que las llamadas encadenadas lleguen (son asíncronas: salir antes deja el trabajo a
+medias). Con `QT_QPA_PLATFORM=wayland` ve los monitores reales.
+
+**Y esto le cambia el escritorio al usuario de verdad**: no hay caja de arena posible, porque
+la feature *es* escribirle a plasmashell. Anotá el `Image` de cada containment **antes** de
+empezar y devolvelos al terminar — un `readConfig` por pantalla y un `writeConfig` +
+`reloadConfig` de vuelta.
+
 ### Manejar el diálogo desde código encuentra lo que la captura no muestra
 
 Vale para cualquier solapa, y para la de Redes fue decisivo: una sonda que linkea los `.o`,
