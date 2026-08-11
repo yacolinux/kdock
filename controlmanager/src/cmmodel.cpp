@@ -28,7 +28,8 @@ QHash<int, QByteArray> CmModel::roleNames() const
     return {
         {IdRole, "cardId"},   {NameRole, "name"},   {IconRole, "icon"},
         {ColRole, "col"},     {RowRole, "row"},     {WidthRole, "span"},
-        {HeightRole, "vspan"}, {BackgroundRole, "background"}, {ShowTitleRole, "showTitle"},
+        {HeightRole, "vspan"}, {BackgroundRole, "background"},
+        {ForegroundRole, "foreground"}, {ShowTitleRole, "showTitle"},
     };
 }
 
@@ -56,6 +57,9 @@ QVariant CmModel::data(const QModelIndex &index, int role) const
         return c.h;
     case BackgroundRole:
         return c.bg;
+    case ForegroundRole:
+        // Empty = no override; CmCard.qml picks the contrast pair itself.
+        return c.fg;
     case ShowTitleRole:
         // -1 = follow the global switch.
         return c.showTitle < 0 ? m_config->showCardTitles() : c.showTitle == 1;

@@ -26,8 +26,13 @@ Item {
     // overriding them fails the whole component load (mordió 2026-08-09: el
     // panel quedó en blanco y el diálogo de configuración inalcanzable debajo
     // de la superficie vacía).
+    // The panel's contrast colour; the grip is drawn straight on the panel.
+    property color fg: theme.foreground
+
     readonly property bool isLeft: corner === 1 || corner === 2
     readonly property bool isTop: corner === 2
+
+    onFgChanged: gripCanvas.requestPaint()
 
     Canvas {
         id: gripCanvas
@@ -37,7 +42,7 @@ Item {
         onPaint: {
             const c = getContext("2d")
             c.clearRect(0, 0, width, height)
-            c.strokeStyle = theme.foreground
+            c.strokeStyle = grip.fg
             c.lineWidth = 2
             c.beginPath()
             for (let i = 0; i < 3; ++i) {

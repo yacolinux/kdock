@@ -18,7 +18,7 @@ de cada uno y cómo agregarle un caso.
 
 | tier | qué prueba | dónde corre |
 |---|---|---|
-| `static` | invariantes del repo: qmllint, `.qml` en el qrc, catálogo al día, `tr()` sin `" = "`, tokens de widget completos | en cualquier lado, sin compilar |
+| `static` | invariantes del repo: qmllint, `.qml` en el qrc, catálogo al día, `tr()` sin `" = "`, tokens de widget completos, tarjetas del panel sin `theme.foreground` | en cualquier lado, sin compilar |
 | `unit` | Qt Test contra `kdock_core`, headless (`offscreen`) | en cualquier lado |
 | `qml` | los binarios de verdad bajo Xvfb: el QML carga **y dibuja** | necesita Xvfb |
 | `live` | dodge y multi-monitor contra KWin | **solo** en la sesión Wayland; nunca en CI |

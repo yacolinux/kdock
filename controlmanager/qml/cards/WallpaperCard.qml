@@ -13,6 +13,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     // Qt.application.screens is a list of {name, ...}: exactly the connector
     // names WallpaperControl expects.
@@ -26,7 +29,7 @@ Item {
         Text {
             visible: !card.compact
             text: qsTr("Siguiente imagen del fondo")
-            color: theme.foreground
+            color: card.fg
             opacity: 0.6
             font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
             font.bold: true
@@ -55,6 +58,7 @@ Item {
             // own — one advance per connected monitor — so the script is now
             // an override for whoever has one, not a requirement.
             CmButton {
+                fg: card.fg
                 compact: card.compact
                 icon: "view-refresh"
                 label: qsTr("Todos")
@@ -77,7 +81,7 @@ Item {
             width: parent.width
             text: qsTr("«Todos» avanza cada monitor conectado, o corre el script si "
                        + "configuraste uno.")
-            color: theme.foreground
+            color: card.fg
             opacity: 0.45
             wrapMode: Text.Wrap
             font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))

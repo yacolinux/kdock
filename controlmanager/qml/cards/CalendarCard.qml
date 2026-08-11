@@ -11,6 +11,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     readonly property date today: new Date()
     property int shownMonth: today.getMonth()
@@ -35,6 +38,8 @@ Item {
             height: 24
 
             CmButton {
+
+                fg: card.fg
                 id: prev
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
@@ -45,11 +50,12 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: Qt.locale().standaloneMonthName(card.shownMonth) + " " + card.shownYear
-                color: theme.foreground
+                color: card.fg
                 font.pixelSize: Math.max(7, Math.round((card.compact ? 12 : 14) * cmConfig.fontScale))
                 font.bold: true
             }
             CmButton {
+                fg: card.fg
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 compact: true
@@ -65,7 +71,7 @@ Item {
             delegate: Text {
                 required property string shortName
                 text: shortName
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.5
                 font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
                 horizontalAlignment: Text.AlignHCenter
@@ -99,7 +105,7 @@ Item {
                 Text {
                     anchors.centerIn: parent
                     text: cell.model.day
-                    color: cell.isToday ? theme.background : theme.foreground
+                    color: cell.isToday ? theme.background : card.fg
                     opacity: cell.thisMonth ? 1.0 : 0.30
                     font.pixelSize: Math.max(7, Math.round((card.compact ? 10 : 12) * cmConfig.fontScale))
                     font.bold: cell.isToday
@@ -111,6 +117,7 @@ Item {
     // Only in the full tab: a card this small has no room for it, and the whole
     // point of the compact one is the dates.
     CmButton {
+        fg: card.fg
         visible: !card.compact
         anchors.right: parent.right
         anchors.bottom: parent.bottom

@@ -13,6 +13,9 @@ Item {
     // [{ id, label, icon }]; the Principal entry has an empty id.
     property var model: []
     property string currentId: ""
+    // Set by ControlManager to the panel's contrast colour; the default keeps
+    // the bar readable if it is ever used somewhere that does not set it.
+    property color fg: theme.foreground
 
     signal picked(string id)
 
@@ -92,10 +95,8 @@ Item {
                                ? Qt.rgba(theme.highlight.r, theme.highlight.g,
                                          theme.highlight.b, 0.45)
                                : (tabMouse.containsMouse
-                                  ? Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                            theme.foreground.b, 0.12)
-                                  : Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                            theme.foreground.b, 0.05))
+                                  ? Qt.rgba(tabs.fg.r, tabs.fg.g, tabs.fg.b, 0.12)
+                                  : Qt.rgba(tabs.fg.r, tabs.fg.g, tabs.fg.b, 0.05))
                     }
 
                     Row {
@@ -120,7 +121,7 @@ Item {
                             visible: tab.showLabel
                             anchors.verticalCenter: parent.verticalCenter
                             text: tab.modelData.label
-                            color: theme.foreground
+                            color: tabs.fg
                             font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
                             font.bold: cmConfig.labelBold
                         }

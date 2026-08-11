@@ -14,6 +14,10 @@ Item {
     property bool checked: false
     property bool compact: false
     property color accent: theme.highlight
+    // The card (or the panel) that contains this button decides the text and
+    // fill colour; on its own the button would use the KDE foreground and
+    // vanish on a light card.
+    property color fg: theme.foreground
     // Tooltip text; empty = no tooltip.
     property string tip: ""
 
@@ -32,12 +36,12 @@ Item {
         anchors.fill: parent
         radius: 6
         color: !button.enabled
-               ? Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.04)
+               ? Qt.rgba(button.fg.r, button.fg.g, button.fg.b, 0.04)
                : button.checked
                  ? Qt.rgba(button.accent.r, button.accent.g, button.accent.b, 0.45)
                  : mouse.containsMouse
-                   ? Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.16)
-                   : Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08)
+                   ? Qt.rgba(button.fg.r, button.fg.g, button.fg.b, 0.16)
+                   : Qt.rgba(button.fg.r, button.fg.g, button.fg.b, 0.08)
         border.width: button.checked ? 1 : 0
         border.color: button.accent
     }
@@ -61,7 +65,7 @@ Item {
             visible: button.label.length > 0
             anchors.verticalCenter: parent.verticalCenter
             text: button.label
-            color: theme.foreground
+            color: button.fg
             opacity: button.enabled ? 1.0 : 0.4
             font.pixelSize: Math.max(7, Math.round((button.compact ? 11 : 12) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold

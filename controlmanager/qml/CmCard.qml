@@ -21,6 +21,7 @@ Item {
     required property int span
     required property int vspan
     required property string background
+    required property string foreground
     required property bool showTitle
 
     // --- wiring from ControlManager.qml ---
@@ -61,9 +62,23 @@ Item {
         NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
     }
 
+    // No colour of its own = a faint tint of the panel's own text colour, so a
+    // card stays visible on a light panel as well as on a dark one.
+    readonly property color cardTint: ui ? ui.panelTextColor : theme.foreground
     readonly property color cardColor: background.length > 0
         ? background
-        : Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.08)
+        : Qt.rgba(cardTint.r, cardTint.g, cardTint.b, 0.08)
+
+    // Every text this card draws — the title here and everything CmSectionView
+    // loads below — uses this one colour. A per-card override wins; otherwise a
+    // card that carries its own background picks the contrast pair from that
+    // colour's luminance (alpha ignored: see root.isLight), and a card without
+    // one is drawn on the panel, so it inherits the panel's answer.
+    readonly property color textColor: foreground.length > 0
+        ? foreground
+        : (background.length > 0
+           ? (ui && ui.isLight(card.cardColor) ? "#141414" : "#F2F2F2")
+           : (ui ? ui.panelTextColor : theme.foreground))
 
     Rectangle {
         id: bg
@@ -112,7 +127,7 @@ Item {
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
             text: card.name
-            color: theme.foreground
+            color: card.textColor
             opacity: 0.75
             elide: Text.ElideRight
             font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
@@ -167,6 +182,7 @@ Item {
         anchors.bottomMargin: 8
         clip: true
         sectionId: card.cardId
+        fg: card.textColor
         compact: true
     }
 }

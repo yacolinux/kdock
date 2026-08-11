@@ -1057,6 +1057,16 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   `TileMenuLauncher`; el `controlmanager`, con `ControlManagerLauncher`) se salta
   `dockmanager.*`: el objeto es fino y sin estado, así que lo crea el propio `DockWindow` en su
   ctor —igual que `AppMenu`— en vez de viajar por `Shared`.
+- **El scope de QML es por ARCHIVO, y un `Binding` dentro de un `Loader` es la carga.** Las dos
+  mordieron al pasarle a cada tarjeta del panel de control su color de texto (2026-08-10). Un
+  `.qml` que instancia un `Loader` **no** le presta sus properties al archivo cargado (los ids
+  sí viajan por la cadena de contextos, las properties de la raíz no), así que un valor se pasa
+  property por property y llega a `CmButton`/`CmSlider` solo si cada uso lo escribe: esos
+  resuelven `theme` contra el contexto raíz, no contra la tarjeta que los declara. Y la default
+  property de un `Loader` es `sourceComponent`, o sea que un `Binding { target: view.item … }`
+  declarado en su cuerpo se lee como *lo que hay que cargar*: sale un **"Binding loop detected
+  for property X" por cada ítem cargado** y el valor no llega. Va con `onLoaded` +
+  `on<Prop>Changed`, como el `compact` que ya estaba.
 - **`Component.onCompleted` (y cualquier handler) se declara UNA sola vez por objeto.** Un
   segundo `Component.onCompleted` en la raíz de `Dock.qml` no es un error de compilación ni una
   advertencia de `qmllint`: es *"Property value set multiple times"* al cargar, o sea **el QML

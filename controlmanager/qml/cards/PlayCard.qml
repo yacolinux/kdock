@@ -11,6 +11,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     readonly property bool have: mpris && mpris.available
     // Microseconds to m:ss.
@@ -32,7 +35,7 @@ Item {
         anchors.centerIn: parent
         visible: !card.have
         text: qsTr("No hay nada reproduciéndose")
-        color: theme.foreground
+        color: card.fg
         opacity: 0.55
         font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
@@ -71,7 +74,7 @@ Item {
                     width: parent.width
                     text: mpris && mpris.title.length > 0 ? mpris.title
                                                           : qsTr("Nada reproduciéndose")
-                    color: theme.foreground
+                    color: card.fg
                     elide: Text.ElideRight
                     font.pixelSize: Math.max(7, Math.round((card.compact ? 12 : 15) * cmConfig.fontScale))
                     font.bold: true
@@ -80,7 +83,7 @@ Item {
                     width: parent.width
                     visible: mpris && mpris.artist.length > 0
                     text: mpris ? mpris.artist : ""
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.7
                     elide: Text.ElideRight
                     font.pixelSize: Math.max(7, Math.round((card.compact ? 10 : 12) * cmConfig.fontScale))
@@ -89,7 +92,7 @@ Item {
                     width: parent.width
                     visible: !card.compact && mpris && mpris.album.length > 0
                     text: mpris ? mpris.album : ""
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.5
                     elide: Text.ElideRight
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
@@ -103,6 +106,8 @@ Item {
             spacing: 6
 
             CmButton {
+
+                fg: card.fg
                 compact: card.compact
                 icon: "media-skip-backward"
                 enabled: mpris ? mpris.canGoPrevious : false
@@ -110,18 +115,21 @@ Item {
                 onClicked: mpris.previous()
             }
             CmButton {
+                fg: card.fg
                 compact: card.compact
                 icon: mpris && mpris.playing ? "media-playback-pause" : "media-playback-start"
                 tip: mpris && mpris.playing ? qsTr("Pausa") : qsTr("Reproducir")
                 onClicked: mpris.playPause()
             }
             CmButton {
+                fg: card.fg
                 compact: card.compact
                 icon: "media-playback-stop"
                 tip: qsTr("Detener")
                 onClicked: mpris.stop()
             }
             CmButton {
+                fg: card.fg
                 compact: card.compact
                 icon: "media-skip-forward"
                 enabled: mpris ? mpris.canGoNext : false
@@ -141,7 +149,7 @@ Item {
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.fmt(mpris ? mpris.position : 0)
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.6
                 font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
             }
@@ -150,11 +158,12 @@ Item {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 text: card.fmt(mpris ? mpris.length : 0)
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.6
                 font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
             }
             CmSlider {
+                fg: card.fg
                 anchors.left: pos.right
                 anchors.right: len.left
                 anchors.leftMargin: 8

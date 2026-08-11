@@ -828,6 +828,7 @@ Close window = Cerrar la ventana
 Close window (right-click: send to next desktop, staying here) = Cerrar la ventana (clic derecho: mandarla al escritorio siguiente y quedarse acá)
 Color %1 = Color %1
 Color de fondo = Color de fondo
+Color de fuente = Color de fuente
 Colores: %1 = Colores: %1
 Conectado = Conectado
 Conectar = Conectar

@@ -14,6 +14,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
     readonly property bool haveDock: dock && dock.available
 
     Flickable {
@@ -33,7 +36,7 @@ Item {
             Text {
                 visible: !card.compact
                 text: qsTr("Configuración")
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.6
                 font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true
@@ -44,6 +47,8 @@ Item {
                 spacing: 6
 
                 CmButton {
+
+                    fg: card.fg
                     compact: card.compact
                     icon: "preferences-system"
                     label: qsTr("KDE")
@@ -51,6 +56,7 @@ Item {
                     onClicked: win.runCommand("systemsettings")
                 }
                 CmButton {
+                    fg: card.fg
                     compact: card.compact
                     icon: "configure"
                     label: qsTr("kdock")
@@ -60,6 +66,7 @@ Item {
                     onClicked: { dock.openSettings(""); win.hidePanel() }
                 }
                 CmButton {
+                    fg: card.fg
                     compact: card.compact
                     icon: "view-list-icons"
                     label: qsTr("Mosaicos")
@@ -67,6 +74,7 @@ Item {
                     onClicked: { win.runCommand("kdock-tilemenu", ["--settings"]); win.hidePanel() }
                 }
                 CmButton {
+                    fg: card.fg
                     compact: card.compact
                     icon: "view-preview"
                     label: qsTr("Previews")
@@ -74,6 +82,7 @@ Item {
                     onClicked: { win.runCommand("kdock-previews", ["--settings"]); win.hidePanel() }
                 }
                 CmButton {
+                    fg: card.fg
                     compact: card.compact
                     icon: "preferences-system"
                     label: qsTr("Este panel")
@@ -86,7 +95,7 @@ Item {
             Text {
                 visible: !card.compact
                 text: qsTr("Reiniciar")
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.6
                 font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true
@@ -98,6 +107,8 @@ Item {
                 visible: !card.compact
 
                 CmButton {
+
+                    fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Dock")
                     enabled: card.haveDock
@@ -112,6 +123,7 @@ Item {
                     }
                 }
                 CmButton {
+                    fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Mosaicos")
                     tip: qsTr("Lo cierra; vuelve solo en el próximo clic del widget")
@@ -119,6 +131,7 @@ Item {
                                                          "org.kdock.TileMenu.quit"])
                 }
                 CmButton {
+                    fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Previews")
                     tip: qsTr("Lo cierra; vuelve al prender su casilla")
@@ -126,6 +139,7 @@ Item {
                                                          "org.kdock.Previews.quit"])
                 }
                 CmButton {
+                    fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Este panel")
                     onClicked: win.restartSelf()
@@ -136,7 +150,7 @@ Item {
             Text {
                 visible: !card.compact && power && power.available
                 text: qsTr("Sesión")
-                color: theme.foreground
+                color: card.fg
                 opacity: 0.6
                 font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 font.bold: true

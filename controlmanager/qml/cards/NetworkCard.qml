@@ -12,6 +12,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     property int rev: 0
     Connections {
@@ -31,7 +34,7 @@ Item {
         anchors.centerIn: parent
         visible: !network || !network.available
         text: qsTr("NetworkManager no responde")
-        color: theme.foreground
+        color: card.fg
         opacity: 0.6
         font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
@@ -58,7 +61,7 @@ Item {
                 width: parent.width - 30
                 text: network && network.primaryName.length > 0 ? network.primaryName
                                                                 : qsTr("Sin conexión")
-                color: theme.foreground
+                color: card.fg
                 elide: Text.ElideRight
                 font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
                 font.bold: cmConfig.labelBold
@@ -68,6 +71,7 @@ Item {
         Row {
             spacing: 6
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: "network-wireless"
                 label: qsTr("Wi-Fi")
@@ -76,6 +80,7 @@ Item {
                 onClicked: network.setWifiEnabled(!network.wifiEnabled)
             }
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: "network-wired"
                 label: qsTr("Redes")
@@ -102,6 +107,7 @@ Item {
             Row {
                 spacing: 6
                 CmButton {
+                    fg: card.fg
                     icon: "network-wireless"
                     label: qsTr("Wi-Fi")
                     visible: network ? network.wifiAvailable : false
@@ -109,6 +115,7 @@ Item {
                     onClicked: network.setWifiEnabled(!network.wifiEnabled)
                 }
                 CmButton {
+                    fg: card.fg
                     icon: "view-refresh"
                     label: qsTr("Buscar redes")
                     visible: network ? network.wifiAvailable : false
@@ -123,7 +130,7 @@ Item {
                 visible: card.connections.length > 0
                 Text {
                     text: qsTr("Conexiones guardadas")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.6
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
@@ -140,8 +147,7 @@ Item {
                             anchors.fill: parent
                             radius: 4
                             color: connMouse.containsMouse
-                                   ? Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                             theme.foreground.b, 0.10)
+                                   ? Qt.rgba(card.fg.r, card.fg.g, card.fg.b, 0.10)
                                    : "transparent"
                         }
                         Image {
@@ -165,7 +171,7 @@ Item {
                             anchors.rightMargin: 4
                             anchors.verticalCenter: parent.verticalCenter
                             text: connRow.modelData.id
-                            color: theme.foreground
+                            color: card.fg
                             opacity: connRow.modelData.active ? 1.0 : 0.7
                             elide: Text.ElideRight
                             font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
@@ -192,7 +198,7 @@ Item {
                 visible: card.accessPoints.length > 0
                 Text {
                     text: qsTr("Redes cercanas")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.6
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
@@ -211,7 +217,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             width: parent.width - 90
                             text: apRow.modelData.ssid
-                            color: theme.foreground
+                            color: card.fg
                             opacity: apRow.modelData.active ? 1.0 : 0.75
                             elide: Text.ElideRight
                             font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
@@ -222,7 +228,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             text: apRow.modelData.strength + " %"
                                   + (apRow.modelData.secure ? " 🔒" : "")
-                            color: theme.foreground
+                            color: card.fg
                             opacity: 0.5
                             font.pixelSize: Math.max(7, Math.round((10) * cmConfig.fontScale))
                         }

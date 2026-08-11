@@ -26,6 +26,9 @@ struct CmCardRecord
     int w = 2;
     int h = 2;
     QString bg;    // empty = the default card background
+    // empty = the contrast pair picked from bg's luminance (see CmCard.qml);
+    // a colour here is the user overriding that choice for this card only.
+    QString fg;
     QString label; // empty = the section's own name
     int showTitle = -1; // -1 inherit from config, 0 off, 1 on
 

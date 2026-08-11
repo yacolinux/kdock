@@ -67,6 +67,8 @@ QJsonObject cardToJson(const CmCardRecord &r)
     o[QStringLiteral("h")] = r.h;
     if (!r.bg.isEmpty())
         o[QStringLiteral("bg")] = r.bg;
+    if (!r.fg.isEmpty())
+        o[QStringLiteral("fg")] = r.fg;
     if (!r.label.isEmpty())
         o[QStringLiteral("lbl")] = r.label;
     if (r.showTitle >= 0)
@@ -83,6 +85,7 @@ CmCardRecord cardFromJson(const QJsonObject &o)
     r.w = qBound(1, o.value(QStringLiteral("w")).toInt(2), kMaxSpan);
     r.h = qBound(1, o.value(QStringLiteral("h")).toInt(2), kMaxSpan);
     r.bg = o.value(QStringLiteral("bg")).toString();
+    r.fg = o.value(QStringLiteral("fg")).toString();
     r.label = o.value(QStringLiteral("lbl")).toString();
     r.showTitle = o.contains(QStringLiteral("st")) ? o.value(QStringLiteral("st")).toInt() : -1;
     return r;
@@ -344,6 +347,8 @@ void CmLayout::setCardProperty(const QString &id, const QString &key, const QVar
     CmCardRecord &r = m_cards[idx];
     if (key == QLatin1String("bg"))
         r.bg = value.toString();
+    else if (key == QLatin1String("fg"))
+        r.fg = value.toString();
     else if (key == QLatin1String("label"))
         r.label = value.toString();
     else if (key == QLatin1String("showTitle"))
@@ -365,6 +370,7 @@ void CmLayout::resetCard(const QString &id)
     const CmSectionInfo info = CmSections::byId(id);
     CmCardRecord &r = m_cards[idx];
     r.bg.clear();
+    r.fg.clear();
     r.label.clear();
     r.showTitle = -1;
     r.w = qMax(1, info.defaultW);
@@ -475,7 +481,8 @@ QString CmLayout::dump() const
                    .arg(c.row)
                    .arg(c.w)
                    .arg(c.h)
-                   .arg(c.bg.isEmpty() ? QString() : QStringLiteral("  bg=") + c.bg);
+                   .arg((c.bg.isEmpty() ? QString() : QStringLiteral("  bg=") + c.bg)
+                        + (c.fg.isEmpty() ? QString() : QStringLiteral("  fg=") + c.fg));
     }
     return out;
 }

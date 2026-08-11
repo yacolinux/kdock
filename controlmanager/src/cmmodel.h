@@ -33,6 +33,7 @@ public:
         WidthRole,
         HeightRole,
         BackgroundRole,
+        ForegroundRole,
         ShowTitleRole,
     };
 

@@ -831,6 +831,7 @@ Close window = 关闭窗口
 Close window (right-click: send to next desktop, staying here) = 关闭窗口 (右键：送到下一桌面，自己留在此处)
 Color %1 = 颜色 %1
 Color de fondo = 背景颜色
+Color de fuente = 字体颜色
 Colores: %1 = 配色方案：%1
 Conectado = 已连接
 Conectar = 连接

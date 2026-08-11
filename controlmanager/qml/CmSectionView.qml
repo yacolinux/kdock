@@ -11,6 +11,9 @@ Loader {
 
     property string sectionId: ""
     property bool compact: false
+    // The colour every text of the loaded section is drawn in: the card's
+    // contrast answer on Principal, the panel's on a full tab.
+    property color fg: theme.foreground
 
     asynchronous: false
     source: {
@@ -29,6 +32,17 @@ Loader {
 
     // `compact` is set on the loaded item rather than declared required on it,
     // so a card can be instantiated by hand in a probe without a Loader.
-    onLoaded: if (item) item.compact = view.compact
+    onLoaded: {
+        if (item) {
+            item.compact = view.compact
+            item.fg = view.fg
+        }
+    }
     onCompactChanged: if (item) item.compact = view.compact
+
+    // Pushed the same way, and not with a Binding element: the default property
+    // of a Loader is `sourceComponent`, so a Binding declared in this body is
+    // read as the thing to load and the card ends up fighting its own `fg`
+    // (measured: "Binding loop detected for property fg" once per card).
+    onFgChanged: if (item) item.fg = view.fg
 }

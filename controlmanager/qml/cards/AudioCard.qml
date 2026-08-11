@@ -13,6 +13,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     // Re-read on every change of the backend. `rev` exists so the lists below
     // re-evaluate: outputList() is a plain function call, not a property.
@@ -49,7 +52,7 @@ Item {
         anchors.centerIn: parent
         visible: !audio || !audio.available
         text: qsTr("pactl no responde")
-        color: theme.foreground
+        color: card.fg
         opacity: 0.6
         font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
     }
@@ -64,13 +67,15 @@ Item {
         Text {
             width: parent.width
             text: card.defaultOutput ? card.defaultOutput.description : qsTr("Sin salida")
-            color: theme.foreground
+            color: card.fg
             elide: Text.ElideRight
             font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
         }
 
         CmSlider {
+
+            fg: card.fg
             width: parent.width
             compact: true
             icon: card.volumeIcon(card.defaultOutput)
@@ -86,6 +91,7 @@ Item {
         Row {
             spacing: 6
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: card.volumeIcon(card.defaultOutput)
                 checked: card.defaultOutput ? card.defaultOutput.muted : false
@@ -94,6 +100,7 @@ Item {
                 onClicked: audio.toggleMute(0, card.defaultOutput.index)
             }
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: "audio-volume-high"
                 label: qsTr("Mezclador")
@@ -120,6 +127,7 @@ Item {
             Row {
                 spacing: 8
                 CmButton {
+                    fg: card.fg
                     label: qsTr("Volumen hasta 150 %")
                     icon: "audio-volume-high"
                     checked: audio ? audio.maxVolume : false
@@ -142,7 +150,7 @@ Item {
 
                     Text {
                         text: group.modelData.title
-                        color: theme.foreground
+                        color: card.fg
                         opacity: 0.6
                         font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                         font.bold: true
@@ -169,8 +177,7 @@ Item {
                                 radius: 7
                                 color: devRow.modelData.isDefault ? theme.highlight : "transparent"
                                 border.width: 1
-                                border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                                      theme.foreground.b, 0.5)
+                                border.color: Qt.rgba(card.fg.r, card.fg.g, card.fg.b, 0.5)
                                 MouseArea {
                                     anchors.fill: parent
                                     anchors.margins: -4
@@ -186,13 +193,15 @@ Item {
                                 anchors.right: parent.right
                                 anchors.top: parent.top
                                 text: devRow.modelData.description
-                                color: theme.foreground
+                                color: card.fg
                                 elide: Text.ElideRight
                                 font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                                 font.bold: devRow.modelData.isDefault && cmConfig.labelBold
                             }
 
                             CmButton {
+
+                                fg: card.fg
                                 id: muteBtn
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
@@ -206,6 +215,8 @@ Item {
                             }
 
                             CmSlider {
+
+                                fg: card.fg
                                 anchors.left: devName.left
                                 anchors.right: muteBtn.left
                                 anchors.rightMargin: 8

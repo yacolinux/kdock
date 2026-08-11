@@ -11,6 +11,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     property date now: new Date()
 
@@ -49,14 +52,14 @@ Item {
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDateTime(card.now, "HH:mm")
-            color: theme.foreground
+            color: card.fg
             font.pixelSize: Math.max(7, Math.round((Math.max(20, Math.min(card.height * 0.42, card.width * 0.30))) * cmConfig.fontScale))
             font.bold: true
         }
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDateTime(card.now, "ddd d MMM yyyy")
-            color: theme.foreground
+            color: card.fg
             opacity: 0.7
             font.pixelSize: Math.max(7, Math.round((Math.max(10, Math.min(card.height * 0.13, card.width * 0.10))) * cmConfig.fontScale))
             font.bold: cmConfig.labelBold
@@ -65,7 +68,7 @@ Item {
             visible: !card.compact && card.height > 150
             anchors.horizontalCenter: parent.horizontalCenter
             text: Qt.formatDateTime(card.now, "ss") + " s"
-            color: theme.foreground
+            color: card.fg
             opacity: 0.45
             font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         }

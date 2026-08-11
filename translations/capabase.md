@@ -827,6 +827,7 @@ Close window = Close window
 Close window (right-click: send to next desktop, staying here) = Close window (right-click: send to next desktop, staying here)
 Color %1 = Color %1
 Color de fondo = Color de fondo
+Color de fuente = Color de fuente
 Colores: %1 = Colores: %1
 Conectado = Conectado
 Conectar = Conectar

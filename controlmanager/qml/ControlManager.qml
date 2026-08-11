@@ -24,6 +24,27 @@ Item {
                                         && cmConfig.backgroundColorSet)
                                        ? cmConfig.backgroundColor : theme.background
 
+    // Text colour for everything drawn straight on the panel: the tab bar, the
+    // corner controls, and a full-size section. A custom panel colour can be
+    // anything, and the theme foreground vanishes on half of them, so the same
+    // perceptual test the dock uses for its clock picks one of the two extremes
+    // instead. Transparency deliberately plays no part (a translucent dark
+    // panel still reads as dark), and without a custom colour nothing changes:
+    // the KDE scheme's own foreground over the KDE scheme's own background is
+    // exactly what the user asked for.
+    readonly property bool baseIsLight: root.isLight(root.baseColor)
+    readonly property color panelTextColor:
+        (cmConfig.backgroundMode === 1 && cmConfig.backgroundColorSet)
+        ? (root.baseIsLight ? "#141414" : "#F2F2F2")
+        : theme.foreground
+
+    // Perceptual luminance, alpha ignored on purpose: a half-transparent white
+    // is still a light surface, and blending it with whatever is behind would
+    // make the answer depend on the wallpaper.
+    function isLight(c) {
+        return (0.299 * c.r + 0.587 * c.g + 0.114 * c.b) > 0.5
+    }
+
     // --- tabs ---------------------------------------------------------------
     readonly property var tabModel: {
         var out = [{ id: "", label: qsTr("Principal"), icon: "view-list-details" }]
@@ -132,8 +153,8 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     color: cmConfig.keepOpen ? theme.highlight : "transparent"
                     border.width: 1
-                    border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                          theme.foreground.b, 0.5)
+                    border.color: Qt.rgba(root.panelTextColor.r, root.panelTextColor.g,
+                                          root.panelTextColor.b, 0.5)
                     Text {
                         anchors.centerIn: parent
                         visible: cmConfig.keepOpen
@@ -146,7 +167,7 @@ Item {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: qsTr("Fijo")
-                    color: theme.foreground
+                    color: root.panelTextColor
                     opacity: 0.8
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
@@ -197,7 +218,7 @@ Item {
             Text {
                 anchors.centerIn: parent
                 text: "✕"
-                color: theme.foreground
+                color: root.panelTextColor
                 font.pixelSize: Math.max(7, Math.round((13) * cmConfig.fontScale))
             }
             MouseArea {
@@ -221,6 +242,7 @@ Item {
         anchors.topMargin: 4
         anchors.bottomMargin: 4
         model: root.tabModel
+        fg: root.panelTextColor
         currentId: win.currentTab
         onPicked: (id) => win.currentTab = id
     }
@@ -245,6 +267,7 @@ Item {
             // user just left.
             active: win.currentTab !== ""
             sectionId: win.currentTab
+            fg: root.panelTextColor
             compact: false
         }
 
@@ -338,7 +361,7 @@ Item {
             wrapMode: Text.Wrap
             text: qsTr("No hay ninguna tarjeta en Principal. Elegí cuáles mostrar en "
                        + "Configuración → Secciones.")
-            color: theme.foreground
+            color: root.panelTextColor
             opacity: 0.55
             font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         }
@@ -354,6 +377,7 @@ Item {
         corner: 0
         anchors.right: parent.right
         anchors.bottom: parent.bottom
+        fg: root.panelTextColor
         currentW: root.width
         currentH: root.height
     }
@@ -361,6 +385,7 @@ Item {
         corner: 1
         anchors.left: parent.left
         anchors.bottom: parent.bottom
+        fg: root.panelTextColor
         currentW: root.width
         currentH: root.height
     }
@@ -368,6 +393,7 @@ Item {
         corner: 2
         anchors.left: parent.left
         anchors.top: parent.top
+        fg: root.panelTextColor
         currentW: root.width
         currentH: root.height
         visible: cmConfig.tabsPosition === 1
@@ -471,6 +497,68 @@ Item {
                 checkable: true
                 checked: cardMenu.c && cardMenu.c.background.length === 0
                 onTriggered: cmLayout.setCardProperty(cardMenu.cid, "bg", "")
+            }
+        }
+
+        // The font colour of one card. Left alone (the "Automático" entry) it
+        // is derived from the card's own background, which is right almost
+        // always; this is the escape hatch for the colour where it is not.
+        Menu {
+            id: fgMenu
+            title: qsTr("Color de fuente")
+            popupType: Popup.Window
+            width: Math.max(implicitWidth + 64, 200)
+
+            Instantiator {
+                model: cmConfig.presetColors
+                delegate: MenuItem {
+                    id: fgPresetItem
+                    required property int index
+                    required property string modelData
+                    readonly property color swatch: modelData
+                    checkable: true
+                    checked: cardMenu.c && cardMenu.c.foreground.length > 0
+                             && Qt.colorEqual(cardMenu.c.foreground, fgPresetItem.swatch)
+                    onTriggered: cmLayout.setCardProperty(cardMenu.cid, "fg",
+                                                          fgPresetItem.modelData)
+                    contentItem: Row {
+                        spacing: 8
+                        Rectangle {
+                            width: 20; height: 20; radius: 4
+                            color: fgPresetItem.swatch
+                            border.width: 1
+                            border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                                  theme.foreground.b, 0.35)
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: qsTr("Color %1").arg(fgPresetItem.index + 1)
+                            color: fgPresetItem.palette.windowText
+                            font: fgPresetItem.font
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+                }
+                onObjectAdded: (i, o) => fgMenu.insertItem(i, o)
+                onObjectRemoved: (i, o) => fgMenu.removeItem(o)
+            }
+
+            MenuSeparator {}
+            IconMenuItem {
+                text: qsTr("Otro color…")
+                iconName: "color-picker"
+                onTriggered: {
+                    var picked = win.pickColor(cardMenu.c ? cardMenu.c.foreground : "")
+                    if (picked.length > 0)
+                        cmLayout.setCardProperty(cardMenu.cid, "fg", picked)
+                }
+            }
+            IconMenuItem {
+                text: qsTr("Automático")
+                iconName: "edit-undo"
+                checkable: true
+                checked: cardMenu.c && cardMenu.c.foreground.length === 0
+                onTriggered: cmLayout.setCardProperty(cardMenu.cid, "fg", "")
             }
         }
 

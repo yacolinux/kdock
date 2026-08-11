@@ -1117,6 +1117,34 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   loop—: la lee de una fila oculta que siempre dibuja las etiquetas completas. Un umbral
   adivinado se probó primero y falló en las dos direcciones (a 96 px seguía desbordando, a 120
   plegaba etiquetas que entraban).
+- **El color del texto sale del fondo, no del tema de KDE** (2026-08-10). Una tarjeta con
+  color propio puede ser cualquier cosa, y la foreground del esquema de KDE se pierde sobre la
+  mitad de ellas: media leyenda invisible sobre el color que el usuario acaba de elegir. Hay
+  una sola regla, la misma que el dock usa para su reloj y el menú de mosaicos para sus
+  mosaicos: **luminancia perceptual (0.299/0.587/0.114) del color, con la transparencia
+  ignorada a propósito** — un blanco a medio alfa sigue siendo una superficie clara, y
+  mezclarlo con lo que haya detrás haría depender la respuesta del fondo de pantalla.
+  - **Tres niveles, en orden**: el override por tarjeta (`fg` en el registro de `CmLayout`,
+    menú contextual → *Color de fuente*, con las mismas ocho presets del dock, *Otro color…* y
+    *Automático* para volver atrás) → el par de contraste (`#141414` / `#F2F2F2`) del color de
+    la tarjeta → el color del panel. Todo eso se resuelve en `CmCard.textColor`.
+  - **Y el panel también**: `ControlManager.panelTextColor` hace el mismo test contra
+    `baseColor` y lo usa la barra de solapas, los controles de esquina, los agarres y una
+    sección a pantalla completa. **Sin color propio del panel no cambia nada**: ahí sigue
+    valiendo `theme.foreground`, que es el esquema que el usuario eligió para su escritorio.
+  - **La propagación es explícita, property por property** (`CmSectionView.fg` → `item.fg` →
+    `card.fg` → `fg:` de cada `CmButton`/`CmSlider`), porque **el scope de QML es por archivo**:
+    un `.qml` cargado por el `Loader` no ve las properties del archivo que lo cargó, y
+    `CmButton`/`CmSlider` resuelven `theme` contra el contexto raíz, no contra la tarjeta que
+    los declara. Lo empuja `onLoaded`/`onFgChanged` y **no** un `Binding`: la default property
+    de un `Loader` es `sourceComponent`, así que un `Binding` declarado en su cuerpo se lee
+    como "lo que hay que cargar" y sale un *"Binding loop detected for property fg"* por
+    tarjeta. La reja contra el olvido es `tests/static/check-card-fg.py`, que exige que ningún
+    `cards/*.qml` mencione `theme.foreground` (salvo el default de su property) y que todo
+    `CmButton`/`CmSlider` de una tarjeta reciba su `fg:`.
+  - **Los íconos siguen al panel, no a la tarjeta** (`win.iconSuffix`, abajo): un ícono
+    monocromo sobre una tarjeta de color opuesto al panel puede quedar flojo. Se arregla con
+    el color de fuente manual o eligiendo un iconset explícito en Apariencia.
 - **Los íconos van por `win.iconSuffix`, nunca por `theme.revision` a mano.** Media docena de
   íconos de breeze son line-art oscuro y **desaparecen** sobre un panel oscuro (el de brillo se
   perdió entero en la primera captura). El sufijo resuelve el set (`widgetIconThemeDarkBg` /
@@ -1518,8 +1546,8 @@ UI: `networkComp` block in `Dock.qml`. **Left click** opens `qml/NetworkPopup.qm
 | `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
 | `DockService` | (sin context property) | `org.kdock.Dock` en `/Dock`: `openSettings(dockId)`, `restart()`, `darkMode()`, `setDarkMode(b)`, `toggleDarkMode()`, `dockIds()`, `dockScreens()`, `primaryDockId()` + señal `darkModeChanged(b)`. Lo consume `DockLink` desde el panel |
 | `CmConfig` | `cmConfig.*` (binario `kdock-controlmanager`) | Ventana: `edge`, `alignment`, `panelWidth`/`panelHeight` (+ `panelWidthPercent`/`panelHeightPercent`, 0 = usar los px), `screenMargin`, `keepOpen`, `closeOnFocusLoss`, `closeOnLeave`, `panelWidthFor(w)`/`panelHeightFor(h)`. Apariencia: `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `cornerRadius`, `labelBold`, `tabsPosition`, `showTabIcons`, `showCardTitles`, `presetColors` (read-only, del `kdock.conf` compartido), `buttonWidth`/`buttonHeight` (mínimos de los `CmButton`, 0 = natural), `fontSize` (0 = predeterminado 12 px) + `fontScale` read-only (multiplica cada `font.pixelSize` del panel), `iconTheme` (iconset propio; vacío = el par por luminancia). Grilla: `columns` (0=según el ancho), `cellSize`, `cellHeight` (fijo; las celdas pueden ser más altas que anchas), `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Secciones: `sectionOrder`, `enabledSections`, `principalCards`, `sectionEnabled(id)`/`setSectionEnabled(id,on)`, `cardEnabled(id)`/`setCardEnabled(id,on)`, `moveSection(from,to)`, `visibleTabs()`, `rememberTab`/`lastTab`, `wallpaperScript`. **Tres señales**: `settingsChanged` (repinta), `windowChanged` (re-commitea la superficie), `sectionsChanged` (rehace solapas y grilla) |
-| `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`label`/`showTitle`), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
-| `CmModel` | `cards` (model) | Roles `cardId`, `name`, `icon`, `col`, `row`, `span`/`vspan`, `background`, `showTitle`; prop `rows`; `get(row)` |
+| `CmLayout` | `cmLayout` | El motor de la grilla de *Principal*, todo `Q_INVOKABLE`: `rows()`, `dropKind(id,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveCard(id,col,row)` (false = rechazado), `resizeCard(id,w,h)` (nunca falla: reubica), `setCardProperty(id,key,value)` (`bg`/`fg`/`label`/`showTitle`; `fg` vacío = color de texto automático), `resetCard`, `resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
+| `CmModel` | `cards` (model) | Roles `cardId`, `name`, `icon`, `col`, `row`, `span`/`vspan`, `background`, `foreground` (vacío = automático), `showTitle`; prop `rows`; `get(row)` |
 | `CmWindow` | `win` | `hidePanel()`, `currentTab` (rw: "" = Principal), `sections` (la tabla de `CmSections`), **`iconSuffix`** (el sufijo de TODA URL `image://icon` del panel: revisión del tema + iconset que se lee sobre este fondo), `openSettings()`, `quitApp()`, `restartSelf()`, `launchDesktop(id)`, `runCommand(prog,args)`, `runScript(path,screen)` (con `KDOCK_SCREEN`), `setPanelSize(w,h)` + **`originShiftX`/`originShiftY`** (cuánto se corre el origen de la superficie por píxel de crecimiento, según el ancla: lo que usan los `CmCornerGrip` para reconstruir el movimiento del puntero en pantalla) + los modales `pickColor`, `promptText`, `confirm` |
 | `ScreenBrightness` | `screens` | `available`, `count`, `displays()` (→ `{name, label, internal, value 0..1, brightness, max}`), `setBrightness(name, ratio)`, `setAll(ratio)`, `refresh()`. Brillo **por monitor** vía PowerDevil; los nombres de los objetos son volátiles y no se cachean |
 | `MprisControl` | `mpris` | `available`, `playerId`, `identity`, `title`, `artist`, `album`, `artUrl`, `status`, `playing`, `canGoNext`/`canGoPrevious`/`canPause`/`canSeek`, `position`/`length` (µs), `players()`, `setPlayer(id)`, `playPause()`/`play()`/`pause()`/`stop()`/`next()`/`previous()`, `seekToRatio(r)`, `raisePlayer()`, `setMonitoring(on)` (el sondeo de posición solo mientras se mira) |

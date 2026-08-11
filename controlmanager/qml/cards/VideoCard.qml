@@ -16,6 +16,9 @@ Item {
     id: card
 
     property bool compact: false
+    // Text colour, pushed in by CmSectionView: the card's contrast answer on
+    // Principal, the panel's on a full tab. Every text of this file uses it.
+    property color fg: theme.foreground
 
     property int rev: 0
     Connections {
@@ -51,6 +54,8 @@ Item {
         visible: card.compact
 
         CmSlider {
+
+            fg: card.fg
             width: parent.width
             compact: true
             icon: card.brightnessIcon(card.perMonitor
@@ -71,6 +76,7 @@ Item {
         Row {
             spacing: 6
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: dock && dock.darkMode ? "weather-clear-night" : "weather-clear"
                 label: qsTr("Oscuro")
@@ -81,6 +87,7 @@ Item {
                 onClicked: dock.toggleDarkMode()
             }
             CmButton {
+                fg: card.fg
                 compact: true
                 icon: "preferences-system-power-management"
                 label: qsTr("Energía")
@@ -110,7 +117,7 @@ Item {
                 spacing: 2
                 Text {
                     text: qsTr("Brillo")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.6
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
@@ -118,7 +125,7 @@ Item {
                 Text {
                     visible: !card.perMonitor && !card.haveFallback
                     text: qsTr("Ni PowerDevil ni brightnessctl responden.")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.55
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
@@ -138,6 +145,7 @@ Item {
                 // Fallback: no PowerDevil, so the internal backlight is all
                 // there is.
                 CmSlider {
+                    fg: card.fg
                     visible: !card.perMonitor && card.haveFallback
                     width: full.width
                     icon: card.brightnessIcon(card.haveFallback ? brightness.brightness : 0)
@@ -151,11 +159,13 @@ Item {
                     spacing: 6
                     topPadding: 4
                     CmButton {
+                        fg: card.fg
                         compact: true
                         label: qsTr("Todos al 100 %")
                         onClicked: screens.setAll(1.0)
                     }
                     CmButton {
+                        fg: card.fg
                         compact: true
                         label: qsTr("Todos al 50 %")
                         onClicked: screens.setAll(0.5)
@@ -170,7 +180,7 @@ Item {
                 visible: battery && battery.profilesAvailable
                 Text {
                     text: qsTr("Perfil de energía")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.6
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
@@ -194,7 +204,7 @@ Item {
                 Text {
                     visible: battery && battery.available
                     text: battery ? battery.tooltipText : ""
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.55
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
@@ -206,7 +216,7 @@ Item {
                 spacing: 4
                 Text {
                     text: qsTr("Modo oscuro del dock")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.6
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                     font.bold: true
@@ -214,6 +224,7 @@ Item {
                 Row {
                     spacing: 6
                     CmButton {
+                        fg: card.fg
                         label: qsTr("Normal")
                         icon: "weather-clear"
                         enabled: dock ? dock.available : false
@@ -221,6 +232,7 @@ Item {
                         onClicked: dock.setDarkMode(false)
                     }
                     CmButton {
+                        fg: card.fg
                         label: qsTr("Oscuro")
                         icon: "weather-clear-night"
                         enabled: dock ? dock.available : false
@@ -231,7 +243,7 @@ Item {
                 Text {
                     visible: !dock || !dock.available
                     text: qsTr("kdock no está en el bus: no se puede conmutar desde acá.")
-                    color: theme.foreground
+                    color: card.fg
                     opacity: 0.55
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }

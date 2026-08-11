@@ -20,6 +20,8 @@ Item {
     // Text on the right. Empty means "the percentage of value".
     property string valueText: ""
     property bool compact: false
+    // Same contract as CmButton.fg: the card that contains the row decides.
+    property color fg: theme.foreground
 
     signal moved(real value)
 
@@ -52,7 +54,7 @@ Item {
         width: Math.min(implicitWidth, row.width * 0.4)
         text: row.label
         elide: Text.ElideRight
-        color: theme.foreground
+        color: row.fg
         opacity: row.enabled ? 0.85 : 0.4
         font.pixelSize: Math.max(7, Math.round((12) * cmConfig.fontScale))
         font.bold: cmConfig.labelBold
@@ -65,7 +67,7 @@ Item {
         text: row.valueText.length > 0
               ? row.valueText
               : Math.round(row.value * 100) + " %"
-        color: theme.foreground
+        color: row.fg
         opacity: row.enabled ? 0.7 : 0.35
         font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
         horizontalAlignment: Text.AlignRight
@@ -101,14 +103,13 @@ Item {
             width: slider.availableWidth
             height: 4
             radius: 2
-            color: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.18)
+            color: Qt.rgba(row.fg.r, row.fg.g, row.fg.b, 0.18)
             Rectangle {
                 width: slider.visualPosition * parent.width
                 height: parent.height
                 radius: parent.radius
                 color: slider.enabled ? theme.highlight
-                                      : Qt.rgba(theme.foreground.r, theme.foreground.g,
-                                                theme.foreground.b, 0.3)
+                                      : Qt.rgba(row.fg.r, row.fg.g, row.fg.b, 0.3)
             }
         }
         handle: Rectangle {
@@ -117,7 +118,7 @@ Item {
             width: 14
             height: 14
             radius: 7
-            color: slider.pressed ? theme.highlight : theme.foreground
+            color: slider.pressed ? theme.highlight : row.fg
             opacity: slider.enabled ? 1.0 : 0.4
         }
     }
