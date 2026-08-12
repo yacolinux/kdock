@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QQuickStyle>
 #include <QTextStream>
 
 #include "appmenu.h"
@@ -63,8 +64,12 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(false);
 
     const QString style = DockConfig::qtStyle();
-    if (!style.isEmpty())
+    if (!style.isEmpty()) {
         app.setStyle(style);
+        const QString qqc2 = (style == QStringLiteral("Breeze"))
+                                 ? QStringLiteral("Fusion") : style;
+        QQuickStyle::setStyle(qqc2);
+    }
 
     const QStringList args = app.arguments();
 

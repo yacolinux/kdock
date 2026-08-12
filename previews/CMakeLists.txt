@@ -68,6 +68,7 @@ target_link_libraries(kdock-previews PRIVATE
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Widgets
     Qt6::WaylandClient
     Qt6::WaylandClientPrivate

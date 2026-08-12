@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Network is only for the weather backend (src/weathercontrol.cpp): plain HTTPS
 # against Open-Meteo, the one thing in kdock that is not local.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick Widgets WaylandClient WaylandClientPrivate DBus Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick QuickControls2 Widgets WaylandClient WaylandClientPrivate DBus Network)
 
 qt_standard_project_setup()
 
@@ -138,6 +138,7 @@ target_link_libraries(kdock_core PUBLIC
     Qt6::Gui
     Qt6::Qml
     Qt6::Quick
+    Qt6::QuickControls2
     Qt6::Widgets
     Qt6::WaylandClient
     Qt6::WaylandClientPrivate

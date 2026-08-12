@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QQmlEngine>
+#include <QQuickStyle>
 #include <QScreen>
 #include <QSocketNotifier>
 #include <QTimer>
@@ -178,8 +179,15 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(false);
 
     const QString style = DockConfig::qtStyle();
-    if (!style.isEmpty())
+    if (!style.isEmpty()) {
         app.setStyle(style);
+        // Mirror to Qt Quick Controls so the dock's own popups and menus
+        // match the chosen style. Breeze is not a QQC2 style name; the
+        // closest built-in equivalent is Fusion.
+        const QString qqc2 = (style == QStringLiteral("Breeze"))
+                                 ? QStringLiteral("Fusion") : style;
+        QQuickStyle::setStyle(qqc2);
+    }
 
     // One-shot CLI (next-wall.sh): advance a monitor's slideshow and exit,
     // before building any dock.
