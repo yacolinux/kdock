@@ -60,7 +60,7 @@ Item {
         // `brightness` resolves that itself (BrightnessControl::wheelDisplay),
         // so the compact card and the dock widget can never disagree. The other
         // screens are one click away, in the full section below.
-        CmSlider {
+        CmSpinBox {
             fg: card.fg
             width: parent.width
             compact: true
@@ -101,7 +101,9 @@ Item {
         // calls itself flickable whenever contentHeight != height — content
         // *shorter* than the viewport included — and then steals the drag of
         // any slider inside it (see CmSlider). This one only flicks when there
-        // is something to scroll.
+        // is something to scroll. The rows are spinboxes (CmSpinBox), which
+        // accept their own wheel events, so the Flickable only ever scrolls
+        // on the gaps between them.
         flickableDirection: Flickable.AutoFlickIfNeeded
         contentWidth: width
         contentHeight: full.height
@@ -143,7 +145,7 @@ Item {
                 // go when a monitor does.
                 Repeater {
                     model: card.perMonitor ? card.displays.length : 0
-                    delegate: CmSlider {
+                    delegate: CmSpinBox {
                         required property int index
                         // Can be null for one frame when a monitor is unplugged:
                         // the count changes before the delegate is destroyed.
@@ -164,7 +166,7 @@ Item {
                 // with or without external monitors listed above, because that
                 // is the docked-laptop case where the built-in screen would
                 // otherwise have no slider anywhere.
-                CmSlider {
+                CmSpinBox {
                     fg: card.fg
                     visible: card.internalRow
                     width: full.width

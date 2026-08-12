@@ -11,8 +11,9 @@ Se chequean las dos puntas del contrato:
 
   1. `controlmanager/qml/cards/*.qml` no menciona `theme.foreground` (la única
      excepción legítima es el valor por defecto de la property `fg`);
-  2. cada `CmButton` / `CmSlider` de esas tarjetas le pasa `fg:`, porque los dos
-     traen su propio default y no heredan nada del archivo que los declara.
+  2. cada `CmButton` / `CmSlider` / `CmSpinBox` de esas tarjetas le pasa `fg:`,
+     porque los tres traen su propio default y no heredan nada del archivo que
+     los declara.
 
 Uso: check-card-fg.py <repo>
 """
@@ -39,11 +40,11 @@ for path in cards:
         if "theme.foreground" in line and DEFAULT not in line:
             errors.append(f"{path.name}:{n}: usa theme.foreground en vez de card.fg")
 
-    # Un CmButton/CmSlider abre bloque en su propia línea (suelto o como
-    # `delegate:` de un Repeater); el `fg:` va adentro, así que alcanza con
+    # Un CmButton/CmSlider/CmSpinBox abre bloque en su propia línea (suelto o
+    # como `delegate:` de un Repeater); el `fg:` va adentro, así que alcanza con
     # mirar las líneas hasta que la indentación vuelve.
     for n, line in enumerate(lines):
-        m = re.match(r"^(\s*)(?:delegate: )?(CmButton|CmSlider) \{\s*$", line)
+        m = re.match(r"^(\s*)(?:delegate: )?(CmButton|CmSlider|CmSpinBox) \{\s*$", line)
         if not m:
             continue
         indent, kind = m.group(1), m.group(2)
