@@ -1,6 +1,7 @@
 #include "darkmodeappearance.h"
 
 #include "appearancecontrol.h"
+#include "autocolorscheme.h"
 #include "dockconfig.h"
 #include "theme.h"
 
@@ -47,8 +48,19 @@ void DarkModeAppearance::apply(bool dark)
     // string for years because currentColorScheme() read the wrong key: leaving
     // the desktop stuck on the dark scheme after switching back (2026-08-05).
     if (dark && m_appearance) {
+        // While ColorAuto owns the system, the live color scheme is one *kdock*
+        // generated from the wallpaper, not the user's. Take ColorAuto's own
+        // saved default instead, or leaving dark mode restores a throwaway
+        // scheme — whose file is deleted on the next wallpaper change, so there
+        // is no way back at all. Same failure the darkAppearanceSelfApplied()
+        // guard below exists for. Only the color scheme needs this: ColorAuto's
+        // icon sets go to kdock's own override (Theme::setIconTheme), never to
+        // the KDE icon theme this loop snapshots.
+        const QString liveColors = AutoColorScheme::applied()
+                                       ? AutoColorScheme::userColorScheme()
+                                       : m_appearance->currentColorScheme();
         for (auto [item, live] :
-             {std::pair{int(DockConfig::SystemColorScheme), m_appearance->currentColorScheme()},
+             {std::pair{int(DockConfig::SystemColorScheme), liveColors},
               std::pair{int(DockConfig::SystemIconTheme), m_appearance->currentIconTheme()}}) {
             // Only a value the *user* put there is worth remembering. The tools
             // that apply these are startDetached (~900 ms), so leaving the mode

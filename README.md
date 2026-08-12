@@ -114,6 +114,22 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   desde su propio widget. Opcionalmente arrastra consigo el **esquema de color
   y el iconset de KDE** y el iconset del propio dock: como eso sí es estado del escritorio y
   no se puede "dejar de aplicar", cada opción guarda el valor de los dos modos.
+- **ColorAuto**: un **esquema de color de KDE generado a partir del fondo de pantalla**, que
+  se rehace cada vez que el fondo cambia. Saca el color predominante de la imagen con el
+  mismo método barato con el que el dock ya tiñe un ícono, y arma con él un esquema completo
+  — pero al revés de lo que suelen hacer estas herramientas, **el contraste manda sobre el
+  color**: cada texto y cada botón se empujan hasta cumplir una razón WCAG contra el fondo
+  sobre el que se apoyan (AAA para el texto), así que el resultado se lee sea cual sea la
+  foto. El color de selección se elige aparte y por omisión es lo que mejor contrasta: gris
+  oscuro con letra blanca en los esquemas claros, gris claro con letra negra en los oscuros
+  — o un color propio, o el complementario del fondo. Claro u oscuro lo decide la luminancia
+  media de la imagen, con la opción de forzarlo. Los **docks se pintan por monitor**, cada
+  uno con su propio fondo, y como el modo oscuro es un override: tu color de panel queda
+  intacto y vuelve al desactivar. El **esquema del sistema** es uno solo y sigue al monitor
+  que elijas (por omisión, el mismo que maneja la rueda del brillo). El esquema generado es
+  **temporal**: se reescribe en cada cambio y se borra al apagar la opción. Y se lleva bien
+  con el modo oscuro: mientras aquel está puesto, ColorAuto se aparta y vuelve solo al salir.
+  Se configura en su propia solapa, para todos los docks a la vez.
 - **Auto-encogido**: cuando no entran todos los íconos, el dock reduce escala y fuente en vez
   de recortar.
 - **Drag & drop** para reordenar íconos y secciones enteras.
@@ -595,6 +611,13 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
   del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y
   un slideshow avanza solo de todas formas.
+- **ColorAuto reacciona a los cambios de fondo hechos desde kdock**, no a los de afuera: el
+  widget/atajo de *siguiente fondo*, los fondos por escritorio virtual y el cambio de
+  escritorio. Si el pase de diapositivas de KDE avanza solo, o cambiás el fondo desde
+  Preferencias del Sistema, el esquema se rehace en el próximo cambio que sí pase por kdock —
+  o en el acto con *Aplicar ahora*. Además deja **un** esquema temporal visible en la lista de
+  Preferencias del Sistema: es el que está aplicado, y no se puede evitar porque
+  `plasma-apply-colorscheme` solo sabe aplicar esquemas que existan como archivo.
 - **Traducciones**: el dock, su panel de configuración y los paneles de `kdock-previews` y
   `kdock-tilemenu` siguen el idioma elegido. `kdock-calendar` es la excepción: al ser
   autocontenido (sin archivos de `src/`), sigue en capabase.

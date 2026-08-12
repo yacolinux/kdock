@@ -43,6 +43,14 @@ public:
     // the KDE global shortcut only ever moves the primary one.
     Q_INVOKABLE void nextWallpaperAll();
 
+signals:
+    // A monitor's wallpaper was just advanced. ColorAuto listens to re-read the
+    // picture and rebuild the scheme; the name is carried through only for that
+    // (nothing in the advance itself needs it, the containments are matched by
+    // geometry). Empty when the primary-only global shortcut was used, because
+    // there is no way to know which screen KDE moved.
+    void wallpaperAdvanced(const QString &screenName);
+
 private:
     void checkAvailability();
     // Primary-only fallback: invoke the KDE global shortcut.
@@ -50,7 +58,7 @@ private:
     // Advance the wallpaper of the containment at (x, y): cycle the plugin for
     // a slideshow, write the next file of the folder for a static image. No-op
     // for any other wallpaper plugin.
-    void advanceForGeometry(int x, int y);
+    void advanceForGeometry(int x, int y, const QString &screenName);
     // Pick the image after `currentPath` (sorted, wrapping) from `folders`.
     static QString nextImage(const QStringList &folders, const QString &currentPath);
 

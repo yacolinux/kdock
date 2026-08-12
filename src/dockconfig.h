@@ -136,6 +136,15 @@ class DockConfig : public QObject
     Q_PROPERTY(bool darkModeActive READ darkModeActive NOTIFY darkModeChanged)
     Q_PROPERTY(QColor darkAccent READ darkAccent NOTIFY darkModeChanged)
     Q_PROPERTY(QColor darkBackground READ darkBackground NOTIFY darkModeChanged)
+    // ColorAuto (see AutoColorScheme): the colors this dock takes from its
+    // monitor's wallpaper. Same arrangement as dark mode and for the same
+    // reason — an override applied at *read* time, never written to the .conf,
+    // so turning the feature off restores the user's own colors by
+    // construction, with no snapshot to keep in sync. Unlike dark mode these
+    // are per instance: each monitor has its own wallpaper.
+    Q_PROPERTY(bool autoColorActive READ autoColorActive NOTIFY autoColorChanged)
+    Q_PROPERTY(QColor autoBackground READ autoBackground NOTIFY autoColorChanged)
+    Q_PROPERTY(QColor autoAccent READ autoAccent NOTIFY autoColorChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(bool showTooltips READ showTooltipsProp NOTIFY showTooltipsChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
@@ -638,6 +647,15 @@ public:
     bool darkModeActive() const;
     QColor darkAccent() const { return darkAccentColor(); }
     QColor darkBackground() const { return darkBackgroundColor(); }
+
+    // ColorAuto, pushed in by AutoColorScheme once per wallpaper change. Never
+    // persisted: these live and die with the process, which is what makes
+    // turning the feature off free.
+    bool autoColorActive() const { return m_autoColorActive; }
+    QColor autoBackground() const { return m_autoBackground; }
+    QColor autoAccent() const { return m_autoAccent; }
+    void setAutoColors(const QColor &background, const QColor &accent);
+    void clearAutoColors();
     bool groupWindows() const { return m_groupWindows; }
     // QML-facing getter: the static setting lives in the shared config file,
     // but QML reads it as a per-instance property so the ToolTip bindings
@@ -869,6 +887,8 @@ signals:
     // exceptions, both colors): every QML binding that cares reads more than
     // one of them anyway.
     void darkModeChanged();
+    // One signal for the ColorAuto trio, same reasoning as darkModeChanged().
+    void autoColorChanged();
     void groupWindowsChanged();
     void menuFavoritesChanged();
     void separator1Changed();
@@ -1005,6 +1025,10 @@ private:
     bool m_showDarkMode = false;
     bool m_showPager = false;
     bool m_darkMode = false;
+    // ColorAuto, deliberately absent from load()/save(): see setAutoColors().
+    bool m_autoColorActive = false;
+    QColor m_autoBackground;
+    QColor m_autoAccent;
     bool m_groupWindows = true;
     QStringList m_menuFavorites;
     int m_separator1 = -1;

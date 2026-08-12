@@ -6,6 +6,7 @@
 #include "screenbrightness.h"
 #include "networksettingswidget.h"
 #include "appearancecontrol.h"
+#include "autocolorscheme.h"
 #include "coloredtabbar.h"
 #include "desktopentry.h"
 #include "dockconfig.h"
@@ -270,6 +271,12 @@ void SettingsDialog::buildTabs()
     addTab(createWidgetsTab(), tr("Widgets"));
     addTab(createMenuTab(), tr("Menu"));
     addTab(createDarkModeTab(), tr("DarkMode"));
+    // Next to DarkMode on purpose: it is the other feature that rewrites the
+    // desktop's appearance, and the two are interlocked (dark mode suspends it).
+    m_colorAutoDefaults = nullptr;
+    m_colorAutoBody = nullptr;
+    if (m_manager && m_manager->autoColorScheme())
+        addTab(createColorAutoTab(), tr("ColorAuto"));
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
@@ -3126,6 +3133,284 @@ QWidget *SettingsDialog::createDarkModeTab()
     });
     connect(m_config, &DockConfig::darkModeChanged, tab, syncAll);
     syncAll();
+
+    layout->addStretch();
+    return tab;
+}
+
+void SettingsDialog::addColorAutoIconsetRow(QFormLayout *form, QWidget *parent, bool dark,
+                                            const QString &title, const QString &tip)
+{
+    if (!m_appearance)
+        return;
+    auto *check = new QCheckBox(title, parent);
+    check->setChecked(AutoColorScheme::iconsetEnabled(dark));
+    check->setToolTip(tip);
+
+    auto *pick = new ThemePickerButton(m_appearance, QStringLiteral("icons"),
+                                       ThemePickerPopup::PickValue, parent);
+    // Never leave the picker sitting on whatever sorts first: with no explicit
+    // empty-id row, ticking the checkbox would quietly apply *that* icon set.
+    pick->setSpecialEntry(tr("(usar el guardado)"));
+    pick->setCurrentId(AutoColorScheme::iconsetValue(dark));
+    pick->setEnabled(check->isChecked());
+
+    connect(check, &QCheckBox::toggled, this, [dark, pick](bool on) {
+        // Persist what the row shows before turning it on, so the switch uses
+        // the value the user is looking at.
+        if (on)
+            AutoColorScheme::setIconsetValue(dark, pick->currentId());
+        AutoColorScheme::setIconsetEnabled(dark, on);
+        pick->setEnabled(on);
+    });
+    connect(pick, &ThemePickerButton::picked, this,
+            [dark](const QString &id) { AutoColorScheme::setIconsetValue(dark, id); });
+
+    form->addRow(check);
+    form->addRow(tr("· Iconset:"), pick);
+}
+
+void SettingsDialog::reloadColorAutoDefaults()
+{
+    if (!m_colorAutoDefaults)
+        return;
+    if (!AutoColorScheme::defaultsSaved()) {
+        m_colorAutoDefaults->setText(
+            tr("Todavía no se guardó nada: se captura al activar la casilla."));
+        return;
+    }
+    const QString colors = AutoColorScheme::defaultColorScheme();
+    const QString icons = AutoColorScheme::defaultIconTheme();
+    m_colorAutoDefaults->setText(
+        tr("Esquema de color: <b>%1</b> — Iconset del dock: <b>%2</b>")
+            .arg(colors.isEmpty() ? tr("(sin definir)") : colors,
+                 icons.isEmpty() ? tr("(seguir el del sistema)") : icons));
+}
+
+QWidget *SettingsDialog::createColorAutoTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+
+    auto *intro = new QLabel(
+        tr("Genera un esquema de color de KDE a partir del color predominante del fondo "
+           "de pantalla y lo aplica al cambiar de fondo. El esquema es <b>temporal</b>: "
+           "se reescribe en cada cambio y se borra al desactivar esto. Las fuentes y los "
+           "botones se calculan por contraste, así que el resultado se lee sea cual sea "
+           "la foto."),
+        tab);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    auto *warn = new QLabel(
+        tr("<i>Esto le cambia la apariencia a todo el escritorio, no solo al dock. Se "
+           "configura una vez para todos los docks. Mientras el modo oscuro esté "
+           "activo, ColorAuto se apaga solo y vuelve al salir.</i>"),
+        tab);
+    warn->setWordWrap(true);
+    layout->addWidget(warn);
+
+    auto *topForm = new QFormLayout;
+
+    auto *enabled = new QCheckBox(tr("Generar esquema automático desde el fondo"), tab);
+    enabled->setChecked(AutoColorScheme::enabled());
+    topForm->addRow(tr("ColorAuto:"), enabled);
+
+    auto *lightness = new QComboBox(tab);
+    lightness->addItem(tr("Automático: según el fondo"),
+                       int(WallpaperColors::Options::Auto));
+    lightness->addItem(tr("Siempre claro"), int(WallpaperColors::Options::ForceLight));
+    lightness->addItem(tr("Siempre oscuro"), int(WallpaperColors::Options::ForceDark));
+    lightness->setCurrentIndex(qMax(0, lightness->findData(AutoColorScheme::lightness())));
+    lightness->setToolTip(tr("Con Automático manda la luminancia media de la imagen. Las "
+                             "otras dos existen porque una foto justo en el límite hace "
+                             "titilar el esquema entre claro y oscuro en cada paso del "
+                             "pase de diapositivas."));
+    connect(lightness, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this, lightness](int) {
+                AutoColorScheme::setLightness(lightness->currentData().toInt());
+                if (m_manager && m_manager->autoColorScheme())
+                    m_manager->autoColorScheme()->refreshNow();
+            });
+    topForm->addRow(tr("Claridad:"), lightness);
+    layout->addLayout(topForm);
+
+    // Everything below the master switch, so it can be greyed out in one go.
+    auto *body = new QWidget(tab);
+    m_colorAutoBody = body;
+    auto *bodyLayout = new QVBoxLayout(body);
+    bodyLayout->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(body);
+
+    // --- Docks -------------------------------------------------------------
+    auto *docksBox = new QGroupBox(tr("Colorear docks"), body);
+    auto *docksForm = new QFormLayout(docksBox);
+    auto *colorDocks = new QCheckBox(tr("Aplicar a los docks, por monitor"), docksBox);
+    colorDocks->setChecked(AutoColorScheme::colorDocks());
+    colorDocks->setToolTip(tr("Cada dock toma los colores del fondo de SU monitor. Como el "
+                              "modo oscuro, es un override momentáneo: el color de panel "
+                              "que configuraste sigue guardado y vuelve al desactivar."));
+    connect(colorDocks, &QCheckBox::toggled, this, [this](bool on) {
+        AutoColorScheme::setColorDocks(on);
+        if (m_manager && m_manager->autoColorScheme())
+            m_manager->autoColorScheme()->refreshNow();
+    });
+    docksForm->addRow(colorDocks);
+    bodyLayout->addWidget(docksBox);
+
+    // --- System ------------------------------------------------------------
+    auto *sysBox = new QGroupBox(tr("Esquema del sistema (KDE)"), body);
+    auto *sysForm = new QFormLayout(sysBox);
+    auto *systemScheme = new QCheckBox(tr("Cambiar el esquema de color de todo el escritorio"),
+                                       sysBox);
+    systemScheme->setChecked(AutoColorScheme::systemScheme());
+    sysForm->addRow(systemScheme);
+
+    auto *monitor = new QComboBox(sysBox);
+    monitor->addItem(tr("(el del widget de Brillo)"), QString());
+    monitor->addItem(tr("(el interno / principal)"), AutoColorScheme::InternalMonitor);
+    for (const QString &name : DesktopWallpapers::configuredScreens())
+        monitor->addItem(name, name);
+    monitor->setCurrentIndex(qMax(0, monitor->findData(AutoColorScheme::systemMonitor())));
+    monitor->setToolTip(tr("De qué monitor sale el fondo que manda: el esquema del sistema "
+                           "es uno solo. Por omisión sigue al monitor que maneja la rueda "
+                           "del brillo; si ese monitor no se puede identificar, elegilo "
+                           "acá a mano."));
+    connect(monitor, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this, monitor](int) {
+                AutoColorScheme::setSystemMonitor(monitor->currentData().toString());
+                if (m_manager && m_manager->autoColorScheme())
+                    m_manager->autoColorScheme()->refreshNow();
+            });
+    sysForm->addRow(tr("Monitor que manda:"), monitor);
+    connect(systemScheme, &QCheckBox::toggled, this, [this, monitor](bool on) {
+        AutoColorScheme::setSystemScheme(on);
+        monitor->setEnabled(on);
+        if (m_manager && m_manager->autoColorScheme())
+            m_manager->autoColorScheme()->refreshNow();
+    });
+    monitor->setEnabled(systemScheme->isChecked());
+    bodyLayout->addWidget(sysBox);
+
+    // --- Selection ---------------------------------------------------------
+    auto *selBox = new QGroupBox(tr("Color de selección"), body);
+    auto *selForm = new QFormLayout(selBox);
+
+    auto *selMode = new QComboBox(selBox);
+    selMode->addItem(tr("Grises por omisión"), int(WallpaperColors::Options::DefaultGrays));
+    selMode->addItem(tr("Color propio"), int(WallpaperColors::Options::Custom));
+    selMode->addItem(tr("Del fondo de pantalla"),
+                     int(WallpaperColors::Options::FromWallpaper));
+    selMode->setCurrentIndex(qMax(0, selMode->findData(AutoColorScheme::selectionMode())));
+    selMode->setToolTip(tr("Por omisión: un esquema claro selecciona con gris oscuro y "
+                           "letra blanca, y uno oscuro con gris claro y letra negra. La "
+                           "letra no se configura: sale del contraste contra el color de "
+                           "selección."));
+    selForm->addRow(tr("Origen:"), selMode);
+
+    auto *lightBtn = new QPushButton(selBox);
+    const auto refreshLight = makeColorButton(lightBtn, &AutoColorScheme::selectionLight,
+                                              &AutoColorScheme::setSelectionLight,
+                                              tr("Selección en esquemas claros"));
+    auto *darkBtn = new QPushButton(selBox);
+    const auto refreshDark = makeColorButton(darkBtn, &AutoColorScheme::selectionDark,
+                                             &AutoColorScheme::setSelectionDark,
+                                             tr("Selección en esquemas oscuros"));
+    selForm->addRow(tr("· Esquemas claros:"), lightBtn);
+    selForm->addRow(tr("· Esquemas oscuros:"), darkBtn);
+
+    const auto syncSelection = [this, selMode, lightBtn, darkBtn] {
+        const bool custom =
+            selMode->currentData().toInt() == int(WallpaperColors::Options::Custom);
+        lightBtn->setEnabled(custom);
+        darkBtn->setEnabled(custom);
+    };
+    connect(selMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this, selMode, syncSelection](int) {
+                AutoColorScheme::setSelectionMode(selMode->currentData().toInt());
+                syncSelection();
+                if (m_manager && m_manager->autoColorScheme())
+                    m_manager->autoColorScheme()->refreshNow();
+            });
+    // The two swatches write app-wide statics, so a click has to re-run the
+    // engine or the change only shows on the next wallpaper.
+    for (QPushButton *btn : {lightBtn, darkBtn}) {
+        connect(btn, &QPushButton::clicked, this, [this] {
+            if (m_manager && m_manager->autoColorScheme())
+                m_manager->autoColorScheme()->refreshNow();
+        });
+    }
+    syncSelection();
+    bodyLayout->addWidget(selBox);
+
+    // --- Icon sets ---------------------------------------------------------
+    auto *iconBox = new QGroupBox(tr("Iconsets"), body);
+    auto *iconForm = new QFormLayout(iconBox);
+    iconForm->addRow(new QLabel(
+        tr("<i>Solo el iconset que usa kdock, sin tocar el del escritorio. Sin tildar, "
+           "se usa el guardado abajo.</i>"),
+        iconBox));
+    addColorAutoIconsetRow(iconForm, iconBox, false, tr("Iconset para esquemas claros"),
+                           tr("Se aplica cuando el esquema generado sale claro."));
+    addColorAutoIconsetRow(iconForm, iconBox, true, tr("Iconset para esquemas oscuros"),
+                           tr("Se aplica cuando el esquema generado sale oscuro."));
+    bodyLayout->addWidget(iconBox);
+
+    // --- Saved defaults ----------------------------------------------------
+    auto *defBox = new QGroupBox(tr("Guardado para volver atrás"), body);
+    auto *defLayout = new QVBoxLayout(defBox);
+    defLayout->addWidget(new QLabel(
+        tr("<i>Se captura la primera vez que activás ColorAuto y es lo que se restaura al "
+           "desactivarlo.</i>"),
+        defBox));
+    m_colorAutoDefaults = new QLabel(defBox);
+    m_colorAutoDefaults->setWordWrap(true);
+    defLayout->addWidget(m_colorAutoDefaults);
+    auto *recapture = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                      tr("Volver a capturar"), defBox);
+    recapture->setToolTip(tr("Toma el esquema de color y el iconset que hay puestos ahora "
+                             "como los nuevos valores por omisión."));
+    connect(recapture, &QPushButton::clicked, this, [this] {
+        if (m_manager && m_manager->autoColorScheme())
+            m_manager->autoColorScheme()->captureDefaults();
+        reloadColorAutoDefaults();
+    });
+    defLayout->addWidget(recapture);
+    bodyLayout->addWidget(defBox);
+    reloadColorAutoDefaults();
+
+    // --- Apply now ---------------------------------------------------------
+    auto *applyNow = new QPushButton(QIcon::fromTheme(QStringLiteral("color-management")),
+                                     tr("Aplicar ahora"), body);
+    applyNow->setToolTip(tr("Vuelve a leer el fondo de cada monitor y regenera el esquema "
+                            "sin esperar al próximo cambio."));
+    connect(applyNow, &QPushButton::clicked, this, [this] {
+        if (m_manager && m_manager->autoColorScheme())
+            m_manager->autoColorScheme()->refreshNow();
+    });
+    bodyLayout->addWidget(applyNow);
+
+    // The master switch gates everything below it. Reading the state back from
+    // AutoColorScheme rather than from the checkbox: turning it on captures the
+    // defaults, and dark mode can turn it off from underneath us.
+    const auto syncEnabled = [this, enabled] {
+        const QSignalBlocker block(enabled);
+        enabled->setChecked(AutoColorScheme::enabled());
+        if (m_colorAutoBody)
+            m_colorAutoBody->setEnabled(AutoColorScheme::enabled());
+        reloadColorAutoDefaults();
+    };
+    connect(enabled, &QCheckBox::toggled, this, [this, syncEnabled](bool on) {
+        if (m_manager && m_manager->autoColorScheme())
+            m_manager->autoColorScheme()->setEnabled(on);
+        syncEnabled();
+    });
+    if (m_manager && m_manager->autoColorScheme()) {
+        connect(m_manager->autoColorScheme(), &AutoColorScheme::changed, tab, syncEnabled);
+    }
+    // Dark mode suspends the feature, so the tab has to follow that too.
+    connect(m_config, &DockConfig::darkModeChanged, tab, syncEnabled);
+    syncEnabled();
 
     layout->addStretch();
     return tab;

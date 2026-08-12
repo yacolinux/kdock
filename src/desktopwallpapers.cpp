@@ -561,6 +561,7 @@ void DesktopWallpapers::apply(int desktop)
         PlasmaScript::run(write);
         PlasmaScript::run(reloadScript(geometryKeys().values()));
         setApplied(true);
+        emit wallpapersApplied(desktop);
         return;
     }
 
@@ -573,6 +574,7 @@ void DesktopWallpapers::apply(int desktop)
     PlasmaScript::run(write);
     PlasmaScript::run(reloadScript(geometryKeys().values()));
     setApplied(true);
+    emit wallpapersApplied(desktop);
 }
 
 void DesktopWallpapers::restore()

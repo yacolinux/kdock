@@ -92,6 +92,13 @@ public:
     // config has seen before, capped at kMaxScreens.
     static QStringList configuredScreens();
 
+    // "x,y" of every connected screen, by connector name. Public because it is
+    // the bridge between a Plasma containment (which only knows a screen index
+    // and its geometry) and the connector names the rest of the config uses —
+    // AutoColorScheme needs the same mapping and copying it would be two
+    // sources of truth for one fact.
+    static QHash<QString, QString> geometryKeys();
+
     // The stored desktop-1 config, by connector name. Survives restarts and
     // keeps entries for monitors that are currently unplugged.
     static QHash<QString, WallpaperSnapshot> snapshot();
@@ -123,6 +130,12 @@ signals:
     // The stored desktop-1 config changed (a capture landed), so the Wallpapers
     // tab can redraw its read-only list.
     void snapshotChanged();
+    // A desktop's wallpapers were just put up. ColorAuto listens: this is one
+    // of the two ways the picture changes without anyone touching a wallpaper
+    // control. NOT called applied(): that name is already the static getter
+    // above, and an overload set of a signal and a static method is not
+    // something &DesktopWallpapers::applied can be resolved out of.
+    void wallpapersApplied(int desktop);
 
 private:
     void onDesktopChanged(int position);
@@ -147,8 +160,6 @@ private:
     // repeat desktop N's image. Toggling away and back makes Plasma advance the
     // slideshow (the next-wall.sh finding) — see DesktopWallpapers::apply().
     QString toggleToImageScript(int desktop) const;
-    // "x,y" of every connected screen, by connector name.
-    static QHash<QString, QString> geometryKeys();
 
     static void setApplied(bool on);
 

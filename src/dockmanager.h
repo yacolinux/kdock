@@ -59,6 +59,7 @@ class WeatherControl;
 class AppearanceControl;
 class VirtualDesktops;
 class DesktopWallpapers;
+class AutoColorScheme;
 
 class DockManager : public QObject
 {
@@ -93,6 +94,10 @@ public:
         AppearanceControl *appearance = nullptr;
         VirtualDesktops *desktops = nullptr;
         DesktopWallpapers *desktopWallpapers = nullptr;
+        // ColorAuto. Injected after construction (setAutoColorScheme): it needs
+        // the manager itself to reach the docks, so the two cannot both be
+        // built with the other already in hand.
+        AutoColorScheme *autoColors = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -235,6 +240,8 @@ public:
     ScreenBrightness *screens() const { return m_shared.screens; }
     BatteryControl *battery() const { return m_shared.battery; }
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
+    AutoColorScheme *autoColorScheme() const { return m_shared.autoColors; }
+    void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

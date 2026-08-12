@@ -137,6 +137,18 @@ private:
     // set), built from AppearanceControl/Theme. Shared by the DarkMode and
     // Colores tabs.
     void addDarkAppearanceExtras(QFormLayout *form, QWidget *parent);
+    // ColorAuto: the color scheme generated from the wallpaper (AutoColorScheme).
+    // Not per-dock — every key it edits is an app-wide static, so the tab looks
+    // the same whichever dock opened the dialog.
+    QWidget *createColorAutoTab();
+    // One "icon set for light / for dark schemes" row of that tab: checkbox plus
+    // a PickValue picker, disabled together. Same shape as
+    // addDarkAppearanceExtrasRow(), one value instead of two.
+    void addColorAutoIconsetRow(QFormLayout *form, QWidget *parent, bool dark,
+                                const QString &title, const QString &tip);
+    // Repaint the "saved as default" line and the enabled/disabled state of the
+    // whole tab. No-op when the tab isn't built.
+    void reloadColorAutoDefaults();
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
     QWidget *createScriptRunnersTab();
@@ -321,4 +333,10 @@ private:
     // Wallpapers tab: the read-only view of the stored desktop-1 config, kept
     // as a member because a capture lands asynchronously.
     QListWidget *m_wallpaperSnapshotList = nullptr;
+
+    // ColorAuto tab. Members because the saved defaults are re-read whenever the
+    // feature is toggled (enabling captures them) and because everything below
+    // the master switch follows its state.
+    QLabel *m_colorAutoDefaults = nullptr;
+    QWidget *m_colorAutoBody = nullptr;
 };

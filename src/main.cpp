@@ -41,6 +41,7 @@
 #include "tilemenulauncher.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
+#include "autocolorscheme.h"
 #include "darkmodeappearance.h"
 #include "networkcontrol.h"
 #include "weatherconfig.h"
@@ -289,6 +290,17 @@ int main(int argc, char *argv[])
         ::_exit(0);
     });
     desktopWallpapers.start();
+
+    // ColorAuto: the color scheme (and optionally the docks' own colors)
+    // following the wallpaper. Built after the manager because it needs it to
+    // reach the docks, and *before* DarkModeAppearance so that its stand-down
+    // on the way into dark mode is connected first.
+    AutoColorScheme autoColors(&theme, &appearance, &manager, &virtualDesktops);
+    manager.setAutoColorScheme(&autoColors);
+    QObject::connect(&wallpaperControl, &WallpaperControl::wallpaperAdvanced, &autoColors,
+                     [&autoColors](const QString &) { autoColors.refresh(); });
+    QObject::connect(&desktopWallpapers, &DesktopWallpapers::wallpapersApplied, &autoColors,
+                     [&autoColors](int) { autoColors.refresh(); });
 
     // Optional system-wide side effects of dark mode (KDE color scheme / icon
     // theme, dock icon override). Built after the docks so its first sync()

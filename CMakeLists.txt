@@ -54,6 +54,8 @@ add_library(kdock_core OBJECT
     src/kwinshortcut.cpp      src/kwinshortcut.h
     src/wallpapercontrol.cpp  src/wallpapercontrol.h
     src/desktopwallpapers.cpp src/desktopwallpapers.h
+    src/wallpapercolors.cpp   src/wallpapercolors.h
+    src/autocolorscheme.cpp   src/autocolorscheme.h
     src/desktopmaximize.cpp   src/desktopmaximize.h
     src/plasmascript.h
     src/brightnesscontrol.cpp src/brightnesscontrol.h

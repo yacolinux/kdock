@@ -953,7 +953,64 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 - Nada de KDE Frameworks como dependencia: los backends hablan D-Bus / CLI directo
   (UDisks2, NetworkManager, UPower, `pactl`, `wpctl`, `brightnessctl`, kglobalaccel).
 
+### Probar ColorAuto (esquema de color desde el wallpaper)
+
+El motor (`src/wallpapercolors.cpp`) es **puro** y se prueba entero en CI:
+`tests/unit/tst_wallpapercolors.cpp` genera sus propias imágenes con `QImage` en vez de
+traer PNG de fixture —el test afirma sobre el color que sale, así que un blob binario
+escondería justo el dato— y verifica el color dominante, la decisión claro/oscuro y que
+**todas** las razones de contraste generadas cumplan su objetivo sobre cuatro imágenes por
+tres claridades. `tests/unit/tst_autocolorscheme.cpp` cubre la máquina de estados sin D-Bus.
+
+Lo que esos dos no pueden probar, y cómo se probó:
+
+- **Que la solapa funcione**: la sonda que linkea los `.o` de `kdock_core.dir` (receta de más
+  arriba), con `XDG_DATA_HOME` y `XDG_CONFIG_HOME` descartables **y el `PATH` falso**, que acá
+  no es opcional: la solapa aplica esquemas e iconsets de verdad. Desambiguá los controles
+  **por el `QGroupBox` que los contiene**; el interruptor maestro es el único `QCheckBox` que
+  no está dentro de ninguno. Con `enabledScreens=` de una pantalla inexistente el
+  `DockManager` no arma ninguna ventana y la sonda no necesita ningún backend real.
+- **Que el dock se pinte de verdad**: el arnés de Xvfb con `enabled=true`, `colorDocks=true` y
+  **`systemScheme=false`** en el `[ColorAuto]` del `.conf` de prueba, y el `import -window` de
+  siempre. El control es correr dos veces, con la feature prendida y apagada, y comparar el
+  píxel del panel: acá dio `(28,32,34)` contra `(203,204,205)`. Una sola corrida no prueba
+  nada — un dock oscuro puede serlo por el tema.
+- **Ojo con que el arnés llega al bus real.** Sin `dbus-run-session`, un kdock (o una sonda)
+  bajo Xvfb le lee los wallpapers al plasmashell **de verdad** y genera el esquema con ellos.
+  Es inofensivo porque solo lee, y el `.colors` cae en el `XDG_DATA_HOME` descartable, pero
+  significa que la corrida **depende del fondo que el usuario tenga puesto**: no afirmes sobre
+  un color concreto, afirmá sobre "cambió respecto de la corrida con la feature apagada".
+- **Comprobá que no le tocaste el escritorio al usuario**: `grep -m1 "^ColorScheme="
+  ~/.kde-opt/config/kdeglobals` y `ls ~/.local/share/color-schemes/ | grep -i kdock` (tiene que
+  salir vacío). El `PATH` falso es lo que lo garantiza.
+
 ## Trampas que muerden
+
+- **`plasma-apply-colorscheme` no hace NADA si el nombre pedido ya es el que está puesto**
+  (2026-08-12). Está en su fuente (`kcms/colors/plasma-apply-colorscheme.cpp`): compara contra
+  el `ColorScheme` de kdeglobals, imprime *"ya está aplicado"* y vuelve con éxito. O sea que
+  reescribir un `.colors` en el mismo archivo y volver a aplicarlo es un **no-op silencioso** —
+  la salida dice que salió bien. Cualquier feature que genere un esquema tiene que **alternar
+  entre dos nombres**; es lo que hace ColorAuto (`KdockColorAuto1`/`2`) y lo mismo que hace
+  kde-material-you-colors, cuyo quirk documentado ("crea dos esquemas y los aplica uno tras
+  otro") es exactamente este.
+- **`QColor` guarda más de 8 bits por canal y `operator==` compara ESO, no `red()/green()/blue()`**
+  (2026-08-12). Un color salido de `QColor::fromHsv()` y el mismo color escrito como `"33,36,40"`
+  y releído comparan **distinto** mientras se imprimen idénticos (`#ff212428` contra
+  `#ff212428`); medido, 8627 contra 8738 en el canal rojo, los dos redondeando a `0x21`.
+  `toRgb()` **no** alcanza (eso arregla el `spec`, no el valor). Si un color va a compararse
+  contra otro leído de un archivo o de otra fuente, normalizalo reconstruyéndolo desde sus
+  canales de 8 bits (`QColor(c.red(), c.green(), c.blue())`). Sin eso, un `if (nuevo == viejo)
+  return;` no corta nunca y el objeto re-emite en cada refresco.
+- **Una señal no puede llamarse igual que un método estático de la misma clase.**
+  `DesktopWallpapers` ya tenía `static bool applied()`, así que agregarle una señal
+  `applied(int)` hace que `&DesktopWallpapers::applied` no resuelva: el error de `connect` son
+  cinco candidatos de plantilla y no menciona la colisión. Se llama `wallpapersApplied(int)`.
+- **`DockConfig::anyDarkModeActive()` recorre las instancias VIVAS de `DockConfig`.** Un test
+  que setea `setDarkModeAllDocks(true)` + `setDarkModeGlobal(true)` sin construir ningún
+  `DockConfig` obtiene `false`: el modo oscuro nunca "se activa" y todo lo que dependa de él
+  da verde **sin haber probado nada**. Un `DockConfig cfg(QStringLiteral("VIRT-9"))` (un
+  monitor inventado, que no crea ventana) es lo que hace falta.
 
 - **Un `import` de QML que falta no imprime NADA: el dock arranca con la ventana vacía**
   (2026-08-09). `Dock.qml` y `previews/qml/PreviewCard.qml` importan

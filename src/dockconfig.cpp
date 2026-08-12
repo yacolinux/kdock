@@ -314,6 +314,29 @@ void DockConfig::setDarkBackgroundColor(const QColor &color)
     notifyDarkModeChanged();
 }
 
+void DockConfig::setAutoColors(const QColor &background, const QColor &accent)
+{
+    // No QSettings anywhere in here on purpose. ColorAuto is a read-time
+    // override exactly like dark mode: the user's own panelColor stays in the
+    // .conf untouched, so switching the feature off needs no restore at all.
+    if (m_autoColorActive && m_autoBackground == background && m_autoAccent == accent)
+        return;
+    m_autoColorActive = background.isValid();
+    m_autoBackground = background;
+    m_autoAccent = accent;
+    emit autoColorChanged();
+}
+
+void DockConfig::clearAutoColors()
+{
+    if (!m_autoColorActive)
+        return;
+    m_autoColorActive = false;
+    m_autoBackground = QColor();
+    m_autoAccent = QColor();
+    emit autoColorChanged();
+}
+
 void DockConfig::notifyDarkModeChanged()
 {
     for (DockConfig *cfg : std::as_const(s_instances))

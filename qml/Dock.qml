@@ -514,7 +514,11 @@ Item {
     // is never written, so leaving dark mode restores the user's own scheme
     // with nothing to undo. config.opacity is applied downstream as always, so
     // a translucent dock stays translucent in dark mode too.
+    // ColorAuto (Settings → ColorAuto) sits between the two: it is the same kind
+    // of read-time override, and dark mode wins because ColorAuto stands itself
+    // down while dark mode is on anyway (AutoColorScheme::onDarkModePing).
     readonly property color dockBaseColor: config.darkModeActive ? config.darkBackground
+                                           : config.autoColorActive ? config.autoBackground
                                            : config.panelColorSet ? config.panelColor
                                                                   : theme.background
     readonly property real dockBaseLum:
@@ -528,10 +532,18 @@ Item {
     // answer the non-dark path uses.
     readonly property real darkAccentLum:
         0.299 * config.darkAccent.r + 0.587 * config.darkAccent.g + 0.114 * config.darkAccent.b
+    // Same test for the ColorAuto accent, which has the same problem: it is the
+    // generated scheme's selection color and nothing stops it from landing close
+    // to the dock background this run.
+    readonly property real autoAccentLum:
+        0.299 * config.autoAccent.r + 0.587 * config.autoAccent.g + 0.114 * config.autoAccent.b
     readonly property color dockContrastColor: dockBaseIsLight ? "#141414" : "#F2F2F2"
     readonly property color dockTextColor:
         config.darkModeActive
             ? (Math.abs(darkAccentLum - dockBaseLum) > 0.35 ? config.darkAccent
+                                                            : dockContrastColor)
+            : config.autoColorActive
+            ? (Math.abs(autoAccentLum - dockBaseLum) > 0.35 ? config.autoAccent
                                                             : dockContrastColor)
             : dockContrastColor
 
@@ -546,6 +558,12 @@ Item {
         // icon on a black panel.
         if (config.darkModeActive)
             return config.widgetIconThemeDarkBg
+        // ColorAuto repaints the dock from the wallpaper, so a fixed choice of
+        // icon set goes unreadable as soon as a light wallpaper follows a dark
+        // one. While it is on, the icons follow the panel like mode 1 does.
+        if (config.autoColorActive)
+            return dockBaseIsLight ? config.widgetIconThemeLightBg
+                                   : config.widgetIconThemeDarkBg
         switch (config.widgetIconThemeMode) {
         case 1: return dockBaseIsLight ? config.widgetIconThemeLightBg   // match dock color
                                        : config.widgetIconThemeDarkBg

@@ -78,7 +78,7 @@ void WallpaperControl::nextWallpaper(const QString &screenName)
     }
 
     const QRect g = target->geometry();
-    advanceForGeometry(g.x(), g.y());
+    advanceForGeometry(g.x(), g.y(), target->name());
 }
 
 void WallpaperControl::nextWallpaperAll()
@@ -90,11 +90,11 @@ void WallpaperControl::nextWallpaperAll()
     const auto screens = QGuiApplication::screens();
     for (QScreen *s : screens) {
         const QRect g = s->geometry();
-        advanceForGeometry(g.x(), g.y());
+        advanceForGeometry(g.x(), g.y(), s->name());
     }
 }
 
-void WallpaperControl::advanceForGeometry(int x, int y)
+void WallpaperControl::advanceForGeometry(int x, int y, const QString &screenName)
 {
     // Step 1: find out which of the two wallpaper plugins the containment runs,
     // because they need opposite treatments (see the header). For a slideshow,
@@ -117,7 +117,8 @@ void WallpaperControl::advanceForGeometry(int x, int y)
 
     auto reply = PlasmaScript::evaluate(probe);
     auto *watcher = new QDBusPendingCallWatcher(reply, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, x, y](QDBusPendingCallWatcher *w) {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, x, y, screenName](QDBusPendingCallWatcher *w) {
         w->deleteLater();
         QDBusPendingReply<QString> r = *w;
         if (r.isError())
@@ -137,6 +138,10 @@ void WallpaperControl::advanceForGeometry(int x, int y)
                     "if(d.screen===t){d.wallpaperPlugin='org.kde.slideshow';"
                     "d.reloadConfig();break;}}}");
             PlasmaScript::run(toSlideshow);
+            // KDE picks the next image itself, asynchronously, so this only says
+            // "a change is under way" — whoever listens has to read the picture
+            // back later, not now.
+            emit wallpaperAdvanced(screenName);
             return;
         }
 
@@ -163,6 +168,7 @@ void WallpaperControl::advanceForGeometry(int x, int y)
                 "d.writeConfig('Image','%1');d.reloadConfig();break;}}}")
                 .arg(PlasmaScript::escapeJs(QUrl::fromLocalFile(next).toString()));
         PlasmaScript::run(writeScript);
+        emit wallpaperAdvanced(screenName);
     });
 }
 
@@ -205,4 +211,7 @@ void WallpaperControl::invokeGlobalShortcut()
         QStringLiteral("invokeShortcut"));
     msg << QStringLiteral("Slideshow Wallpaper Next Image");
     QDBusConnection::sessionBus().asyncCall(msg);
+    // Empty name: KDE only ever moves the primary screen here and does not say
+    // so, and a listener re-reading every monitor is harmless anyway.
+    emit wallpaperAdvanced(QString());
 }

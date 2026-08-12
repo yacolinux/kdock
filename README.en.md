@@ -112,6 +112,22 @@ The dock, across different edges and label layouts:
   own widget. It can optionally drag along the **KDE color scheme and iconset** as well as
   the dock's own iconset: since that is desktop state and can't "stop being applied," each
   option stores the value for both modes.
+- **ColorAuto**: a **KDE color scheme generated from the wallpaper**, rebuilt every time the
+  wallpaper changes. It pulls the image's predominant color with the same cheap method the
+  dock already uses to tint an icon, and builds a full scheme out of it — but unlike most
+  tools of this kind, **contrast wins over color**: every piece of text and every button is
+  pushed until it meets a WCAG ratio against whatever it sits on (AAA for body text), so the
+  result stays readable whatever the photo is. The selection color is chosen separately and
+  defaults to whatever contrasts best: a dark gray with white text on light schemes, a light
+  gray with black text on dark ones — or a color of your own, or the wallpaper's complement.
+  Light or dark is decided by the image's mean luminance, with the option to force it. The
+  **docks are colored per monitor**, each from its own wallpaper, and like dark mode it is an
+  override: your panel color stays untouched and comes back when you switch it off. The
+  **system scheme** is a single one and follows whichever monitor you pick (by default, the
+  same one the brightness wheel drives). The generated scheme is **temporary**: it is
+  rewritten on every change and removed when the option is turned off. And it gets along with
+  dark mode: while that one is on, ColorAuto stands aside and comes back on its own when you
+  leave. Configured in its own tab, once for every dock.
 - **Auto-shrink**: when not all icons fit, the dock reduces scale and font instead of
   clipping.
 - **Drag & drop** to reorder icons and whole sections.
@@ -583,6 +599,13 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
   6 onward kdock leaves everything untouched. And when you return to Desktop 1, if you had a
   slideshow, it comes back with its configuration intact but **showing the next image** —
   reloading it advances it, and a slideshow advances on its own anyway.
+- **ColorAuto reacts to wallpaper changes made from kdock**, not to outside ones: the *next
+  wallpaper* widget/shortcut, the per-virtual-desktop wallpapers, and the desktop switch. If
+  KDE's own slideshow advances by itself, or you change the wallpaper from System Settings,
+  the scheme is rebuilt on the next change that does go through kdock — or right away with
+  *Apply now*. It also leaves **one** temporary scheme visible in the System Settings list:
+  it's the one currently applied, and it can't be avoided because `plasma-apply-colorscheme`
+  only knows how to apply schemes that exist as a file.
 - **Translations**: the dock, its settings panel, and the `kdock-previews` and
   `kdock-tilemenu` panels all follow the chosen language. `kdock-calendar` is the exception:
   being self-contained (no files from `src/`), it stays in capabase.
