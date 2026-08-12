@@ -49,8 +49,9 @@ public:
     QString targetLabel() const;
 
     // The monitor the wheel drives, resolved fresh on every call:
-    //   empty key   -> the internal display if PowerDevil reports one, else the
-    //                  first (same heuristic as the Control Manager's card),
+    //   empty key   -> auto: PowerDevil's internal display, else the
+    //                  brightnessctl backlight (PowerDevil normally does not
+    //                  list the laptop panel at all), else the first display,
     //   "internal"  -> the brightnessctl backlight,
     //   any label   -> that monitor, falling back to auto when it is gone.
     // Returns the PowerDevil *object name*, or an empty string when the target
@@ -86,8 +87,6 @@ private:
     void refresh();
     void scheduleRefresh();
     void persist();
-    // True when the wheel goes through PowerDevil instead of brightnessctl.
-    bool delegating() const { return !wheelDisplay().isEmpty(); }
 
     ScreenBrightness *m_screens = nullptr;
     QString m_wheelTarget;

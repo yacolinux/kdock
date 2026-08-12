@@ -30,6 +30,12 @@ Item {
     readonly property var streams: { card.rev; return audio ? audio.appList() : [] }
     readonly property real ceiling: { card.rev; return audio ? audio.ceiling() : 1.0 }
 
+    // Device list by AudioControl device type, so the rows below can be indexed
+    // out of a stable model (see the Repeater comment further down).
+    function listFor(type) {
+        return type === 0 ? card.outputs : type === 1 ? card.inputs : card.streams
+    }
+
     readonly property var defaultOutput: {
         for (var i = 0; i < card.outputs.length; ++i) {
             if (card.outputs[i].isDefault)
@@ -134,18 +140,26 @@ Item {
                 }
             }
 
+            // The models here are **counts**, and the lists are read by index
+            // through card.listFor(). Handing a Repeater a fresh JS array
+            // destroys and rebuilds every delegate, and these lists are rebuilt
+            // on each `card.rev++`, i.e. on every echo from pactl — including
+            // the optimistic one our own write produces. The delegate being
+            // dragged died with it, so a volume slider only answered to isolated
+            // clicks. Same bug the brightness rows had (2026-08-12).
             Repeater {
                 model: [
-                    { title: qsTr("Salidas"),      list: card.outputs, type: 0, radio: true },
-                    { title: qsTr("Entradas"),     list: card.inputs,  type: 1, radio: true },
-                    { title: qsTr("Aplicaciones"), list: card.streams, type: 2, radio: false }
+                    { title: qsTr("Salidas"),      type: 0, radio: true },
+                    { title: qsTr("Entradas"),     type: 1, radio: true },
+                    { title: qsTr("Aplicaciones"), type: 2, radio: false }
                 ]
                 delegate: Column {
                     id: group
                     required property var modelData
+                    readonly property var list: card.listFor(group.modelData.type)
                     width: fullColumn.width
                     spacing: 4
-                    visible: group.modelData.list.length > 0
+                    visible: group.list.length > 0
 
                     Text {
                         text: group.modelData.title
@@ -156,12 +170,18 @@ Item {
                     }
 
                     Repeater {
-                        model: group.modelData.list
+                        model: group.list.length
                         delegate: Item {
                             id: devRow
-                            required property var modelData
+                            required property int index
+                            // `dev` and not `modelData`: with an int model the
+                            // delegate has no modelData, and the row can outlive
+                            // its entry for one frame when the list shrinks.
+                            readonly property var dev: group.list[devRow.index]
+                                                       ? group.list[devRow.index] : null
                             width: group.width
                             height: 46
+                            visible: devRow.dev !== null
 
                             // The default-device marker doubles as the button
                             // that sets it; applications have no default, so the
@@ -174,14 +194,15 @@ Item {
                                 width: visible ? 14 : 0
                                 height: 14
                                 radius: 7
-                                color: devRow.modelData.isDefault ? theme.highlight : "transparent"
+                                color: devRow.dev && devRow.dev.isDefault ? theme.highlight : "transparent"
                                 border.width: 1
                                 border.color: Qt.rgba(card.fg.r, card.fg.g, card.fg.b, 0.5)
                                 MouseArea {
                                     anchors.fill: parent
                                     anchors.margins: -4
-                                    onClicked: audio.setDefault(group.modelData.type,
-                                                                devRow.modelData.name)
+                                    onClicked: if (devRow.dev)
+                                                   audio.setDefault(group.modelData.type,
+                                                                    devRow.dev.name)
                                 }
                             }
 
@@ -191,11 +212,11 @@ Item {
                                 anchors.leftMargin: marker.visible ? 8 : 0
                                 anchors.right: parent.right
                                 anchors.top: parent.top
-                                text: devRow.modelData.description
+                                text: devRow.dev ? devRow.dev.description : ""
                                 color: card.fg
                                 elide: Text.ElideRight
                                 font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
-                                font.bold: devRow.modelData.isDefault && cmConfig.labelBold
+                                font.bold: devRow.dev && devRow.dev.isDefault && cmConfig.labelBold
                             }
 
                             CmButton {
@@ -204,12 +225,13 @@ Item {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 compact: true
-                                icon: devRow.modelData.muted ? "audio-volume-muted"
-                                                             : "audio-volume-high"
-                                checked: devRow.modelData.muted
+                                icon: devRow.dev && devRow.dev.muted ? "audio-volume-muted"
+                                                                     : "audio-volume-high"
+                                checked: devRow.dev ? devRow.dev.muted : false
                                 tip: qsTr("Silenciar")
-                                onClicked: audio.toggleMute(group.modelData.type,
-                                                            devRow.modelData.index)
+                                onClicked: if (devRow.dev)
+                                               audio.toggleMute(group.modelData.type,
+                                                                devRow.dev.index)
                             }
 
                             CmSlider {
@@ -220,9 +242,10 @@ Item {
                                 anchors.bottom: parent.bottom
                                 compact: true
                                 maximum: card.ceiling
-                                value: devRow.modelData.volume
-                                onMoved: (v) => audio.setVolume(group.modelData.type,
-                                                                devRow.modelData.index, v)
+                                value: devRow.dev ? devRow.dev.volume : 0
+                                onMoved: (v) => { if (devRow.dev)
+                                                      audio.setVolume(group.modelData.type,
+                                                                      devRow.dev.index, v) }
                             }
                         }
                     }

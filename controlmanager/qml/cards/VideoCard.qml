@@ -127,16 +127,29 @@ Item {
                     font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
                 }
 
+                // The model is the *count*, not the array of displays. Handing a
+                // Repeater a fresh JS array destroys and rebuilds every
+                // delegate, and this list is rebuilt on each backend echo — so
+                // the very first move of a drag deleted the slider being
+                // dragged. The grab died with it: the row only answered to
+                // isolated clicks and the pointer "escaped" the panel mid-drag
+                // (reported 2026-08-12). With an int, delegates only come and
+                // go when a monitor does.
                 Repeater {
-                    model: card.perMonitor ? card.displays : []
+                    model: card.perMonitor ? card.displays.length : 0
                     delegate: CmSlider {
+                        required property int index
+                        // Can be null for one frame when a monitor is unplugged:
+                        // the count changes before the delegate is destroyed.
+                        readonly property var display: card.displays[index]
+                                                       ? card.displays[index] : null
                         fg: card.fg
-                        required property var modelData
                         width: full.width
-                        icon: card.brightnessIcon(modelData.value)
-                        label: modelData.label.length > 0 ? modelData.label : modelData.name
-                        value: modelData.value
-                        onMoved: (v) => screens.setBrightness(modelData.name, v)
+                        icon: card.brightnessIcon(display ? display.value : 0)
+                        label: !display ? ""
+                               : (display.label.length > 0 ? display.label : display.name)
+                        value: display ? display.value : 0
+                        onMoved: (v) => { if (display) screens.setBrightness(display.name, v) }
                     }
                 }
 

@@ -1356,6 +1356,20 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   se deshabilitan. Y ojo con el ícono neutro: `weather-none-available` es lo literal, pero
   varios iconsets lo dibujan como un "?" morado; se elige mirando el dock renderizado, no el
   nombre en disco.
+- **Un `Repeater` con un array de JS por modelo destruye y reconstruye TODOS sus delegates cada
+  vez que el array se re-evalúa** (2026-08-12). El idiom del panel de control es un `rev++` en
+  `Connections { target: <backend> }` y listas `readonly property var xs: { card.rev; return
+  backend.list() }`, así que cada eco del backend —incluido el optimista que dispara nuestra
+  propia escritura— cambia la identidad del array. Con un slider adentro, eso mata al delegate
+  **en el primer movimiento del arrastre**: se pierde el grab, la fila solo responde a clics
+  sueltos y el puntero "se escapa" de la ventana a mitad del gesto. Desde afuera parece un
+  problema de foco o del `MouseArea`, no del modelo. Va con el modelo en **entero**
+  (`model: xs.length`) y el ítem leído por índice (`xs[index]`, con guarda contra `null`: la
+  cuenta cambia un frame antes de que el delegate se destruya). Mordió en `VideoCard.qml` y
+  estaba latente igual en `AudioCard.qml`.
+  El control positivo son dos capturas: con el modelo array, un arrastre con `xdotool`
+  (`mousedown`, varios `mousemove`, `mouseup`) deja el handle clavado en el valor viejo; con el
+  modelo entero, lo sigue.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú

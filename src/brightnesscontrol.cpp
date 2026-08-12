@@ -97,6 +97,13 @@ QString BrightnessControl::wheelDisplay() const
         if (d.value(QStringLiteral("internal")).toBool())
             return d.value(QStringLiteral("name")).toString();
     }
+    // No internal display *in PowerDevil* does not mean there is no internal
+    // screen: with a dock station PowerDevil lists the DDC monitors and leaves
+    // the laptop panel to the backlight. So the panel comes before the first
+    // external monitor — "automático" means the built-in screen whenever there
+    // is one, which is what the laptop's own brightness keys do.
+    if (m_available)
+        return QString();
     return displays.first().toMap().value(QStringLiteral("name")).toString();
 }
 
@@ -132,8 +139,11 @@ qreal BrightnessControl::brightness() const
 QString BrightnessControl::targetLabel() const
 {
     const QString name = wheelDisplay();
-    if (name.isEmpty())
-        return QString();
+    if (name.isEmpty()) {
+        // The backlight has no label of its own, and the tooltip needs to say
+        // *something*: with two screens a bare percentage is a riddle.
+        return m_available ? tr("Pantalla interna") : QString();
+    }
     const QVariantList displays = m_screens->displays();
     for (const QVariant &v : displays) {
         const QVariantMap d = v.toMap();

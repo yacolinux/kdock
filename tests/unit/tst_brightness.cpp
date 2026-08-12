@@ -103,8 +103,34 @@ private slots:
         QVERIFY(brightness.targetLabel().isEmpty());
     }
 
-    // El caso del bug: un solo display, externo. "auto" tiene que agarrarlo —
-    // si no, la rueda se queda en el backlight que nadie ve.
+    // Con brightnessctl presente y PowerDevil reportando SOLO el externo (dock
+    // station), "automático" tiene que ser la pantalla interna: PowerDevil no
+    // lista el panel del portátil, así que "el primer display" es el monitor de
+    // afuera y la rueda terminaba en el que no se está mirando (reportado
+    // 2026-08-12: "por default selecciona el primer monitor, ¿está invertido?").
+    void autoPrefersTheBacklightOverAnExternal()
+    {
+        const QString dir = fakeBrightnessctl(
+            QStringLiteral("intel_backlight,backlight,48000,50%,96000"));
+        const QByteArray oldPath = qgetenv("PATH");
+        qputenv("PATH", dir.toUtf8() + ":" + oldPath);
+        qputenv("KDOCK_TEST_DISPLAYS", externalOnly());
+
+        ScreenBrightness screens;
+        BrightnessControl brightness;
+        brightness.setScreens(&screens);
+        brightness.setWheelTarget(QString());
+        QSignalSpy spy(&brightness, &BrightnessControl::changed);
+        QVERIFY(spy.wait(3000)); // el refresh de brightnessctl es asíncrono
+        qputenv("PATH", oldPath);
+
+        QVERIFY(brightness.internalAvailable());
+        QVERIFY(brightness.wheelDisplay().isEmpty()); // o sea: el backlight
+        QCOMPARE(brightness.brightness(), 0.5);       // el del panel, no el 1.0 del Samsung
+    }
+
+    // Sin brightnessctl no hay panel interno que elegir, así que "auto" cae en
+    // el único display que hay — si no, la rueda se queda sin destino.
     void autoPicksTheOnlyDisplay()
     {
         qputenv("KDOCK_TEST_DISPLAYS", externalOnly());

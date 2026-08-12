@@ -2687,7 +2687,7 @@ void SettingsDialog::rebuildVideoTab()
     if (m_videoWheelTarget) {
         QSignalBlocker blk(m_videoWheelTarget);
         m_videoWheelTarget->clear();
-        m_videoWheelTarget->addItem(tr("Automático (interno, si no el primero)"), QString());
+        m_videoWheelTarget->addItem(tr("Automático (la pantalla interna)"), QString());
         for (const QVariant &v : displays) {
             const QVariantMap d = v.toMap();
             const QString label = d.value(QStringLiteral("label")).toString();
