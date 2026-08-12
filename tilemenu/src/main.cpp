@@ -1,5 +1,6 @@
 #include <QApplication>
-#include <QQuickStyle>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QTextStream>
 
 #include "appmenu.h"
@@ -54,6 +55,18 @@ int main(int argc, char *argv[])
     if (qgetenv("QT_WAYLAND_SHELL_INTEGRATION") == "kdock-layershell")
         qunsetenv("QT_WAYLAND_SHELL_INTEGRATION");
 
+    // Qt Quick Controls must be set before QApplication (see kdock's main.cpp).
+    {
+        const QString conf = QStandardPaths::writableLocation(
+            QStandardPaths::GenericDataLocation) + QStringLiteral("/kdock/kdock.conf");
+        QSettings s(conf, QSettings::IniFormat);
+        const QString sval = s.value(QStringLiteral("qtStyle")).toString();
+        if (sval.isEmpty() || sval == QStringLiteral("Breeze"))
+            qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
+        else
+            qputenv("QT_QUICK_CONTROLS_STYLE", sval.toUtf8());
+    }
+
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("kdock-tilemenu"));
     app.setOrganizationName(QStringLiteral("kdock"));
@@ -66,13 +79,6 @@ int main(int argc, char *argv[])
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())
         app.setStyle(style);
-
-    if (style.isEmpty())
-        QQuickStyle::setStyle(QStringLiteral("Fusion"));
-    else if (style == QStringLiteral("Breeze"))
-        QQuickStyle::setStyle(QStringLiteral("Fusion"));
-    else
-        QQuickStyle::setStyle(style);
 
     const QStringList args = app.arguments();
 

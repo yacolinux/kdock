@@ -1,8 +1,9 @@
 #include <QApplication>
 #include <QQmlEngine>
-#include <QQuickStyle>
 #include <QScreen>
+#include <QSettings>
 #include <QSocketNotifier>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
@@ -165,6 +166,25 @@ int main(int argc, char *argv[])
         qputenv("QT_WAYLAND_SHELL_INTEGRATION", "kdock-layershell");
     }
 
+    // Qt Quick Controls must be set before QApplication: the static QML
+    // plugin initialisation (qt_import_qml_plugins) reads
+    // QT_QUICK_CONTROLS_STYLE before main() runs, so QQuickStyle::setStyle()
+    // called later arrives too late. The env var is the only path that
+    // works.
+    // The QML files import QtQuick.Controls.Basic explicitly; Fusion is the
+    // closest built-in style that looks like a real desktop application.
+    // Breeze is not a QQC2 style name.
+    {
+        const QString conf = QStandardPaths::writableLocation(
+            QStandardPaths::GenericDataLocation) + QStringLiteral("/kdock/kdock.conf");
+        QSettings s(conf, QSettings::IniFormat);
+        const QString sval = s.value(QStringLiteral("qtStyle")).toString();
+        if (sval.isEmpty() || sval == QStringLiteral("Breeze"))
+            qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
+        else
+            qputenv("QT_QUICK_CONTROLS_STYLE", sval.toUtf8());
+    }
+
     QApplication app(argc, argv);
 
     // Qt has now loaded our layer-shell integration. Drop the variable so the
@@ -181,17 +201,6 @@ int main(int argc, char *argv[])
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())
         app.setStyle(style);
-
-    // Qt Quick Controls must always be set: the QML files import
-    // QtQuick.Controls.Basic explicitly, and without a call here that
-    // import forces Basic regardless of the desktop default.
-    // Breeze is not a QQC2 style name; the closest built-in is Fusion.
-    if (style.isEmpty())
-        QQuickStyle::setStyle(QStringLiteral("Fusion"));
-    else if (style == QStringLiteral("Breeze"))
-        QQuickStyle::setStyle(QStringLiteral("Fusion"));
-    else
-        QQuickStyle::setStyle(style);
 
     // One-shot CLI (next-wall.sh): advance a monitor's slideshow and exit,
     // before building any dock.
