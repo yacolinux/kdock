@@ -277,6 +277,12 @@ Item {
             anchors.fill: parent
             visible: win.currentTab === ""
             clip: true
+            // AutoFlickIfNeeded and not the default AutoFlickDirection: the latter
+            // calls itself flickable whenever contentHeight != height — content
+            // *shorter* than the viewport included — and then steals the drag of
+            // any slider inside it (see CmSlider). This one only flicks when there
+            // is something to scroll.
+            flickableDirection: Flickable.AutoFlickIfNeeded
             contentWidth: width
             contentHeight: canvas.height
             boundsBehavior: Flickable.StopAtBounds

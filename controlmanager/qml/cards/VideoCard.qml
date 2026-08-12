@@ -97,6 +97,12 @@ Item {
     Flickable {
         anchors.fill: parent
         visible: !card.compact
+        // AutoFlickIfNeeded and not the default AutoFlickDirection: the latter
+        // calls itself flickable whenever contentHeight != height — content
+        // *shorter* than the viewport included — and then steals the drag of
+        // any slider inside it (see CmSlider). This one only flicks when there
+        // is something to scroll.
+        flickableDirection: Flickable.AutoFlickIfNeeded
         contentWidth: width
         contentHeight: full.height
         clip: true

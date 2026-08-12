@@ -1370,6 +1370,21 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
   El control positivo son dos capturas: con el modelo array, un arrastre con `xdotool`
   (`mousedown`, varios `mousemove`, `mouseup`) deja el handle clavado en el valor viejo; con el
   modelo entero, lo sigue.
+- **Un `Flickable` le roba el arrastre a cualquier slider que tenga adentro, y con contenido
+  que ni siquiera desborda** (2026-08-12). `yflick()` es `contentHeight != height` —**`!=`, no
+  `>`**—, así que un `Flickable` cuyo contenido es *más corto* que el viewport se considera
+  flickable igual y toma el grab en cuanto el arrastre se desvía del eje horizontal más allá del
+  umbral de Qt (~10 px). Una mano siempre se desvía: el handle deja de seguir al puntero, el
+  gesto termina afuera de la ventana y **solo un clic seco funciona** (nunca cruza el umbral).
+  Se lee como un problema de foco o de Wayland, y es el modelo de eventos.
+  - **`flickableDirection: Flickable.VerticalFlick` NO lo arregla**: vertical es justo el eje que
+    roba. Lo que sirve es `Flickable.AutoFlickIfNeeded` (solo flickea si hay algo que scrollear)
+    y, para el caso en que sí desborda, apagarle `interactive` mientras el handle está apretado
+    — lo hace `CmSlider` solo, buscando el `Flickable` ancestro (`findFlickable()`).
+  - **Un arrastre de `xdotool` en línea recta no lo reproduce**: los pasos horizontales grandes
+    cruzan primero el umbral del slider, que se queda con el grab. Para reproducirlo hay que
+    imitar la mano: pasos horizontales **chicos** (≤10 px) con desvío vertical. Dos arneses
+    "limpios" dieron verde sobre esto.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú

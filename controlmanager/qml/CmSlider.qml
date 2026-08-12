@@ -32,6 +32,51 @@ Item {
     // makes the handle stutter, so the binding is dropped for the duration.
     readonly property bool live: !slider.pressed
 
+    readonly property bool pressed: slider.pressed
+
+    // A Flickable ancestor steals the pointer grab out from under the handle.
+    // Every card is inside one, and `contentHeight != height` is enough for
+    // Flickable to consider itself flickable — content *shorter* than the
+    // viewport counts, so even a panel with nothing to scroll steals. It takes
+    // the grab as soon as the drag drifts past Qt's threshold on the vertical
+    // axis, and a hand always drifts: the handle stops following, the gesture
+    // ends up outside the window, and only a plain click (which never crosses
+    // the threshold) works. Reported 2026-08-12 on the panel's monitor rows.
+    //
+    // Note that `flickableDirection: VerticalFlick` does NOT help: vertical is
+    // precisely the axis that steals here. Suspending `interactive` for the
+    // duration of the drag is what does, and it costs the scroll gesture
+    // nothing — the pointer is busy holding a handle.
+    property Item flickAncestor: null
+    property bool flickWasInteractive: true
+
+    function findFlickable() {
+        var p = row.parent
+        while (p) {
+            // Duck-typed instead of `instanceof Flickable`: this file has no
+            // reason to care which Flickable subclass it is inside of.
+            if (p.maximumFlickVelocity !== undefined && p.interactive !== undefined)
+                return p
+            p = p.parent
+        }
+        return null
+    }
+
+    onPressedChanged: {
+        if (row.pressed) {
+            row.flickAncestor = row.findFlickable()
+            if (row.flickAncestor) {
+                row.flickWasInteractive = row.flickAncestor.interactive
+                row.flickAncestor.interactive = false
+            }
+        } else if (row.flickAncestor) {
+            // Restore what it was, not a blunt `true`: a Flickable that was
+            // deliberately inert has to stay that way.
+            row.flickAncestor.interactive = row.flickWasInteractive
+            row.flickAncestor = null
+        }
+    }
+
     Image {
         id: iconImage
         visible: row.icon.length > 0
