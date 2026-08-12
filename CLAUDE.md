@@ -1057,6 +1057,25 @@ Lo que esos dos no pueden probar, y cómo se probó:
   ajustes los lee también el botón manual, que anda con la casilla apagada: grisarlos dejaba la
   solapa inservible para quien solo quería el botón. Antes de gatear un `QWidget` contenedor,
   preguntá si esos controles tienen un segundo consumidor.
+- **Una sección nueva del panel de control se toca en TRES lugares, y el que se olvida no da
+  error** (2026-08-12): la fila en `CmSections::all()`, la entrada del `.qml` en
+  `controlmanager/CMakeLists.txt`, y **el `case` en `CmSectionView.qml`**. Sin ese último la
+  solapa aparece en la barra, se selecciona, y se abre **completamente vacía**: el `Loader` se
+  queda sin `source` y no hay una sola línea en el log. Lo agarra
+  `tests/static/check-cm-sections.py`, que cruza las tres puntas.
+- **`QColor` guarda más de 8 bits, así que un contraste que "cumple" puede dejar de cumplir al
+  escribirlo.** `ensureContrast()` alcanzaba exactamente 1.200 y el redondeo a 8 bits —que es
+  lo que va al `.colors` y lo que el usuario ve— lo dejaba en 1.193, con el test del contrato
+  fallando sobre un color que la propia función había dado por bueno. La medición tiene que
+  hacerse **sobre la forma de 8 bits**, no sobre la interna.
+- **Un fondo monocromático rompe cualquier "probá otro color" basado en el tono.** Medido: una
+  captura de pantalla con **56 cubetas vívidas, todas en el tono 202°**. Dos errores se suman
+  ahí — mirar solo las N cubetas más votadas para elegir candidatas (todas del mismo tono) y no
+  tener plan B cuando la imagen de verdad tiene un solo color. El tope va sobre lo que **sale**,
+  no sobre lo que se mira, y la lista se completa con armonías del dominante. Sin eso, ocho
+  clics dan ocho veces el mismo esquema y se lee como "el botón dejó de funcionar" — y ojo,
+  **el mecanismo sí anda**: el ping-pong de los dos `.colors` avanza y se aplica ocho veces. Si
+  vas a diagnosticar esto, mirá el **color** que sale, no si hubo aplicación.
 - **Los colores dominantes de una foto suelen ser el mismo tono**, y eso hace invisible
   cualquier "probá otro color" ingenuo. Las tres cubetas más votadas de un fondo real fueron
   (25,39,47), (71,116,143) y (51,87,109) — un solo azul en tres matices — así que un esquema

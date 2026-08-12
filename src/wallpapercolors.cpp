@@ -147,6 +147,12 @@ WallpaperPalette computePalette(const QString &path)
         return true;
     };
 
+    // Every bucket, not just the first kMaxCandidates: the cap is on how many
+    // candidates come *out*, not on how far we look. Capping the scan was a bug
+    // — a wallpaper whose eight most populated buckets are all one hue (a
+    // screenshot, measured: 56 vivid buckets, every one of them at hue 202°)
+    // ended up with a single candidate, so "Generate color" kept producing the
+    // same scheme and read as having stopped working.
     for (int key : keys) {
         if (out.candidates.size() >= WallpaperColors::kMaxCandidates)
             break;
@@ -154,6 +160,33 @@ WallpaperPalette computePalette(const QString &path)
         const QColor c(int(sumR[key] / n), int(sumG[key] / n), int(sumB[key] / n));
         if (hueFarEnough(c))
             out.candidates.append(c);
+    }
+
+    // A genuinely monochromatic wallpaper has one hue, and no amount of looking
+    // finds a second — but the button still has to give something new on the
+    // next press. Top the list up with *harmonies* of the dominant color: the
+    // complementary, the two triadic thirds, and so on. They are still derived
+    // from the wallpaper (they are its own hue, rotated by the classic
+    // intervals), which is what keeps the result feeling related to the image
+    // instead of random. The image's own colors always come first.
+    if (!out.candidates.isEmpty()) {
+        static const int kHarmonies[] = {180, 120, 240, 30, 330, 150, 210, 60};
+        const QColor base = out.candidates.first();
+        int h, s, v, a;
+        base.getHsv(&h, &s, &v, &a);
+        if (h >= 0) {
+            for (int rot : kHarmonies) {
+                if (out.candidates.size() >= WallpaperColors::kMaxCandidates)
+                    break;
+                // Keep the dominant's own saturation and value: only the hue
+                // moves, so the harmony reads as "the same photo, another
+                // note". A floor on saturation stops a washed-out dominant from
+                // producing eight identical grays.
+                const QColor c = QColor::fromHsv((h + rot) % 360, qMax(s, 120), qMax(v, 90));
+                if (hueFarEnough(c))
+                    out.candidates.append(c);
+            }
+        }
     }
 
     if (out.candidates.isEmpty()) {
@@ -193,20 +226,33 @@ QColor WallpaperColors::ensureContrast(const QColor &fg, const QColor &bg, qreal
 {
     if (!fg.isValid() || !bg.isValid())
         return fg;
-    if (contrastRatio(fg, bg) >= target)
-        return fg;
+
+    // Everything here is measured on the 8-bit form, because 8 bits is what
+    // ends up in the .colors file and therefore what the user actually sees.
+    // QColor keeps more precision internally, so a value that clears the target
+    // at full precision can fall under it once rounded — measured: a button
+    // that came out at exactly 1.200 landed at 1.193 after rounding, and the
+    // test that asserts the contract failed on a colour this function had
+    // already declared good.
+    const auto round8 = [](const QColor &c) {
+        const QColor r = c.toRgb();
+        return QColor(r.red(), r.green(), r.blue());
+    };
+    const QColor bg8 = round8(bg);
+    if (contrastRatio(round8(fg), bg8) >= target)
+        return round8(fg);
 
     // Which end of the scale can actually get there, asked directly instead of
     // inferred from the background's luminance: for a mid gray the luminance
     // test picks the wrong end (it is nearer white in luma but contrasts better
     // with black), and the loop below would then walk away from the target.
     const bool lighten =
-        contrastRatio(QColor(Qt::white), bg) >= contrastRatio(QColor(Qt::black), bg);
+        contrastRatio(QColor(Qt::white), bg8) >= contrastRatio(QColor(Qt::black), bg8);
 
     int h, s, v, a;
     fg.getHsv(&h, &s, &v, &a);
-    QColor best = fg;
-    qreal bestRatio = contrastRatio(fg, bg);
+    QColor best = round8(fg);
+    qreal bestRatio = contrastRatio(best, bg8);
 
     // Value first, saturation second: dropping saturation is what lets a vivid
     // color reach white at all, but it is the more destructive of the two, so
@@ -227,8 +273,8 @@ QColor WallpaperColors::ensureContrast(const QColor &fg, const QColor &bg, qreal
             else
                 break;
         }
-        const QColor c = QColor::fromHsv(h, s, v, a);
-        const qreal r = contrastRatio(c, bg);
+        const QColor c = round8(QColor::fromHsv(h, s, v, a));
+        const qreal r = contrastRatio(c, bg8);
         if (r > bestRatio) {
             bestRatio = r;
             best = c;

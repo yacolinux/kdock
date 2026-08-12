@@ -74,6 +74,7 @@ kdock_add_static_test(static.catalog          ${KDOCK_TESTS_DIR}/static/check-ca
 kdock_add_static_test(static.tr_separator     ${KDOCK_TESTS_DIR}/static/check-tr-separator.py)
 kdock_add_static_test(static.widget_tokens    ${KDOCK_TESTS_DIR}/static/check-widget-tokens.py)
 kdock_add_static_test(static.card_fg          ${KDOCK_TESTS_DIR}/static/check-card-fg.py)
+kdock_add_static_test(static.cm_sections      ${KDOCK_TESTS_DIR}/static/check-cm-sections.py)
 
 # ----------------------------------------------------------------- qml tier --
 #

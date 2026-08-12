@@ -244,9 +244,16 @@ private slots:
 
         const WallpaperPalette p = WallpaperColors::sample(path);
         QVERIFY(p.valid);
-        // Todas del mismo tono -> una sola candidata sobrevive. Honesto: ese
-        // fondo tiene un color, no cuatro.
-        QCOMPARE(p.candidates.size(), 1);
+        // De los cuatro azules sobrevive uno solo —son el mismo tono— y ese es
+        // el que manda.
+        QVERIFY(nearly(p.candidates.first(), QColor(25, 39, 47), 12));
+
+        // Pero la lista NO se queda en uno: un fondo monocromático igual tiene
+        // que dar variantes, o el botón "Generar Color" deja de hacer nada a
+        // partir del segundo clic (reportado 2026-08-12). Las de más son
+        // armonías del dominante — su mismo tono, rotado.
+        QVERIFY2(p.candidates.size() > 1,
+                 "un fondo de un solo tono se quedó sin variantes");
 
         // Y con tonos de verdad distintos sí entran varias, separadas.
         for (int i = 0; i < p.candidates.size(); ++i) {
@@ -274,6 +281,26 @@ private slots:
         // "Generar Color" se vea.
         QVERIFY(WallpaperColors::buildScheme(p, a).windowBg
                 != WallpaperColors::buildScheme(p, b).windowBg);
+    }
+
+    void everyVariantOfAMonochromeWallpaperDiffers()
+    {
+        // El caso del usuario, medido: una captura de pantalla con 56 cubetas
+        // vívidas, todas en el tono 202°. Antes daba una sola candidata y ocho
+        // clics en "Generar Color" daban ocho veces el mismo esquema — lo que
+        // se ve exactamente como "el botón dejó de funcionar".
+        const WallpaperPalette p = WallpaperColors::sample(m_blue); // liso, un tono
+        QVERIFY(p.valid);
+        QSet<QRgb> backgrounds;
+        for (int v = 0; v < p.candidates.size(); ++v) {
+            WallpaperColors::Options opt;
+            opt.variant = v;
+            backgrounds.insert(WallpaperColors::buildScheme(p, opt).windowBg.rgb());
+        }
+        // Un color de fondo distinto por variante: si dos coinciden, ese clic
+        // no se ve.
+        QCOMPARE(backgrounds.size(), p.candidates.size());
+        QVERIFY(p.candidates.size() >= 4);
     }
 
     void variantWraps()

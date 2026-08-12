@@ -756,6 +756,41 @@ QString AutoColorScheme::saveCurrentScheme()
     return id;
 }
 
+QVariantMap AutoColorScheme::previewEntry() const
+{
+    QColor bg, fg, sel;
+    if (m_haveScheme) {
+        bg = m_lastScheme.windowBg;
+        fg = m_lastScheme.windowFg;
+        sel = m_lastScheme.selectionBg;
+    } else {
+        // Nothing generated in this process: read back the one that is applied,
+        // so the tab has something to show the moment it opens.
+        const QString path = schemeFilePath(lastSlot() == 0 ? kSchemeIdA : kSchemeIdB);
+        if (!QFile::exists(path))
+            return {};
+        QSettings ini(path, QSettings::IniFormat);
+        const auto colorAt = [&ini](const char *key) {
+            // "r,g,b" comes back as a QStringList (QSettings splits on commas).
+            const QStringList v = ini.value(QLatin1String(key)).toStringList();
+            return v.size() == 3 ? QColor(v.at(0).toInt(), v.at(1).toInt(), v.at(2).toInt())
+                                 : QColor();
+        };
+        bg = colorAt("Colors:Window/BackgroundNormal");
+        fg = colorAt("Colors:Window/ForegroundNormal");
+        sel = colorAt("Colors:Selection/BackgroundNormal");
+    }
+    if (!bg.isValid())
+        return {};
+
+    return QVariantMap{
+        {QStringLiteral("id"),
+         QStringLiteral("colorauto:%1%2%3").arg(bg.name(), fg.name(), sel.name())},
+        {QStringLiteral("bg"), bg.name()},
+        {QStringLiteral("fg"), fg.name()},
+        {QStringLiteral("sel"), sel.name()}};
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

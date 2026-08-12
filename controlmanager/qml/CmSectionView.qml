@@ -29,7 +29,11 @@ Loader {
         case "system":    return "cards/SystemCard.qml"
         case "appearance": return "cards/AppearanceCard.qml"
         case "desktops":  return "cards/DesktopsCard.qml"
+        case "colorauto": return "cards/ColorAutoCard.qml"
         }
+        // No case = an empty Loader, i.e. a tab that opens onto nothing and a
+        // card that draws nothing, with no error anywhere. tests/static checks
+        // this switch against CmSections' table for exactly that reason.
         return ""
     }
 

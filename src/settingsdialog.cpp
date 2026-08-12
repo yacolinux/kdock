@@ -3252,6 +3252,36 @@ QWidget *SettingsDialog::createColorAutoTab()
     manualRow->addStretch();
     manualLayout->addLayout(manualRow);
 
+    // Preview of the scheme on offer: the same three swatches (window, text,
+    // selection) the theme picker draws for any other scheme, so a generated
+    // one is judged the same way as an installed one — without applying it
+    // first and then having to undo it.
+    auto *previewRow = new QHBoxLayout;
+    auto *previewSwatches = new QLabel(manualBox);
+    auto *previewText = new QLabel(manualBox);
+    previewRow->addWidget(new QLabel(tr("Color generado:"), manualBox));
+    previewRow->addWidget(previewSwatches);
+    previewRow->addWidget(previewText, 1);
+    manualLayout->addLayout(previewRow);
+
+    const auto refreshPreview = [this, previewSwatches, previewText] {
+        const QVariantMap entry =
+            m_manager && m_manager->autoColorScheme()
+                ? m_manager->autoColorScheme()->previewEntry()
+                : QVariantMap();
+        if (entry.isEmpty()) {
+            previewSwatches->clear();
+            previewText->setText(tr("(todavía no se generó ninguno)"));
+            return;
+        }
+        previewSwatches->setPixmap(
+            themePreviewPixmap(false, entry, previewSwatches->devicePixelRatioF()));
+        previewText->setText(tr("fondo %1 · texto %2 · selección %3")
+                                 .arg(entry.value(QStringLiteral("bg")).toString().toUpper(),
+                                      entry.value(QStringLiteral("fg")).toString().toUpper(),
+                                      entry.value(QStringLiteral("sel")).toString().toUpper()));
+    };
+
     auto *manualStatus = new QLabel(manualBox);
     manualStatus->setWordWrap(true);
     manualLayout->addWidget(manualStatus);
@@ -3273,6 +3303,15 @@ QWidget *SettingsDialog::createColorAutoTab()
                                        "volvé a apretar Guardar.")
                                   : tr("Guardado y aplicado como <b>%1</b>.").arg(id));
     });
+    // Generating is a D-Bus round trip, so the new colors only exist a moment
+    // later: repainting the preview from the click handler would keep showing
+    // the previous scheme. AutoColorScheme::changed is emitted once the new one
+    // is in place, which is the only correct moment.
+    if (m_manager && m_manager->autoColorScheme()) {
+        connect(m_manager->autoColorScheme(), &AutoColorScheme::changed, manualBox,
+                [refreshPreview] { refreshPreview(); });
+    }
+    refreshPreview();
     layout->addWidget(manualBox);
 
     auto *topForm = new QFormLayout;

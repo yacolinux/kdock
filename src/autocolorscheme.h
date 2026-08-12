@@ -30,6 +30,7 @@
 #include <QString>
 #include <QStringList>
 #include <QTimer>
+#include <QVariantMap>
 
 #include "wallpapercolors.h"
 
@@ -141,6 +142,16 @@ public:
     // nothing here overwrites it afterwards). Returns the id, or empty on
     // failure. Generates first when nothing has been generated yet.
     QString saveCurrentScheme();
+
+    // {id, bg, fg, sel} of the scheme on offer, in the shape
+    // themePreviewPixmap() takes, so the tab can show the same three swatches
+    // the theme picker draws. Falls back to reading the generated .colors off
+    // disk when this process has not generated anything yet — otherwise opening
+    // the tab would show an empty preview until the first click.
+    //
+    // The `id` deliberately encodes the colors: that pixmap cache is keyed by
+    // id, so a fixed one would serve the first scheme for ever.
+    QVariantMap previewEntry() const;
 
 signals:
     void changed();
