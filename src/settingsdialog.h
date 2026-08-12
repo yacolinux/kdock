@@ -148,8 +148,7 @@ private:
     // addDarkAppearanceExtrasRow(), one value instead of two.
     void addColorAutoIconsetRow(QFormLayout *form, QWidget *parent, bool dark,
                                 const QString &title, const QString &tip);
-    // Repaint the "saved as default" line and the enabled/disabled state of the
-    // whole tab. No-op when the tab isn't built.
+    // Repaint the "saved as default" line. No-op when the tab isn't built.
     void reloadColorAutoDefaults();
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
@@ -337,9 +336,7 @@ private:
     // as a member because a capture lands asynchronously.
     QListWidget *m_wallpaperSnapshotList = nullptr;
 
-    // ColorAuto tab. Members because the saved defaults are re-read whenever the
-    // feature is toggled (enabling captures them) and because everything below
-    // the master switch follows its state.
+    // ColorAuto tab: the "saved as default" line, re-read whenever the feature
+    // is toggled (enabling is what captures those defaults).
     QLabel *m_colorAutoDefaults = nullptr;
-    QWidget *m_colorAutoBody = nullptr;
 };

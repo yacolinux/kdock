@@ -15,6 +15,7 @@
 #include "appearancecontrol.h"
 #include "autocolorscheme.h"
 #include "darkmodeappearance.h"
+#include "dockmanager.h"
 #include "dockconfig.h"
 #include "sandbox.h"
 #include "theme.h"
@@ -499,6 +500,53 @@ private slots:
         }
         QVERIFY(QFile::exists(dir + QStringLiteral("/kdock-1.colors")));
         QVERIFY(QFile::exists(dir + QStringLiteral("/kdock-2.colors")));
+    }
+
+    // ---- Colores de los docks ----------------------------------------------
+
+    void clearingReachesEveryDockThatCouldHaveOne()
+    {
+        // El bug del 2026-08-12: los colores se ponían recorriendo enabledDocks()
+        // y se sacaban recorriendo knownDocks(). En una config real esas dos
+        // listas diferían en cuatro docks, que quedaban con un color generado
+        // que ya nada podía cambiar — el override de ColorAuto le gana al
+        // panelColor del propio dock, así que ni el menú contextual ni el
+        // diálogo servían. Ahora se limpia por los configs que el manager
+        // repartió, que es exactamente el conjunto que puede tener uno.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+
+        // Dos docks sobre monitores que no existen: DockManager no les arma
+        // ventana (si no, sync() intentaría con todos los servicios en nullptr
+        // y el proceso se cae).
+        writeShared(QStringLiteral("enabledScreens"),
+                    QStringList{QStringLiteral("VIRT-8"), QStringLiteral("VIRT-9")});
+        // knownDocks a propósito INCOMPLETA, que es justo el caso del bug.
+        writeShared(QStringLiteral("knownDocks"), QStringList{QStringLiteral("VIRT-8")});
+
+        DockManager::Shared shared;
+        shared.theme = &theme;
+        shared.appearance = &appearance;
+        DockManager manager(shared);
+
+        AutoColorScheme autoColors(&theme, &appearance, &manager, nullptr);
+
+        DockConfig *a = manager.configFor(QStringLiteral("VIRT-8"));
+        DockConfig *b = manager.configFor(QStringLiteral("VIRT-9"));
+        QVERIFY(a && b);
+        a->setAutoColors(QColor(10, 20, 30), QColor(200, 200, 200));
+        b->setAutoColors(QColor(10, 20, 30), QColor(200, 200, 200));
+        QVERIFY(a->autoColorActive());
+        QVERIFY(b->autoColorActive());
+
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+        autoColors.setEnabled(false);
+
+        // Los dos, no solo el que estaba en knownDocks.
+        QVERIFY(!a->autoColorActive());
+        QVERIFY2(!b->autoColorActive(),
+                 "el dock que faltaba en knownDocks quedó pegado a su color generado");
     }
 
     void aCrashedRunIsCleanedUpOnStartup()

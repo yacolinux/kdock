@@ -26,6 +26,7 @@
 #include <QColor>
 #include <QFileSystemWatcher>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -158,9 +159,12 @@ private:
     void armWallpaperWatch();
     // Push the dock colors of one screen's palette onto every dock there.
     void applyToDocks(const QString &screen, const SchemeColors &scheme);
+    // Drop the ColorAuto colours of every dock except the ones listed. The
+    // exception set is how a refresh keeps the docks it just coloured while
+    // still clearing the ones whose screen it could not resolve.
     void applySystem(const SchemeColors &scheme);
     void restoreDefaults();
-    void clearDockColors();
+    void clearDockColors(const QSet<QString> &except = {});
     void removeGeneratedFiles();
     // Connector name of the monitor the system scheme follows.
     QString systemScreenName() const;

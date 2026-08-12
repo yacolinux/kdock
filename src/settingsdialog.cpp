@@ -274,7 +274,6 @@ void SettingsDialog::buildTabs()
     // Next to DarkMode on purpose: it is the other feature that rewrites the
     // desktop's appearance, and the two are interlocked (dark mode suspends it).
     m_colorAutoDefaults = nullptr;
-    m_colorAutoBody = nullptr;
     m_colorAutoTabIndex = -1;
     if (m_manager && m_manager->autoColorScheme()) {
         addTab(createColorAutoTab(), tr("ColorAuto"));
@@ -3229,10 +3228,9 @@ QWidget *SettingsDialog::createColorAutoTab()
     layout->addWidget(warn);
 
     // --- Manual actions ----------------------------------------------------
-    // Deliberately ABOVE the master switch and outside m_colorAutoBody: these
-    // two work with ColorAuto switched off, which is the whole point of them
-    // (same as the dock widget and the panel card). Putting them in the body
-    // would grey them out exactly when they are most useful.
+    // Deliberately ABOVE the master switch: these two work with ColorAuto
+    // switched off, which is the whole point of them (same as the dock widget
+    // and the panel card).
     auto *manualBox = new QGroupBox(tr("A mano"), tab);
     auto *manualLayout = new QVBoxLayout(manualBox);
     auto *manualRow = new QHBoxLayout;
@@ -3279,8 +3277,11 @@ QWidget *SettingsDialog::createColorAutoTab()
 
     auto *topForm = new QFormLayout;
 
-    auto *enabled = new QCheckBox(tr("Generar esquema automático desde el fondo"), tab);
+    auto *enabled = new QCheckBox(tr("Activar ColorAuto"), tab);
     enabled->setChecked(AutoColorScheme::enabled());
+    enabled->setToolTip(tr("Regenera el esquema solo, cada vez que cambia el fondo. Con esto "
+                           "apagado los ajustes de abajo se siguen usando: valen igual para "
+                           "«Generar Color», el widget del dock y la tarjeta del panel."));
     topForm->addRow(tr("ColorAuto:"), enabled);
 
     auto *lightness = new QComboBox(tab);
@@ -3302,9 +3303,9 @@ QWidget *SettingsDialog::createColorAutoTab()
     topForm->addRow(tr("Claridad:"), lightness);
     layout->addLayout(topForm);
 
-    // Everything below the master switch, so it can be greyed out in one go.
+    // Everything below the master switch. Only a container for the layout —
+    // it is deliberately never disabled, see syncEnabled() at the end.
     auto *body = new QWidget(tab);
-    m_colorAutoBody = body;
     auto *bodyLayout = new QVBoxLayout(body);
     bodyLayout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(body);
@@ -3457,14 +3458,20 @@ QWidget *SettingsDialog::createColorAutoTab()
     });
     bodyLayout->addWidget(applyNow);
 
-    // The master switch gates everything below it. Reading the state back from
-    // AutoColorScheme rather than from the checkbox: turning it on captures the
-    // defaults, and dark mode can turn it off from underneath us.
+    // The master switch does NOT gate the settings below it, and that is the
+    // point: every one of them (lightness, selection color, icon sets, which
+    // monitor wins, whether the docks are coloured) is read by "Generar Color",
+    // the dock widget and the panel card too, and those work with the feature
+    // switched off. Greying them out made the whole tab unusable for anyone who
+    // only wanted the manual button — reported 2026-08-12. The switch decides
+    // *when* the scheme is regenerated, not *how*.
+    //
+    // State is read back from AutoColorScheme rather than from the checkbox:
+    // turning it on captures the defaults, and dark mode can turn it off from
+    // underneath us.
     const auto syncEnabled = [this, enabled] {
         const QSignalBlocker block(enabled);
         enabled->setChecked(AutoColorScheme::enabled());
-        if (m_colorAutoBody)
-            m_colorAutoBody->setEnabled(AutoColorScheme::enabled());
         reloadColorAutoDefaults();
     };
     connect(enabled, &QCheckBox::toggled, this, [this, syncEnabled](bool on) {

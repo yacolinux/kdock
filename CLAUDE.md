@@ -1042,6 +1042,21 @@ Lo que esos dos no pueden probar, y cómo se probó:
   esquema **después** de que la restauración ya devolvió el del usuario: queda puesto justo lo
   que se acaba de apagar. La guarda va al principio del handler, releyendo el estado en vez de
   confiar en el que había cuando se lanzó la llamada.
+- **Un override de tiempo de lectura tapa la opción del usuario, así que limpiarlo mal deja el
+  control muerto** (2026-08-12, reportado). Los colores de ColorAuto se ponían recorriendo
+  `enabledDocks()` y se sacaban recorriendo `knownDocks()`; en la config real esas listas
+  diferían en **cuatro docks**, que quedaban con un color que después no se podía cambiar por
+  ningún lado — el menú contextual y el diálogo escriben `panelColor`, y la rama del override
+  va antes en el binding. **El conjunto que se limpia tiene que derivarse del que se pinta**:
+  acá, los `DockConfig` que el manager repartió (`liveConfigs()`), porque los colores solo
+  llegan por `configFor()`. Dos listas que "deberían" coincidir es lo que hay que evitar.
+  Se comprueba con `grep -m1 '^enabledScreens=' ~/.local/share/kdock/kdock.conf` contra
+  `grep -m1 '^knownDocks='`: no son la misma lista y nunca lo fueron.
+- **Deshabilitar el cuerpo de una solapa detrás de su casilla maestra es una trampa cuando esos
+  ajustes los usa alguien más.** En ColorAuto la casilla decide *cuándo* se regenera, pero los
+  ajustes los lee también el botón manual, que anda con la casilla apagada: grisarlos dejaba la
+  solapa inservible para quien solo quería el botón. Antes de gatear un `QWidget` contenedor,
+  preguntá si esos controles tienen un segundo consumidor.
 - **Los colores dominantes de una foto suelen ser el mismo tono**, y eso hace invisible
   cualquier "probá otro color" ingenuo. Las tres cubetas más votadas de un fondo real fueron
   (25,39,47), (71,116,143) y (51,87,109) — un solo azul en tres matices — así que un esquema

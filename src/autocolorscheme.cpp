@@ -452,13 +452,15 @@ void AutoColorScheme::restoreDefaults()
     setManual(false);
 }
 
-void AutoColorScheme::clearDockColors()
+void AutoColorScheme::clearDockColors(const QSet<QString> &except)
 {
     if (!m_manager)
         return;
-    const QStringList docks = DockConfig::knownDocks();
-    for (const QString &dockId : docks) {
-        if (DockConfig *cfg = m_manager->configFor(dockId))
+    // Every config the manager has handed out, not a list of dockIds: see
+    // DockManager::liveConfigs() for why walking a list is what broke this.
+    const auto configs = m_manager->liveConfigs();
+    for (DockConfig *cfg : configs) {
+        if (cfg && !except.contains(cfg->dockId()))
             cfg->clearAutoColors();
     }
 }
@@ -611,8 +613,21 @@ void AutoColorScheme::applyPalettes(const QHash<QString, QString> &imageByScreen
         return;
 
     if (colorDocks()) {
-        for (auto it = byScreen.constBegin(); it != byScreen.constEnd(); ++it)
+        // Colour the docks of every screen we resolved, and clear the rest.
+        // Clearing the rest matters: a monitor that got unplugged (or whose
+        // wallpaper stopped being readable) would otherwise keep its last
+        // generated colour for the life of the process, and that colour
+        // outranks the dock's own panelColor — so the dock would be stuck on a
+        // colour nothing could change.
+        QSet<QString> coloured;
+        for (auto it = byScreen.constBegin(); it != byScreen.constEnd(); ++it) {
             applyToDocks(it.key(), it.value());
+            const auto ids = m_manager ? m_manager->enabledDocksForScreen(it.key())
+                                       : QStringList();
+            for (const QString &id : ids)
+                coloured.insert(id);
+        }
+        clearDockColors(coloured);
     } else {
         clearDockColors();
     }

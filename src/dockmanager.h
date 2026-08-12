@@ -229,6 +229,16 @@ public:
     // dialog can edit a dock even before it is shown.
     DockConfig *configFor(const QString &dockId);
 
+    // Every DockConfig handed out so far. ColorAuto clears its per-dock colors
+    // through this instead of walking a dockId list: those colors only ever
+    // reach a config through configFor(), so this is exactly the set that can
+    // be holding one, and it cannot drift from it. Walking a list can — and
+    // did: the colors went on via enabledDocks() and came off via knownDocks(),
+    // which on a real config differed by four docks. Those four kept a
+    // generated color that nothing could then change, because the dock's
+    // read-time override outranks its own panelColor (2026-08-12).
+    QList<DockConfig *> liveConfigs() const { return m_configs.values(); }
+
     // Global shared services. The settings dialog uses these regardless of
     // which dock opened it.
     RelanzadoresManager *relanzadores() const { return m_shared.relanzadores; }
