@@ -203,6 +203,22 @@ void DockConfig::setShowTooltips(bool on)
         emit cfg->showTooltipsChanged();
 }
 
+QString DockConfig::qtStyle()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("qtStyle"), QString()).toString();
+}
+
+void DockConfig::setQtStyle(const QString &name)
+{
+    if (qtStyle() == name)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("qtStyle"), name);
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->qtStyleChanged();
+}
+
 bool DockConfig::darkModeAllDocks()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

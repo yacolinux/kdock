@@ -62,6 +62,10 @@ int main(int argc, char *argv[])
     // thing on screen for a while.
     app.setQuitOnLastWindowClosed(false);
 
+    const QString style = DockConfig::qtStyle();
+    if (!style.isEmpty())
+        app.setStyle(style);
+
     const QStringList args = app.arguments();
 
     if (args.contains(QStringLiteral("--dump-layout")))

@@ -148,6 +148,7 @@ class DockConfig : public QObject
     Q_PROPERTY(QColor autoAccent READ autoAccent NOTIFY autoColorChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(bool showTooltips READ showTooltipsProp NOTIFY showTooltipsChanged)
+    Q_PROPERTY(QString qtStyle READ qtStyleProp NOTIFY qtStyleChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
     Q_PROPERTY(QStringList widgetOrder READ widgetOrder WRITE setWidgetOrder NOTIFY widgetOrderChanged)
     Q_PROPERTY(int dockLength READ dockLength WRITE setDockLength NOTIFY dockLengthChanged)
@@ -325,6 +326,11 @@ public:
     // ToolTip shows on any element of any dock. Shared setting, not per dock.
     static bool showTooltips();
     static void setShowTooltips(bool on);
+
+    // Qt widget style for the whole app, persisted in the shared config.
+    // Empty (default) = let Qt decide (Breeze on KDE, Fusion elsewhere).
+    static QString qtStyle();
+    static void setQtStyle(const QString &name);
 
     // ---- Dark mode (app-wide part) ----------------------------------------
     // Breeze Dark's two colors, copied into the app on purpose: the dark scheme
@@ -666,6 +672,7 @@ public:
     // but QML reads it as a per-instance property so the ToolTip bindings
     // (`config.showTooltips`) re-evaluate when the dialog flips the checkbox.
     bool showTooltipsProp() const { return showTooltips(); }
+    QString qtStyleProp() const { return qtStyle(); }
     QStringList menuFavorites() const { return m_menuFavorites; }
     int separator1() const { return m_separator1; }
     int separator2() const { return m_separator2; }
@@ -825,6 +832,7 @@ signals:
     void aliasChanged();
     void dockDesktopsChanged();
     void showTooltipsChanged();
+    void qtStyleChanged();
     void panelModeChanged();
     void compactChanged();
     void alignmentChanged();

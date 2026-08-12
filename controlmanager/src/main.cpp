@@ -13,6 +13,7 @@
 #include "cmservice.h"
 #include "cmwindow.h"
 #include "desktopentry.h"
+#include "dockconfig.h"
 #include "docklink.h"
 #include "mpriscontrol.h"
 #include "networkcontrol.h"
@@ -189,6 +190,10 @@ int main(int argc, char *argv[])
     // The panel hides instead of closing, and the settings dialog can be the
     // only thing on screen for a while.
     app.setQuitOnLastWindowClosed(false);
+
+    const QString style = DockConfig::qtStyle();
+    if (!style.isEmpty())
+        app.setStyle(style);
 
     const QStringList args = app.arguments();
 

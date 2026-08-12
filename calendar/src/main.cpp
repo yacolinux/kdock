@@ -2,6 +2,8 @@
 #include <QCommandLineParser>
 #include <QDate>
 #include <QScreen>
+#include <QSettings>
+#include <QStandardPaths>
 
 #include "calendarwidget.h"
 
@@ -18,6 +20,15 @@ int main(int argc, char *argv[])
     app.setOrganizationName(QStringLiteral("kdock"));
     app.setApplicationDisplayName(QStringLiteral("Calendario"));
     app.setDesktopFileName(QStringLiteral("kdock-calendar"));
+
+    {
+        const QString style = QSettings(
+            QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation)
+                + QStringLiteral("/kdock.conf"),
+            QSettings::IniFormat).value(QStringLiteral("qtStyle")).toString();
+        if (!style.isEmpty())
+            app.setStyle(style);
+    }
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral(

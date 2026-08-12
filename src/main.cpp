@@ -177,6 +177,10 @@ int main(int argc, char *argv[])
     app.setDesktopFileName(QStringLiteral("kdock"));
     app.setQuitOnLastWindowClosed(false);
 
+    const QString style = DockConfig::qtStyle();
+    if (!style.isEmpty())
+        app.setStyle(style);
+
     // One-shot CLI (next-wall.sh): advance a monitor's slideshow and exit,
     // before building any dock.
     {

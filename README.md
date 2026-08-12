@@ -169,6 +169,9 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
   un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
   de lo que le queda.
+- **Estilo Qt para todo kdock**: un desplegable en *General* elige el widget style del proceso
+  — `Breeze`, `Fusion`…— para todos los docks y binarios a la vez. Vacío = el que Qt decida
+  (Breeze en KDE, Fusion en otros escritorios). Se aplica al reiniciar.
 - **Tooltips globales**: un casillero en *General* prende o apaga todos los tooltips de todos
   los docks a la vez, para no pagar sus ventanas si no los querés.
 - **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un

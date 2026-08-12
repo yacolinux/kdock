@@ -5,6 +5,7 @@
 #include <QtPlugin>
 
 #include "kwinwindows.h"
+#include "dockconfig.h"
 #include "previewconfig.h"
 #include "previewmanager.h"
 #include "previewsservice.h"
@@ -112,6 +113,10 @@ int main(int argc, char *argv[])
     // this binary cannot work without (see kdock-previews.desktop.in).
     app.setDesktopFileName(QStringLiteral("kdock-previews"));
     app.setQuitOnLastWindowClosed(false);
+
+    const QString style = DockConfig::qtStyle();
+    if (!style.isEmpty())
+        app.setStyle(style);
 
     const QStringList args = app.arguments();
 

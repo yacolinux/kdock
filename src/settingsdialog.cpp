@@ -62,6 +62,7 @@
 #include <QScrollArea>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QStyleFactory>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
@@ -656,6 +657,37 @@ QWidget *SettingsDialog::createGeneralTab()
 
         minIcon->setEnabled(m_config->autoShrinkIcons());
         connect(autoShrink, &QCheckBox::toggled, minIcon, &QWidget::setEnabled);
+    }
+
+    // ---- Appearance section separator -----------------------------------
+    {
+        auto *sep = new QFrame(tab);
+        sep->setFrameShape(QFrame::HLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        form->addRow(sep);
+    }
+
+    // Qt widget style for the whole kdock suite, persisted in the shared config.
+    {
+        auto *styleCombo = new QComboBox(tab);
+        styleCombo->addItem(tr("(System default)"), QString());
+        const QStringList keys = QStyleFactory::keys();
+        for (const QString &k : keys)
+            styleCombo->addItem(k, k);
+        const int idx = styleCombo->findData(DockConfig::qtStyle());
+        styleCombo->setCurrentIndex(idx < 0 ? 0 : idx);
+        styleCombo->setToolTip(tr("Qt default (Breeze on KDE, Fusion elsewhere)"));
+        connect(styleCombo, &QComboBox::currentIndexChanged, this,
+                [this, styleCombo](int i) {
+                    const QString val = styleCombo->itemData(i).toString();
+                    if (DockConfig::qtStyle() == val)
+                        return;
+                    DockConfig::setQtStyle(val);
+                    QMessageBox::information(
+                        this, tr("Qt Style"),
+                        tr("El estilo se aplicará la próxima vez que inicies kdock."));
+                });
+        form->addRow(tr("Qt style:"), styleCombo);
     }
 
     // Icon theme (global; overrides the KDE theme for all docks).

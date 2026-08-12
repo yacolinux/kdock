@@ -2,6 +2,7 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include "dockconfig.h"
 #include "theme.h"
 #include "translations.h"
 #include "weatherconfig.h"
@@ -66,6 +67,10 @@ int main(int argc, char *argv[])
     // The settings dialog can be the only thing on screen for a while (a first
     // run with no city configured opens exactly that).
     app.setQuitOnLastWindowClosed(false);
+
+    const QString style = DockConfig::qtStyle();
+    if (!style.isEmpty())
+        app.setStyle(style);
 
     const QStringList args = app.arguments();
 
