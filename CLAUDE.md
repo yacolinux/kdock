@@ -50,6 +50,26 @@ cmake --build build -j
 `env -u CC -u CXX` es obligatorio: las variables apuntan a ccache y CMake falla si están
 seteadas.
 
+### Qt style (widgets + QML)
+
+Desde RELEASE 0.1.12, Configuración → General tiene un combo que elige el estilo de Qt
+para **todo el proceso** (`QApplication::setStyle`) y para los menús QML del dock
+(`QQuickStyle::setStyle`). La clave `qtStyle` en `kdock.conf` (compartida, vacío = Fusion).
+
+Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
+
+1. **`app.setStyle` no alcanza**: los menús y popups del dock son QML (`Popup.Window`) y
+   usan su propio sistema de estilos (Qt Quick Controls 2), independiente de Qt Widgets.
+2. **`QQuickStyle::setStyle` no surte efecto** mientras los `.qml` importen
+   `QtQuick.Controls.Basic` explícitamente. Ni la API ni la variable de entorno
+   `QT_QUICK_CONTROLS_STYLE` lo overridean: el import tiene precedencia absoluta.
+3. **Fix**: cambiar los ~40 `.qml` de `import QtQuick.Controls.Basic` a
+   `import QtQuick.Controls` (sin sufijo). Sin el import forzado, `QQuickStyle::setStyle`
+   funciona.
+4. **Solo los nombres QQC2 conocidos** (`Basic`, `Fusion`, `Material`, `Universal`,
+   `Imagine`) se pasan a `setStyle`; cualquier otro (Breeze, Oxygen, Windows…) cae a
+   Fusion, o kdock no arranca.
+
 **Son seis binarios**, los seis los compila el mismo `cmake --build build`:
 
 - `kdock`;
