@@ -983,6 +983,19 @@ Lo que esos dos no pueden probar, y cómo se probó:
 - **Comprobá que no le tocaste el escritorio al usuario**: `grep -m1 "^ColorScheme="
   ~/.kde-opt/config/kdeglobals` y `ls ~/.local/share/color-schemes/ | grep -i kdock` (tiene que
   salir vacío). El `PATH` falso es lo que lo garantiza.
+- **El watcher del wallpaper solo se prueba en la sesión real**, y la prueba es una segunda
+  instancia aislada (`XDG_DATA_HOME` descartable, `autohide=true` para no moverle ninguna
+  ventana al usuario, `PATH` falso) más **el script del usuario de verdad**. Lo que se mira no
+  es el color sino el **ping-pong de los dos `.colors`**: si el archivo pasó de
+  `KdockColorAuto1` a `KdockColorAuto2`, el watcher disparó y hubo una aplicación nueva.
+  `grep colorscheme /tmp/fakebin/calls.log` lo cuenta de una: tres líneas donde antes había
+  una. Acordate de que esa instancia **no puede tomar `org.kdock.Dock`** (lo tiene el dock
+  real), así que la tarjeta del panel no se prueba por ahí.
+- **Una sonda de `generateNow()` con `QT_QPA_PLATFORM=offscreen` no hace nada y no falla.**
+  El mapeo containment → conector sale de `QGuiApplication::screens()`, y offscreen no le pone
+  nombre a la pantalla: `imageByScreen` queda vacío y `applyPalettes()` vuelve sin escribir
+  nada. Se ve igual que "la generación está rota". Bajo Xvfb con `xcb` la pantalla se llama
+  `screen` y está en 0,0, que matchea el containment del monitor principal.
 
 ## Trampas que muerden
 
@@ -1011,6 +1024,32 @@ Lo que esos dos no pueden probar, y cómo se probó:
   `DockConfig` obtiene `false`: el modo oscuro nunca "se activa" y todo lo que dependa de él
   da verde **sin haber probado nada**. Un `DockConfig cfg(QStringLiteral("VIRT-9"))` (un
   monitor inventado, que no crea ventana) es lo que hace falta.
+- **Los triggers "en proceso" para un cambio de fondo no alcanzan, y el agujero es el caso
+  normal** (2026-08-12). Cualquier feature que reaccione al wallpaper tiene que vigilar
+  `plasma-org.kde.plasma.desktop-appletsrc`: los scripts del Script Runner hablan `qdbus6`
+  derecho a plasmashell, el pase de diapositivas de KDE avanza solo y Preferencias del Sistema
+  no consulta a nadie — kdock no participa en ninguno de los tres. **Y `kdock --next-wallpaper`
+  tampoco sirve como aviso**: corre en un proceso aparte que emite su señal y sale, así que el
+  dock que está corriendo nunca se entera. Costó entregar ColorAuto con la feature muerta en
+  el flujo real del usuario.
+- **`QFileSystemWatcher` suelta el watch cuando el archivo se reemplaza por `rename`.**
+  KConfig (y casi todo lo que guarda de forma atómica) escribe un temporal y lo renombra
+  encima, así que el inodo vigilado deja de existir: el watcher dispara **una sola vez** y
+  después nunca más, sin un error. Hay que re-agregar el path en cada señal y vigilar también
+  el directorio, porque entre el `unlink` y el `rename` el archivo no existe.
+- **Cuidado con las respuestas asíncronas que llegan después de que el usuario canceló.** Un
+  `evaluateScript` en vuelo cuando se apaga la casilla vuelve igual, y aplicar ahí pone el
+  esquema **después** de que la restauración ya devolvió el del usuario: queda puesto justo lo
+  que se acaba de apagar. La guarda va al principio del handler, releyendo el estado en vez de
+  confiar en el que había cuando se lanzó la llamada.
+- **Los colores dominantes de una foto suelen ser el mismo tono**, y eso hace invisible
+  cualquier "probá otro color" ingenuo. Las tres cubetas más votadas de un fondo real fueron
+  (25,39,47), (71,116,143) y (51,87,109) — un solo azul en tres matices — así que un esquema
+  construido con el *tono* daba fondos separados por un punto (`33,37,40` contra `33,38,40`):
+  el botón parecía roto. Hay que descartar candidatas por **distancia de tono**, no por color.
+  Y ojo con el modelo mental: la dominante es la más votada entre los píxeles **vívidos**, no
+  el promedio — una foto de media cálida (146,93,63) puede tener como dominante un azul oscuro
+  (1,22,48), porque lo cálido estaba desaturado y el portón lo descarta.
 
 - **Un `import` de QML que falta no imprime NADA: el dock arranca con la ventana vacía**
   (2026-08-09). `Dock.qml` y `previews/qml/PreviewCard.qml` importan

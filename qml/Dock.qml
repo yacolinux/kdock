@@ -668,6 +668,9 @@ Item {
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
         case "darkmode": return config.showDarkMode
         case "pager": return config.showPager && virtualDesktops && virtualDesktops.count > 0
+        // Shown whenever the flag is on, even with ColorAuto switched off: the
+        // whole point of the button is that it works either way.
+        case "colorauto": return config.showColorAuto && autoColors
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
         case "systray": return systray && config.showSystray && systray.count > 0
@@ -711,6 +714,7 @@ Item {
         case "nextwallpaper": return nextWallpaperComp
         case "darkmode": return darkModeComp
         case "pager": return pagerComp
+        case "colorauto": return colorAutoComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
         case "systray": return systrayComp
@@ -756,6 +760,7 @@ Item {
         case "closewindow": return qsTr("Close window (right-click: send to next desktop, staying here)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
         case "darkmode": return qsTr("Modo normal (clic derecho: modo oscuro)")
+        case "colorauto": return qsTr("Generar color del fondo (clic derecho: configurar)")
         case "iconthemes": return qsTr("Iconset de KDE")
         case "colorschemes": return qsTr("Esquema de color de KDE")
         case "autohide": return config.autohide ? qsTr("Dock auto-hides") : qsTr("Dock stays visible")
@@ -787,6 +792,7 @@ Item {
         else if (token === "showdesktop" && showdesktop) showdesktop.minimizeAllWindows()
         else if (token === "settings") dockWindow.openSettings()
         else if (token === "clock2") clock2.launch()
+        else if (token === "colorauto" && autoColors) autoColors.generateNow()
     }
 
     // Widgets whose right click is an action of their own instead of the
@@ -796,6 +802,7 @@ Item {
         return token === "volume" || token === "brightness" || token === "movetoscreen"
                || token === "maxmin"
                || token === "closewindow" || token === "darkmode"
+               || token === "colorauto"
     }
 
     function sectionAltClick(token) {
@@ -807,6 +814,7 @@ Item {
         else if (token === "maxmin" && maxmin) maxmin.minimize()
         else if (token === "closewindow" && activeWindow) activeWindow.sendActiveToNextDesktop()
         else if (token === "darkmode") config.setDarkModeActive(true)
+        else if (token === "colorauto") dockWindow.openColorAutoSettings()
     }
 
     function sectionWheel(token, dy) {
@@ -3585,6 +3593,29 @@ Item {
                 source: "image://icon/"
                         + (config.darkModeActive ? "weather-clear-night" : "weather-clear")
                         + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: parent.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    // "Generate color": one click builds a scheme from this monitor's wallpaper
+    // and applies it. Repeating it walks to the next candidate color of the same
+    // image, so it is worth pressing more than once.
+    Component {
+        id: colorAutoComp
+        Item {
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                source: "image://icon/color-management" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
                 opacity: 0.85

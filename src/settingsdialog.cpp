@@ -275,8 +275,11 @@ void SettingsDialog::buildTabs()
     // desktop's appearance, and the two are interlocked (dark mode suspends it).
     m_colorAutoDefaults = nullptr;
     m_colorAutoBody = nullptr;
-    if (m_manager && m_manager->autoColorScheme())
+    m_colorAutoTabIndex = -1;
+    if (m_manager && m_manager->autoColorScheme()) {
         addTab(createColorAutoTab(), tr("ColorAuto"));
+        m_colorAutoTabIndex = m_tabWidget->count() - 1;
+    }
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
@@ -1773,6 +1776,15 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showPager, &QCheckBox::toggled, m_config, &DockConfig::setShowPager);
     form->addRow(tr("Escritorios:"), showPager);
 
+    auto *showColorAuto = new QCheckBox(tr("Mostrar «Generar Color»"), tab);
+    showColorAuto->setChecked(m_config->showColorAuto());
+    showColorAuto->setToolTip(tr("Un clic arma un esquema de color con el fondo de este "
+                                 "monitor y lo aplica al dock y al sistema, esté ColorAuto "
+                                 "activado o no; repetirlo pasa al siguiente color del mismo "
+                                 "fondo. Clic derecho: la solapa ColorAuto."));
+    connect(showColorAuto, &QCheckBox::toggled, m_config, &DockConfig::setShowColorAuto);
+    form->addRow(tr("Generar Color:"), showColorAuto);
+
     // The tray can live in any dock, but in only one at a time: several docks
     // drawing the same StatusNotifierItems would duplicate every icon and open
     // two menus for one click. While another dock holds it, the checkbox is
@@ -2748,6 +2760,12 @@ void SettingsDialog::showVideoTab()
         m_tabWidget->setCurrentIndex(m_videoTabIndex);
 }
 
+void SettingsDialog::showColorAutoTab()
+{
+    if (m_colorAutoTabIndex >= 0 && m_colorAutoTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_colorAutoTabIndex);
+}
+
 void SettingsDialog::showAudioTab()
 {
     if (m_audioTabIndex >= 0 && m_audioTabIndex < m_tabWidget->count())
@@ -3209,6 +3227,55 @@ QWidget *SettingsDialog::createColorAutoTab()
         tab);
     warn->setWordWrap(true);
     layout->addWidget(warn);
+
+    // --- Manual actions ----------------------------------------------------
+    // Deliberately ABOVE the master switch and outside m_colorAutoBody: these
+    // two work with ColorAuto switched off, which is the whole point of them
+    // (same as the dock widget and the panel card). Putting them in the body
+    // would grey them out exactly when they are most useful.
+    auto *manualBox = new QGroupBox(tr("A mano"), tab);
+    auto *manualLayout = new QVBoxLayout(manualBox);
+    auto *manualRow = new QHBoxLayout;
+
+    auto *generate = new QPushButton(QIcon::fromTheme(QStringLiteral("color-management")),
+                                     tr("Generar Color"), manualBox);
+    generate->setToolTip(tr("Genera un esquema del fondo actual y lo aplica al dock y al "
+                            "sistema, esté ColorAuto activado o no. Apretarlo otra vez sobre "
+                            "el mismo fondo pasa al siguiente color del mismo, así que se "
+                            "puede ir probando hasta que guste."));
+    auto *save = new QPushButton(QIcon::fromTheme(QStringLiteral("document-save")),
+                                 tr("Guardar Color Scheme"), manualBox);
+    save->setToolTip(tr("Guarda el esquema que está puesto como uno permanente "
+                        "(kdock-1, kdock-2…) en tu carpeta de esquemas, y lo aplica. A "
+                        "partir de ahí es tuyo: ni apagar ColorAuto ni reiniciar el dock "
+                        "lo pisan."));
+    manualRow->addWidget(generate);
+    manualRow->addWidget(save);
+    manualRow->addStretch();
+    manualLayout->addLayout(manualRow);
+
+    auto *manualStatus = new QLabel(manualBox);
+    manualStatus->setWordWrap(true);
+    manualLayout->addWidget(manualStatus);
+
+    connect(generate, &QPushButton::clicked, this, [this, manualStatus] {
+        if (!m_manager || !m_manager->autoColorScheme())
+            return;
+        m_manager->autoColorScheme()->generateNow();
+        manualStatus->setText(tr("Generando…"));
+    });
+    connect(save, &QPushButton::clicked, this, [this, manualStatus] {
+        if (!m_manager || !m_manager->autoColorScheme())
+            return;
+        const QString id = m_manager->autoColorScheme()->saveCurrentScheme();
+        // Empty means there was nothing generated yet, so save kicked off a
+        // generation instead. Saying so beats a button that looks inert.
+        manualStatus->setText(id.isEmpty()
+                                  ? tr("Todavía no hay nada generado: se generó uno ahora, "
+                                       "volvé a apretar Guardar.")
+                                  : tr("Guardado y aplicado como <b>%1</b>.").arg(id));
+    });
+    layout->addWidget(manualBox);
 
     auto *topForm = new QFormLayout;
 

@@ -49,6 +49,17 @@ public slots:
     // Restarts the whole kdock process, i.e. every dock it draws.
     Q_SCRIPTABLE void restart();
 
+    // ColorAuto's "generate a color from the wallpaper and apply it". It lives
+    // here rather than in the panel's own process because the engine keeps
+    // state that must exist exactly once: which of the two generated schemes is
+    // current (plasma-apply-colorscheme ignores a re-apply of the same name, so
+    // they alternate). Two processes ping-ponging the same two names would step
+    // on each other.
+    Q_SCRIPTABLE void generateColorScheme();
+    // Keep the generated scheme permanently as kdock-<n>; returns its id, or
+    // empty when there was nothing generated yet.
+    Q_SCRIPTABLE QString saveColorScheme();
+
     Q_SCRIPTABLE bool darkMode();
     Q_SCRIPTABLE void setDarkMode(bool on);
     Q_SCRIPTABLE void toggleDarkMode();

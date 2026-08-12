@@ -128,6 +128,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
     Q_PROPERTY(bool showDarkMode READ showDarkMode WRITE setShowDarkMode NOTIFY showDarkModeChanged)
     Q_PROPERTY(bool showPager READ showPager WRITE setShowPager NOTIFY showPagerChanged)
+    Q_PROPERTY(bool showColorAuto READ showColorAuto WRITE setShowColorAuto NOTIFY showColorAutoChanged)
     // Dark mode: an *override* of the normal color scheme, never a rewrite of
     // it. See darkModeActive() — the "Normal" colors stay in the .conf exactly
     // where the user left them, so turning dark mode off restores them by
@@ -637,6 +638,10 @@ public:
     // Virtual-desktop pager (token "pager"): the numbers of KWin's desktops,
     // click to switch.
     bool showPager() const { return m_showPager; }
+    // "Generate color" (token "colorauto"): builds a color scheme from the
+    // current wallpaper and applies it, whether or not ColorAuto is switched
+    // on. See AutoColorScheme::generateNow().
+    bool showColorAuto() const { return m_showColorAuto; }
     // This dock's own dark-mode flag. Only consulted when the app-wide switch
     // is off; see darkModeActive().
     bool darkMode() const { return m_darkMode; }
@@ -763,6 +768,7 @@ public:
     void setShowNextWallpaper(bool show);
     void setShowDarkMode(bool show);
     void setShowPager(bool show);
+    void setShowColorAuto(bool show);
     void setDarkMode(bool on);
     // What the "Modo" submenu and the darkmode widget call: writes wherever the
     // effective value lives (the app-wide switch when it is on, this dock's own
@@ -883,6 +889,7 @@ signals:
     void showNextWallpaperChanged();
     void showDarkModeChanged();
     void showPagerChanged();
+    void showColorAutoChanged();
     // One signal for the whole dark-mode group (own flag, app-wide switch,
     // exceptions, both colors): every QML binding that cares reads more than
     // one of them anyway.
@@ -1024,6 +1031,7 @@ private:
     bool m_showNextWallpaper = false;
     bool m_showDarkMode = false;
     bool m_showPager = false;
+    bool m_showColorAuto = false;
     bool m_darkMode = false;
     // ColorAuto, deliberately absent from load()/save(): see setAutoColors().
     bool m_autoColorActive = false;

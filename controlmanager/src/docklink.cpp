@@ -91,6 +91,27 @@ void DockLink::onDarkModeChanged(bool on)
     emit changed();
 }
 
+void DockLink::generateColorScheme()
+{
+    if (!m_available)
+        return;
+    QDBusConnection::sessionBus().asyncCall(
+        QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                       QStringLiteral("generateColorScheme")));
+}
+
+QString DockLink::saveColorScheme()
+{
+    if (!m_available)
+        return {};
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("saveColorScheme"));
+    const QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 4000);
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return {};
+    return reply.arguments().constFirst().toString();
+}
+
 void DockLink::setDarkMode(bool on)
 {
     if (!m_available)

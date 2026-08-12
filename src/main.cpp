@@ -276,7 +276,17 @@ int main(int argc, char *argv[])
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
 
+    // ColorAuto: the color scheme (and optionally the docks' own colors)
+    // following the wallpaper. Built **before** the manager on purpose — every
+    // dock gets it as a QML context property when it is created, and the first
+    // docks are created inside DockManager's own constructor, so building it
+    // after would leave them with a null "autoColors" and a dead widget. The
+    // manager is injected right below; the class tolerates not having one.
+    AutoColorScheme autoColors(&theme, &appearance, nullptr, &virtualDesktops);
+    shared.autoColors = &autoColors;
+
     DockManager manager(shared);
+    autoColors.setManager(&manager);
 
     // Wallpapers per virtual desktop. start() re-applies the current desktop's
     // set (or puts desktop 1 back if a previous run died with ours up), and the
@@ -291,12 +301,9 @@ int main(int argc, char *argv[])
     });
     desktopWallpapers.start();
 
-    // ColorAuto: the color scheme (and optionally the docks' own colors)
-    // following the wallpaper. Built after the manager because it needs it to
-    // reach the docks, and *before* DarkModeAppearance so that its stand-down
-    // on the way into dark mode is connected first.
-    AutoColorScheme autoColors(&theme, &appearance, &manager, &virtualDesktops);
-    manager.setAutoColorScheme(&autoColors);
+    // The wallpaper triggers kdock can see for itself. They are not enough on
+    // their own — the usual way to change a wallpaper never goes through kdock
+    // at all — which is why AutoColorScheme also watches Plasma's config.
     QObject::connect(&wallpaperControl, &WallpaperControl::wallpaperAdvanced, &autoColors,
                      [&autoColors](const QString &) { autoColors.refresh(); });
     QObject::connect(&desktopWallpapers, &DesktopWallpapers::wallpapersApplied, &autoColors,

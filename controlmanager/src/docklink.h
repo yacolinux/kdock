@@ -38,6 +38,14 @@ public:
     Q_INVOKABLE void openNetworkSettings(const QString &dockId = QString());
     // Restarts the kdock *process*, i.e. every dock it draws. The UI says so.
     Q_INVOKABLE void restartDock();
+    // ColorAuto (see src/autocolorscheme.h). Both run in the dock's process on
+    // purpose: the engine keeps which of its two generated schemes is current,
+    // and that has to exist exactly once for the whole session.
+    Q_INVOKABLE void generateColorScheme();
+    // Blocking, unlike everything else here: the card shows the id it saved,
+    // and there is nothing to show until the dock answers. Short timeout so a
+    // dock that went away cannot freeze the panel.
+    Q_INVOKABLE QString saveColorScheme();
     // [{ id, screen, primary }]
     Q_INVOKABLE QVariantList docks() const { return m_docks; }
 

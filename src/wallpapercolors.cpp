@@ -9,6 +9,7 @@
 #include <QImageReader>
 #include <QTextStream>
 
+#include <algorithm>
 #include <cmath>
 
 namespace {
@@ -78,7 +79,6 @@ WallpaperPalette computePalette(const QString &path)
     // with no color at all). The luminance sum rides along on the second one.
     QHash<int, int> bucketCount;
     QHash<int, quint64> sumR, sumG, sumB;
-    int bestBucket = -1, bestCount = 0;
 
     quint64 anyR = 0, anyG = 0, anyB = 0;
     qreal lumaSum = 0.0;
@@ -105,12 +105,8 @@ WallpaperPalette computePalette(const QString &path)
                 continue;                       // saturation < ~0.25
 
             const int key = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5); // 3 bits/channel
-            const int c = ++bucketCount[key];
+            ++bucketCount[key];
             sumR[key] += r; sumG[key] += g; sumB[key] += b;
-            if (c > bestCount) {
-                bestCount = c;
-                bestBucket = key;
-            }
         }
     }
 
@@ -119,15 +115,56 @@ WallpaperPalette computePalette(const QString &path)
 
     out.valid = true;
     out.meanLuma = lumaSum / anyCount;
-    if (bestBucket >= 0 && bestCount > 0) {
-        out.seed = QColor(int(sumR[bestBucket] / bestCount), int(sumG[bestBucket] / bestCount),
-                          int(sumB[bestBucket] / bestCount));
-    } else {
+
+    // Rank the buckets instead of only tracking the winner: the extra ones are
+    // what "Generate color" cycles through. Sorted by population, and by key on
+    // a tie so the order does not depend on QHash's iteration order — otherwise
+    // the same wallpaper could hand out its variants in a different order on
+    // every run, and variant 3 would stop meaning anything.
+    QList<int> keys = bucketCount.keys();
+    std::sort(keys.begin(), keys.end(), [&bucketCount](int a, int b) {
+        if (bucketCount[a] != bucketCount[b])
+            return bucketCount[a] > bucketCount[b];
+        return a < b;
+    });
+    // Accept a bucket only when its hue is far enough from every candidate
+    // already taken: the winner of a hue band represents it, and the runners-up
+    // of that same band would only produce the same background again.
+    const auto hueFarEnough = [&out](const QColor &c) {
+        const int h = c.hue();
+        if (h < 0)
+            return out.candidates.isEmpty(); // achromatic: only as the first one
+        for (const QColor &other : std::as_const(out.candidates)) {
+            const int oh = other.hue();
+            if (oh < 0)
+                continue;
+            int d = qAbs(h - oh);
+            if (d > 180)
+                d = 360 - d; // the hue wheel wraps: 350° and 10° are 20° apart
+            if (d < WallpaperColors::kMinHueDistance)
+                return false;
+        }
+        return true;
+    };
+
+    for (int key : keys) {
+        if (out.candidates.size() >= WallpaperColors::kMaxCandidates)
+            break;
+        const int n = bucketCount[key];
+        const QColor c(int(sumR[key] / n), int(sumG[key] / n), int(sumB[key] / n));
+        if (hueFarEnough(c))
+            out.candidates.append(c);
+    }
+
+    if (out.candidates.isEmpty()) {
         // Nothing vivid anywhere: a grayscale or washed-out wallpaper. The mean
         // is the honest answer, and the tiny saturations buildScheme() applies
-        // keep the result neutral instead of inventing a hue.
-        out.seed = QColor(int(anyR / anyCount), int(anyG / anyCount), int(anyB / anyCount));
+        // keep the result neutral instead of inventing a hue. One candidate, so
+        // cycling variants on such an image is a no-op rather than a crash.
+        out.candidates.append(
+            QColor(int(anyR / anyCount), int(anyG / anyCount), int(anyB / anyCount)));
     }
+    out.seed = out.candidates.first();
     return out;
 }
 
@@ -248,8 +285,16 @@ SchemeColors WallpaperColors::buildScheme(const WallpaperPalette &palette, const
     s.dark = options.lightness == Options::ForceDark
              || (options.lightness == Options::Auto && palette.meanLuma < 0.5);
 
-    const QColor seed = palette.valid && palette.seed.isValid() ? palette.seed
-                                                                : QColor(127, 127, 127);
+    // The variant wraps, so a wallpaper with fewer candidates than the click
+    // count still answers instead of falling off the end.
+    QColor seed(127, 127, 127);
+    if (palette.valid && !palette.candidates.isEmpty()) {
+        const int n = palette.candidates.size();
+        const int idx = ((options.variant % n) + n) % n; // also right for a negative
+        seed = palette.candidates.at(idx);
+    } else if (palette.valid && palette.seed.isValid()) {
+        seed = palette.seed;
+    }
     int h, sat, v, a;
     seed.getHsv(&h, &sat, &v, &a);
     if (h < 0)

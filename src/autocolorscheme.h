@@ -24,6 +24,7 @@
 #pragma once
 
 #include <QColor>
+#include <QFileSystemWatcher>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -48,6 +49,13 @@ public:
 
     AutoColorScheme(Theme *theme, AppearanceControl *appearance, DockManager *manager,
                     VirtualDesktops *desktops, QObject *parent = nullptr);
+
+    // Injected after construction, because the two need each other: this object
+    // has to exist *before* DockManager (its docks get it as a QML context
+    // property the moment they are built, and the first ones are built inside
+    // the manager's own constructor), while it needs the manager to reach those
+    // docks. Everything here tolerates a null manager, so the gap is safe.
+    void setManager(DockManager *manager) { m_manager = manager; }
 
     // ---- persisted settings (shared kdock.conf, group [ColorAuto]) ---------
     static bool enabled();
@@ -88,9 +96,17 @@ public:
     // Re-capture from the live system (the tab's "Volver a capturar" button).
     void captureDefaults();
 
-    // True while a generated scheme is on the desktop. Persisted: it describes
-    // the system, which outlives this process.
+    // **"The system's color scheme is ours"**, not merely "something was
+    // applied". Persisted, because it describes the system, which outlives this
+    // process. It is what gates the restore: once the user saves a scheme of
+    // their own (saveCurrentScheme) this goes false and nothing here overwrites
+    // it any more.
     static bool applied();
+
+    // True while the scheme on the desktop came from a manual "Generate color"
+    // rather than from the automatic path. It is what stops the startup cleanup
+    // from undoing an explicit choice of the user's on every dock restart.
+    static bool manual();
 
     // True for either generated scheme id. DarkModeAppearance asks before
     // snapshotting "what the user had", or it would store one of ours and
@@ -105,11 +121,25 @@ public:
     // docks and removes the generated files.
     void setEnabled(bool on);
 
-    // Re-read the wallpapers and re-apply. Debounced, so the four triggers can
-    // all call it freely.
+    // Re-read the wallpapers and re-apply. Debounced, so every trigger can call
+    // it freely. No-op while the feature is off.
     void refresh();
     // Same, without waiting for the debounce (the tab's "Aplicar ahora").
     void refreshNow();
+
+    // "Generate color": re-read the wallpapers and apply the **next** candidate
+    // color of the same image. Deliberately NOT gated on enabled() — this is the
+    // dock widget, the panel card and the tab button, and they are meant to work
+    // with the feature switched off, leaving the result for the user to manage.
+    // Captures the defaults on first use so there is always a way back.
+    void generateNow();
+
+    // Write the scheme currently generated to a permanent
+    // ~/.local/share/color-schemes/kdock-<n>.colors, apply that copy, and hand
+    // ownership of the system scheme back to the user (applied() goes false, so
+    // nothing here overwrites it afterwards). Returns the id, or empty on
+    // failure. Generates first when nothing has been generated yet.
+    QString saveCurrentScheme();
 
 signals:
     void changed();
@@ -120,6 +150,12 @@ private:
     // keyed by connector name, and continue in applyPalettes().
     void readWallpapers();
     void applyPalettes(const QHash<QString, QString> &imageByScreen);
+    // (Re)arm the watch on Plasma's applet config. Must run again after every
+    // signal: KConfig saves by writing a temp file and renaming it over the
+    // original, so the inode being watched is gone and QFileSystemWatcher drops
+    // the watch *silently* — without this the whole thing fires exactly once,
+    // which is the very bug this watcher exists to fix.
+    void armWallpaperWatch();
     // Push the dock colors of one screen's palette onto every dock there.
     void applyToDocks(const QString &screen, const SchemeColors &scheme);
     void applySystem(const SchemeColors &scheme);
@@ -141,8 +177,22 @@ private:
     // the plugin, KDE picks the next image itself, so reading immediately gets
     // the *previous* path back.
     QTimer m_debounce;
+    // Watches Plasma's applet config, which is where a wallpaper change lands
+    // whoever made it — including the D-Bus scripts that never go through
+    // kdock at all, which is the common case and what the four in-process
+    // triggers could never see.
+    QFileSystemWatcher m_wallpaperWatch;
     // Last dark-mode state acted on, so a repeated ping is a no-op (the accent
     // color emits the same signal).
     bool m_lastDark = false;
     bool m_reading = false;
+    // Set while the round trip in flight was started by generateNow(): it is
+    // what tells applyPalettes() to take ownership without turning the feature
+    // on, and not to reset the variant counter.
+    bool m_manualRun = false;
+    // The scheme last handed to the system, so "save" can write it out again
+    // without regenerating (and therefore without re-reading the wallpaper).
+    // Not persisted: a fresh process has nothing to save until it generates.
+    SchemeColors m_lastScheme;
+    bool m_haveScheme = false;
 };

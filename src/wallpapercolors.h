@@ -30,7 +30,15 @@
 struct WallpaperPalette
 {
     // Predominant color of the image, the seed every background derives from.
+    // Always candidates.first() — kept as its own field because that is what
+    // every caller that does not care about variants wants.
     QColor seed;
+    // The same histogram's other winners, most populated first and capped at
+    // kMaxCandidates. This is what the "Generate color" button cycles through:
+    // a second click on an unchanged wallpaper has to produce a *different*
+    // scheme or the button reads as broken, and picking another bucket keeps
+    // the result honestly derived from that image instead of jittered.
+    QList<QColor> candidates;
     // Mean perceptual luminance of the image, 0..1. Decides light vs dark.
     qreal meanLuma = 0.0;
     bool valid = false;
@@ -76,7 +84,24 @@ public:
         // Used in Custom mode only, one per resulting scheme kind.
         QColor selectionLight = QColor(0x3A, 0x3A, 0x3A); // for a LIGHT scheme
         QColor selectionDark = QColor(0xD6, 0xD6, 0xD6);  // for a DARK scheme
+        // Which of the palette's candidates to seed from, wrapped. 0 is the
+        // predominant color, i.e. what the automatic path always uses.
+        int variant = 0;
     };
+
+    // How many histogram winners a palette carries. Eight is plenty to cycle
+    // through by hand and stops the whole 512-bucket histogram from being kept
+    // alive in the sample cache.
+    static constexpr int kMaxCandidates = 8;
+
+    // Minimum hue distance, in degrees, between two candidates. Without it the
+    // top buckets of a photo are usually three shades of one color — measured
+    // on a real wallpaper: (25,39,47), (71,116,143) and (51,87,109), all the
+    // same blue — and since a background is built from the *hue* at a fixed
+    // saturation and value, cycling through them produced backgrounds one point
+    // apart. Visibly nothing, which is the very complaint the cycling exists to
+    // answer. Candidates have to be alternative colors, not alternative shades.
+    static constexpr int kMinHueDistance = 25;
 
     // Longest edge the image is decoded at. 128 px is ~16k pixels: the bucket
     // loop is noise next to the decode, and going smaller starts to lose small

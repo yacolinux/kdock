@@ -27,6 +27,7 @@ const QList<CmSectionInfo> &table()
         {QStringLiteral("system"),    QStringLiteral("preferences-system"),             2, 2, 1, 1, true},
         {QStringLiteral("appearance"),QStringLiteral("preferences-desktop-theme"),       2, 2, 2, 1, true},
         {QStringLiteral("desktops"),  QStringLiteral("virtual-desktops"),                2, 1, 1, 1, true},
+        {QStringLiteral("colorauto"), QStringLiteral("color-management"),                2, 1, 1, 1, true},
     };
     return t;
 }
@@ -94,6 +95,8 @@ QString CmSections::label(const QString &id)
         return QCoreApplication::translate("CmSections", "Apariencia");
     if (id == QLatin1String("desktops"))
         return QCoreApplication::translate("CmSections", "Escritorios");
+    if (id == QLatin1String("colorauto"))
+        return QCoreApplication::translate("CmSections", "ColorAuto");
     return id;
 }
 
@@ -130,6 +133,10 @@ QString CmSections::description(const QString &id)
     if (id == QLatin1String("desktops"))
         return QCoreApplication::translate("CmSections",
                                            "Cambiar de escritorio virtual.");
+    if (id == QLatin1String("colorauto"))
+        return QCoreApplication::translate("CmSections",
+                                           "Generar un esquema de color con el fondo de "
+                                           "pantalla, y guardarlo.");
     return QString();
 }
 

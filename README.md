@@ -130,6 +130,13 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   **temporal**: se reescribe en cada cambio y se borra al apagar la opción. Y se lleva bien
   con el modo oscuro: mientras aquel está puesto, ColorAuto se aparta y vuelve solo al salir.
   Se configura en su propia solapa, para todos los docks a la vez.
+- **«Generar Color» a mano**, que anda con ColorAuto apagado: desde su solapa, desde un widget
+  del dock (clic izquierdo genera, clic derecho abre la configuración) o desde la tarjeta del
+  panel de control. Apretarlo otra vez sobre el mismo fondo **pasa al siguiente color de esa
+  imagen** —las candidatas se separan por tono, así que cada clic se ve— y se puede ir
+  probando hasta que guste. Cuando uno convence, **Guardar Color Scheme** lo deja permanente
+  en tu carpeta de esquemas como `kdock-1`, `kdock-2`… y lo aplica: a partir de ahí es tuyo,
+  ni apagar ColorAuto ni reiniciar el dock lo pisan.
 - **Auto-encogido**: cuando no entran todos los íconos, el dock reduce escala y fuente en vez
   de recortar.
 - **Drag & drop** para reordenar íconos y secciones enteras.

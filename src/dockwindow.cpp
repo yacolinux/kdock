@@ -22,6 +22,7 @@
 #include "clipboardhistory.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
+#include "autocolorscheme.h"
 #include "networkcontrol.h"
 #include "relanzadoresmanager.h"
 #include "scriptrunnersmanager.h"
@@ -71,7 +72,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        ClipboardHistory *clipboardHistory,
                        DisksControl *disks, NetworkControl *network,
                        AppearanceControl *appearance, WindowMonitor *monitor,
-                       VirtualDesktops *desktops, WeatherControl *weather)
+                       VirtualDesktops *desktops, WeatherControl *weather,
+                       AutoColorScheme *autoColors)
     : m_config(config)
     , m_theme(theme)
     , m_model(model)
@@ -90,6 +92,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_power(power)
     , m_appearance(appearance)
     , m_desktops(desktops)
+    , m_autoColors(autoColors)
 {
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
@@ -156,6 +159,11 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("network"), network);
     rootContext()->setContextProperty(QStringLiteral("appearance"), appearance);
     rootContext()->setContextProperty(QStringLiteral("virtualDesktops"), m_desktops);
+    // ColorAuto: the "colorauto" widget calls generateNow() on it. The object
+    // is process-wide (it owns the ping-pong of the two generated schemes), so
+    // it travels through Shared like every other backend rather than being
+    // built here.
+    rootContext()->setContextProperty(QStringLiteral("autoColors"), m_autoColors);
     rootContext()->setContextProperty(QStringLiteral("dockIsPrimary"), m_primary);
     rootContext()->setContextProperty(QStringLiteral("apps"), m_apps);
     rootContext()->setContextProperty(QStringLiteral("showdesktop"), monitor);
@@ -642,6 +650,12 @@ void DockWindow::openVideoSettings()
 {
     openSettings();
     m_dialog->showVideoTab();
+}
+
+void DockWindow::openColorAutoSettings()
+{
+    openSettings();
+    m_dialog->showColorAutoTab();
 }
 
 void DockWindow::openNetworkSettings()

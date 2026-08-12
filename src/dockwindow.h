@@ -40,6 +40,7 @@ class WindowMonitor;
 class TileMenuLauncher;
 class ControlManagerLauncher;
 class VirtualDesktops;
+class AutoColorScheme;
 
 class AbstractWindow;
 
@@ -66,7 +67,8 @@ public:
                AppearanceControl *appearance = nullptr,
                WindowMonitor *monitor = nullptr,
                VirtualDesktops *desktops = nullptr,
-               WeatherControl *weather = nullptr);
+               WeatherControl *weather = nullptr,
+               AutoColorScheme *autoColors = nullptr);
 
     // Called from QML when the autohide animation finishes: shrinks the
     // input region to a thin strip on the screen edge so clicks pass
@@ -122,6 +124,8 @@ public:
     // Same, on the VideoEnergía tab (brightness widget right-click): the wheel
     // only drives one monitor, and this is where the others live.
     Q_INVOKABLE void openVideoSettings();
+    // The ColorAuto tab (the colorauto widget's right-click).
+    Q_INVOKABLE void openColorAutoSettings();
     Q_INVOKABLE void quit();
     // Relaunch kdock with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restart();
@@ -178,6 +182,7 @@ private:
     PowerControl *m_power = nullptr;
     AppearanceControl *m_appearance = nullptr;
     VirtualDesktops *m_desktops = nullptr;
+    AutoColorScheme *m_autoColors = nullptr;
     // Drives the separate kdock-tilemenu process (context property
     // "tileLauncher"); owned by this window.
     TileMenuLauncher *m_tileLauncher = nullptr;

@@ -814,6 +814,7 @@ void DockConfig::load()
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
     m_showDarkMode = m_settings.value(QStringLiteral("showDarkMode"), false).toBool();
     m_showPager = m_settings.value(QStringLiteral("showPager"), false).toBool();
+    m_showColorAuto = m_settings.value(QStringLiteral("showColorAuto"), false).toBool();
     m_darkMode = m_settings.value(QStringLiteral("darkMode"), false).toBool();
     m_showClock2 = m_settings.value(QStringLiteral("showClock2"), false).toBool();
     m_groupWindows = m_settings.value(QStringLiteral("groupWindows"), true).toBool();
@@ -853,7 +854,8 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
             QStringLiteral("closewindow"),
             QStringLiteral("nextwallpaper"), QStringLiteral("darkmode"),
-            QStringLiteral("pager"),       QStringLiteral("autohide"),
+            QStringLiteral("pager"),       QStringLiteral("colorauto"),
+            QStringLiteral("autohide"),
             QStringLiteral("showdesktop"), QStringLiteral("systray"),
             QStringLiteral("relanzadores"), QStringLiteral("scriptrunners"),
             QStringLiteral("session"),     QStringLiteral("settings")};
@@ -1485,6 +1487,15 @@ void DockConfig::setShowPager(bool show)
     emit showPagerChanged();
 }
 
+void DockConfig::setShowColorAuto(bool show)
+{
+    if (m_showColorAuto == show)
+        return;
+    m_showColorAuto = show;
+    m_settings.setValue(QStringLiteral("showColorAuto"), show);
+    emit showColorAutoChanged();
+}
+
 void DockConfig::setDarkMode(bool on)
 {
     if (m_darkMode == on)
@@ -1891,6 +1902,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("nextwallpaper"), QStringLiteral("Next wallpaper")},
         {QStringLiteral("darkmode"),      QStringLiteral("Modo oscuro")},
         {QStringLiteral("pager"),         QStringLiteral("Escritorios")},
+        {QStringLiteral("colorauto"),     QStringLiteral("Generar Color")},
         {QStringLiteral("autohide"),      QStringLiteral("Auto-hide toggle")},
         {QStringLiteral("showdesktop"),   QStringLiteral("Show desktop")},
         {QStringLiteral("systray"),       QStringLiteral("System tray")},

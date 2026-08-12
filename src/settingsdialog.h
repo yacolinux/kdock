@@ -61,6 +61,8 @@ public:
     void showNetworkTab();
     // Same for the VideoEnergía tab (brightness widget's right-click).
     void showVideoTab();
+    // Same for the ColorAuto tab (the colorauto widget's right-click).
+    void showColorAutoTab();
     // Same for the Docks tab, also selecting the row of the given dockId
     // (used by the dock's right-click → Dock → Nombre).
     void showMonitorsTab(const QString &dockId);
@@ -296,6 +298,7 @@ private:
     // values behind our back), and m_videoSliderDown suppresses that while a
     // slider is under the pointer.
     int m_videoTabIndex = -1;
+    int m_colorAutoTabIndex = -1;
     QVBoxLayout *m_videoBrightnessLayout = nullptr;
     QComboBox *m_videoWheelTarget = nullptr;
     QGroupBox *m_videoPowerGroup = nullptr;

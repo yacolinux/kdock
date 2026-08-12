@@ -2,6 +2,7 @@
 
 #include "apprestart.h"
 #include "dockconfig.h"
+#include "autocolorscheme.h"
 #include "dockmanager.h"
 #include "dockwindow.h"
 
@@ -76,6 +77,20 @@ void DockService::restart()
 bool DockService::darkMode()
 {
     return DockConfig::anyDarkModeActive();
+}
+
+void DockService::generateColorScheme()
+{
+    if (!m_manager || !m_manager->autoColorScheme())
+        return;
+    m_manager->autoColorScheme()->generateNow();
+}
+
+QString DockService::saveColorScheme()
+{
+    if (!m_manager || !m_manager->autoColorScheme())
+        return {};
+    return m_manager->autoColorScheme()->saveCurrentScheme();
 }
 
 void DockService::setDarkMode(bool on)

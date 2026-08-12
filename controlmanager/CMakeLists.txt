@@ -91,6 +91,7 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/cards/SystemCard.qml
         qml/cards/AppearanceCard.qml
         qml/cards/DesktopsCard.qml
+        qml/cards/ColorAutoCard.qml
 )
 
 # kdock's IconMenuItem, verbatim. BASE lands it on :/qml/IconMenuItem.qml, i.e.

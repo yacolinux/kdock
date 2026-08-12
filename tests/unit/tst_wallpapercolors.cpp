@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QSet>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
@@ -46,6 +47,16 @@ QString writeBanded(const QString &dir, const QString &name, const QColor &bulk,
     }
     const QString path = dir + QLatin1Char('/') + name;
     return img.save(path, "PNG") ? path : QString();
+}
+
+// Una candidata es el **promedio** de su cubeta, no un píxel: en una imagen con
+// varias zonas, los píxeles que el remuestreo mezcla en los bordes caen en la
+// cubeta de al lado y corren esa media uno o dos puntos. Comparar exacto solo
+// vale para una imagen lisa.
+bool nearly(const QColor &a, const QColor &b, int tol = 4)
+{
+    return qAbs(a.red() - b.red()) <= tol && qAbs(a.green() - b.green()) <= tol
+           && qAbs(a.blue() - b.blue()) <= tol;
 }
 
 // Los grupos que un .colors de KDE 6 tiene que traer. Verificados contra
@@ -145,6 +156,137 @@ private slots:
         QCOMPARE(WallpaperColors::sample(path).seed, QColor(40, 180, 90));
     }
 
+    // ---- Colores alternativos ---------------------------------------------
+
+    void candidatesAreRankedAndDistinct()
+    {
+        // Tres franjas de colores muy distintos, de más a menos superficie: el
+        // orden de las candidatas tiene que seguir esa población, porque es lo
+        // que hace que la variante 0 sea "el color del fondo" y las siguientes
+        // sean alternativas razonables y no ruido.
+        QImage img(300, 300, QImage::Format_ARGB32);
+        img.fill(QColor(200, 40, 60));                                  // más
+        for (int y = 0; y < 100; ++y)
+            for (int x = 0; x < 300; ++x)
+                img.setPixelColor(x, y, QColor(40, 80, 200));           // medio
+        for (int y = 0; y < 40; ++y)
+            for (int x = 0; x < 300; ++x)
+                img.setPixelColor(x, y, QColor(40, 200, 90));           // menos
+        const QString path = m_dir.path() + QStringLiteral("/ranked.png");
+        QVERIFY(img.save(path, "PNG"));
+
+        const WallpaperPalette p = WallpaperColors::sample(path);
+        QVERIFY(p.valid);
+        // Tres o más, no exactamente tres: la imagen se decodifica a 128x128 y
+        // el remuestreo mezcla los píxeles del borde entre franjas, lo que deja
+        // cubetas intermedias de poca población. Eso es correcto —una foto real
+        // tiene degradés por todos lados— y por eso lo que se afirma es el
+        // *orden* de las tres que importan, no el conteo.
+        QVERIFY(p.candidates.size() >= 3);
+        QVERIFY(nearly(p.candidates.at(0), QColor(200, 40, 60)));
+        QVERIFY(nearly(p.candidates.at(1), QColor(40, 80, 200)));
+        QVERIFY(nearly(p.candidates.at(2), QColor(40, 200, 90)));
+        // seed es la primera por contrato: todo el camino automático lo asume.
+        QCOMPARE(p.seed, p.candidates.first());
+        // Y no se repiten, o ciclar daría el mismo esquema dos veces seguidas.
+        QCOMPARE(QSet<QRgb>({p.candidates.at(0).rgb(), p.candidates.at(1).rgb(),
+                             p.candidates.at(2).rgb()})
+                     .size(),
+                 3);
+    }
+
+    void candidatesAreCapped()
+    {
+        // Un degradé llena muchísimas cubetas; la paleta no puede crecer sin
+        // límite porque vive en la caché de muestreo toda la sesión.
+        QImage img(256, 256, QImage::Format_ARGB32);
+        for (int y = 0; y < 256; ++y)
+            for (int x = 0; x < 256; ++x)
+                img.setPixelColor(x, y, QColor::fromHsv(x, 200, 128 + (y >> 1)));
+        const QString path = m_dir.path() + QStringLiteral("/grad.png");
+        QVERIFY(img.save(path, "PNG"));
+
+        const WallpaperPalette p = WallpaperColors::sample(path);
+        QVERIFY(p.valid);
+        QVERIFY(p.candidates.size() <= WallpaperColors::kMaxCandidates);
+        QVERIFY(!p.candidates.isEmpty());
+    }
+
+    void grayWallpaperStillHasOneCandidate()
+    {
+        // Sin un solo píxel vivo, ciclar variantes tiene que ser inocuo (el
+        // mismo color) y nunca dividir por cero.
+        const WallpaperPalette p = WallpaperColors::sample(m_gray);
+        QVERIFY(p.valid);
+        QCOMPARE(p.candidates.size(), 1);
+        WallpaperColors::Options opt;
+        opt.variant = 5;
+        const SchemeColors s = WallpaperColors::buildScheme(p, opt);
+        QVERIFY(s.windowBg.isValid());
+    }
+
+    void candidatesAreSeparatedByHue()
+    {
+        // Cuatro azules apenas distintos: sin separación por tono las cubetas
+        // más votadas serían las cuatro, y como el fondo se arma con el TONO a
+        // saturación y valor fijos, ciclar entre ellas daría cuatro fondos
+        // idénticos. Medido en vivo antes de arreglarlo: 33,37,40 contra
+        // 33,38,40 — un punto de diferencia, o sea nada.
+        QImage img(320, 320, QImage::Format_ARGB32);
+        const QList<QColor> blues = {QColor(25, 39, 47), QColor(71, 116, 143),
+                                     QColor(51, 87, 109), QColor(38, 66, 84)};
+        for (int i = 0; i < blues.size(); ++i)
+            for (int y = i * 80; y < (i + 1) * 80; ++y)
+                for (int x = 0; x < 320; ++x)
+                    img.setPixelColor(x, y, blues.at(i));
+        const QString path = m_dir.path() + QStringLiteral("/blues.png");
+        QVERIFY(img.save(path, "PNG"));
+
+        const WallpaperPalette p = WallpaperColors::sample(path);
+        QVERIFY(p.valid);
+        // Todas del mismo tono -> una sola candidata sobrevive. Honesto: ese
+        // fondo tiene un color, no cuatro.
+        QCOMPARE(p.candidates.size(), 1);
+
+        // Y con tonos de verdad distintos sí entran varias, separadas.
+        for (int i = 0; i < p.candidates.size(); ++i) {
+            for (int j = i + 1; j < p.candidates.size(); ++j) {
+                int d = qAbs(p.candidates.at(i).hue() - p.candidates.at(j).hue());
+                if (d > 180)
+                    d = 360 - d;
+                QVERIFY(d >= WallpaperColors::kMinHueDistance);
+            }
+        }
+    }
+
+    void variantPicksAnotherCandidate()
+    {
+        const QString path = writeBanded(m_dir.path(), QStringLiteral("twotone.png"),
+                                         QColor(200, 40, 60), QColor(40, 80, 200), 60);
+        QVERIFY(!path.isEmpty());
+        const WallpaperPalette p = WallpaperColors::sample(path);
+        QVERIFY(p.candidates.size() >= 2);
+
+        WallpaperColors::Options a, b;
+        a.variant = 0;
+        b.variant = 1;
+        // Distinto color de fondo: es lo único que hace que un segundo clic en
+        // "Generar Color" se vea.
+        QVERIFY(WallpaperColors::buildScheme(p, a).windowBg
+                != WallpaperColors::buildScheme(p, b).windowBg);
+    }
+
+    void variantWraps()
+    {
+        // Más clics que candidatas vuelve al principio en vez de caerse.
+        const WallpaperPalette p = WallpaperColors::sample(m_blue);
+        WallpaperColors::Options first, wrapped;
+        first.variant = 0;
+        wrapped.variant = p.candidates.size();
+        QCOMPARE(WallpaperColors::buildScheme(p, wrapped).windowBg,
+                 WallpaperColors::buildScheme(p, first).windowBg);
+    }
+
     // ---- Claro / oscuro ---------------------------------------------------
 
     void lightnessFollowsWallpaper()
@@ -225,14 +367,22 @@ private slots:
                                   WallpaperColors::Options::ForceDark};
         for (const QString &image : images) {
             for (int mode : modes) {
+              const WallpaperPalette pal = WallpaperColors::sample(image);
+              QVERIFY(pal.valid);
+              // Todas las variantes, no solo la predominante: el botón "Generar
+              // Color" cicla por ellas y cualquiera puede terminar siendo el
+              // esquema del escritorio, así que la garantía de legibilidad vale
+              // para todas o no vale para ninguna.
+              for (int variant = 0; variant < pal.candidates.size(); ++variant) {
                 WallpaperColors::Options opt;
                 opt.lightness = mode;
-                const WallpaperPalette pal = WallpaperColors::sample(image);
-                QVERIFY(pal.valid);
+                opt.variant = variant;
                 const SchemeColors s = WallpaperColors::buildScheme(pal, opt);
 
-                const QString ctx =
-                    QStringLiteral("%1 modo %2").arg(QFileInfo(image).fileName()).arg(mode);
+                const QString ctx = QStringLiteral("%1 modo %2 variante %3")
+                                        .arg(QFileInfo(image).fileName())
+                                        .arg(mode)
+                                        .arg(variant);
 
                 // Texto: AAA de cuerpo de texto sobre cada superficie.
                 for (const auto &pair : {qMakePair(s.windowFg, s.windowBg),
@@ -254,6 +404,7 @@ private slots:
                 QVERIFY2(WallpaperColors::contrastRatio(s.selectionBg, s.windowBg)
                              >= WallpaperColors::kSelectionContrast,
                          qPrintable(ctx));
+              }
             }
         }
     }

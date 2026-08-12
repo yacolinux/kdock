@@ -20,6 +20,7 @@
 #include "theme.h"
 #include "wallpapercolors.h"
 
+#include <QDir>
 #include <QFile>
 #include <QSettings>
 #include <QStandardPaths>
@@ -362,6 +363,142 @@ private slots:
         DockConfig::setDarkModeGlobal(false);
         DockConfig::setDarkModeAllDocks(false);
         DockConfig::setDarkAppearanceApplied(false);
+    }
+
+    // ---- Generación manual -------------------------------------------------
+
+    void manualGenerationSurvivesARestart()
+    {
+        // El rescate de arranque (deshacer un esquema temporal que quedó de una
+        // corrida muerta) NO puede deshacer una generación hecha a mano: el
+        // usuario la pidió explícitamente con la casilla apagada, y desarmarla
+        // en cada reinicio del dock sería lo contrario de lo que promete el
+        // botón. Es lo que distingue `manual` de `applied`.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        theme.setIconTheme(QStringLiteral("Gruvbox-Plus-Dark"));
+
+        writeShared(QStringLiteral("ColorAuto/enabled"), false);
+        writeShared(QStringLiteral("ColorAuto/applied"), true);
+        writeShared(QStringLiteral("ColorAuto/manual"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultIconTheme"), QStringLiteral("Papirus"));
+
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        // Ni restauró el iconset ni soltó la propiedad del esquema.
+        QCOMPARE(theme.iconTheme(), QStringLiteral("Gruvbox-Plus-Dark"));
+        QVERIFY(AutoColorScheme::applied());
+    }
+
+    void generateBumpsTheVariant()
+    {
+        // Sin esto, dos clics seguidos sobre el mismo fondo dan el mismo
+        // esquema y el botón parece roto — que es justo el síntoma reportado.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        writeShared(QStringLiteral("ColorAuto/variant"), 0);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        QVERIFY(!AutoColorScheme::enabled()); // apagado a propósito
+        autoColors.generateNow();
+        QCOMPARE(shared().value(QStringLiteral("ColorAuto/variant")).toInt(), 1);
+        autoColors.generateNow();
+        QCOMPARE(shared().value(QStringLiteral("ColorAuto/variant")).toInt(), 2);
+    }
+
+    void generateCapturesDefaultsWhenThereAreNone()
+    {
+        // Generar a mano con la casilla apagada es justo el camino que nunca
+        // pasó por setEnabled(true), así que si no captura acá el usuario se
+        // queda sin forma de volver.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        theme.setIconTheme(QStringLiteral("Papirus"));
+        QVERIFY(!AutoColorScheme::defaultsSaved());
+
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.generateNow();
+        QVERIFY(AutoColorScheme::defaultsSaved());
+        QCOMPARE(AutoColorScheme::defaultIconTheme(), QStringLiteral("Papirus"));
+    }
+
+    void generateStandsDownForDarkMode()
+    {
+        // El modo oscuro es dueño de la apariencia mientras está puesto; los dos
+        // pisándose sería peor que no hacer nada.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        DockConfig dock(QStringLiteral("VIRT-9"));
+        DockConfig::setDarkModeAllDocks(true);
+        DockConfig::setDarkModeGlobal(true);
+
+        writeShared(QStringLiteral("ColorAuto/variant"), 0);
+        autoColors.generateNow();
+        QCOMPARE(shared().value(QStringLiteral("ColorAuto/variant")).toInt(), 0);
+
+        DockConfig::setDarkModeGlobal(false);
+        DockConfig::setDarkModeAllDocks(false);
+    }
+
+    // ---- Guardar -----------------------------------------------------------
+
+    void disablingRestoresOnlyWhatWasOurs()
+    {
+        // restoreDefaults() está gateado por applied(): si ColorAuto nunca llegó
+        // a aplicar nada (o el usuario ya se quedó con un esquema guardado), no
+        // tiene por qué pisar el iconset ni el esquema que haya puestos.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        theme.setIconTheme(QStringLiteral("Adwaita"));
+
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/applied"), false); // nunca aplicó
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultIconTheme"), QStringLiteral("Papirus"));
+
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setEnabled(false);
+        QCOMPARE(theme.iconTheme(), QStringLiteral("Adwaita"));
+
+        // Y con applied()=true sí restaura, que es el caso normal.
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/applied"), true);
+        AutoColorScheme second(&theme, &appearance, nullptr, nullptr);
+        second.setEnabled(false);
+        QCOMPARE(theme.iconTheme(), QStringLiteral("Papirus"));
+    }
+
+    void saveWithoutAnythingGeneratedDoesNotWrite()
+    {
+        // Un proceso recién arrancado no tiene nada que guardar: generar es un
+        // viaje de ida y vuelta por D-Bus, así que no hay esquema sincrónico.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        QVERIFY(autoColors.saveCurrentScheme().isEmpty());
+    }
+
+    void savedSchemesAreNumberedAndDoNotOverwrite()
+    {
+        // Se prueba con el motor directo, que es lo que el guardado usa: el
+        // nombre tiene que ser incremental o el segundo "guardar" se come al
+        // primero.
+        const QString dir =
+            QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/color-schemes");
+        QDir().mkpath(dir);
+        const SchemeColors s = WallpaperColors::buildScheme(WallpaperPalette{},
+                                                            WallpaperColors::Options());
+        for (int n = 1; n <= 2; ++n) {
+            const QString id = QStringLiteral("kdock-%1").arg(n);
+            QVERIFY(WallpaperColors::writeSchemeFile(
+                s, dir + QLatin1Char('/') + id + QStringLiteral(".colors"), id,
+                QStringLiteral("kdock %1").arg(n)));
+        }
+        QVERIFY(QFile::exists(dir + QStringLiteral("/kdock-1.colors")));
+        QVERIFY(QFile::exists(dir + QStringLiteral("/kdock-2.colors")));
     }
 
     void aCrashedRunIsCleanedUpOnStartup()

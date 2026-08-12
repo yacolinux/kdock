@@ -128,6 +128,13 @@ The dock, across different edges and label layouts:
   rewritten on every change and removed when the option is turned off. And it gets along with
   dark mode: while that one is on, ColorAuto stands aside and comes back on its own when you
   leave. Configured in its own tab, once for every dock.
+- **"Generate color" by hand**, which works with ColorAuto switched off: from its own tab, from
+  a dock widget (left click generates, right click opens the settings) or from the control
+  panel's card. Pressing it again on the same wallpaper **moves to that image's next color** —
+  candidates are kept apart by hue, so every click shows — and you can keep trying until one
+  looks right. When one does, **Save color scheme** keeps it permanently in your schemes folder
+  as `kdock-1`, `kdock-2`… and applies it: from then on it is yours, and neither switching
+  ColorAuto off nor restarting the dock overwrites it.
 - **Auto-shrink**: when not all icons fit, the dock reduces scale and font instead of
   clipping.
 - **Drag & drop** to reorder icons and whole sections.
