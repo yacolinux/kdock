@@ -6,7 +6,7 @@
 // percentage, because a drag writes the size the user is looking at.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: grip

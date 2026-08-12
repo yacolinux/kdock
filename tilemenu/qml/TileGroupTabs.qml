@@ -9,7 +9,7 @@
 // which is the only drag route left now that the other groups are off screen.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: tabs

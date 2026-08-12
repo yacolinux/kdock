@@ -4,7 +4,7 @@
 // ClipboardPopup but non-modal (no text input, so no keyboard grab needed).
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: popup

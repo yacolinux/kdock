@@ -6,7 +6,7 @@
 // CLAUDE.md).
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Menu {
     id: menu

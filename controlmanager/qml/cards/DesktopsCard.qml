@@ -6,7 +6,7 @@
 // la tarjeta lo dice en vez de dibujar una fila vacía que se lee como un bug.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

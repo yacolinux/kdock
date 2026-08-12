@@ -11,7 +11,7 @@
 // callers are unchanged; only the widget is different.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: row

@@ -2,7 +2,7 @@
 // Shows a mini-dock with the relanzador's launchers and optional widgets.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: popup

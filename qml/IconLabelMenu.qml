@@ -4,7 +4,7 @@
 // and the widget-section menu in Dock.qml, like BackgroundColorMenu.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Menu {
     id: labelMenu

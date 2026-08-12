@@ -10,7 +10,7 @@
 // popups plus setKeyboardInteractive() while open.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: popup

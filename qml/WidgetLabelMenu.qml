@@ -6,7 +6,7 @@
 // not the other. Uses the global context property `config`.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Menu {
     id: widgetLabelMenu

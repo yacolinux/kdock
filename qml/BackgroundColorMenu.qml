@@ -5,7 +5,7 @@
 // context menu and the widget-section menu in Dock.qml.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Menu {
     id: bgMenu

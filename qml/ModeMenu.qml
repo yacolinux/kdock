@@ -8,7 +8,7 @@
 // is switched on app-wide) — so what the menu shows is always what it changes.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Menu {
     title: qsTr("Modo")

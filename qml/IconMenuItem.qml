@@ -4,7 +4,7 @@
 // AppMenuPopup app list). This component bridges that gap.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 MenuItem {
     id: control

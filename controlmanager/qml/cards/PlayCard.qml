@@ -4,7 +4,7 @@
 // round trip per second, and a hidden panel keeps its QML alive.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

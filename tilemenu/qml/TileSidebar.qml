@@ -4,7 +4,7 @@
 // because it is exactly the same AppMenu::sections().
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Rectangle {
     id: sidebar

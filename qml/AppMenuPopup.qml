@@ -3,7 +3,7 @@
 // editable favorites (star toggle / context menu).
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: popup

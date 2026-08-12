@@ -6,7 +6,7 @@
 // toggle and a slider up to the configured ceiling.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

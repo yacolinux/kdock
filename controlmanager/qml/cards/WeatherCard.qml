@@ -8,7 +8,7 @@
 // condición— no se duplica: viene formateada de C++.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

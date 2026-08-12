@@ -7,7 +7,7 @@
 // dock widget and the control panel's card cannot disagree.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: root

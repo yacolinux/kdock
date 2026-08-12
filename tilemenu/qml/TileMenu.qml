@@ -11,7 +11,7 @@
 // menu are the only routes.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: root

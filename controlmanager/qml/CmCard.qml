@@ -7,7 +7,7 @@
 // drop, is exactly where it started). Same contract as TileMenuTile.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: card

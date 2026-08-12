@@ -3,7 +3,7 @@
 // copies that entry back to the active clipboard. Modeled on AppMenuPopup.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Popup {
     id: popup

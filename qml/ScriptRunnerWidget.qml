@@ -2,7 +2,7 @@
 // Clicking it runs the configured shell script via the manager.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: scriptRunnerWidget

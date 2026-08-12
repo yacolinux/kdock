@@ -6,7 +6,7 @@
 // echo" rule lives (see `live` below).
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: row

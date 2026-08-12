@@ -1,9 +1,8 @@
 #include <QApplication>
 #include <QQmlEngine>
+#include <QQuickStyle>
 #include <QScreen>
-#include <QSettings>
 #include <QSocketNotifier>
-#include <QStandardPaths>
 #include <QTimer>
 #include <QWidget>
 #include <QWindow>
@@ -166,25 +165,6 @@ int main(int argc, char *argv[])
         qputenv("QT_WAYLAND_SHELL_INTEGRATION", "kdock-layershell");
     }
 
-    // Qt Quick Controls must be set before QApplication: the static QML
-    // plugin initialisation (qt_import_qml_plugins) reads
-    // QT_QUICK_CONTROLS_STYLE before main() runs, so QQuickStyle::setStyle()
-    // called later arrives too late. The env var is the only path that
-    // works.
-    // The QML files import QtQuick.Controls.Basic explicitly; Fusion is the
-    // closest built-in style that looks like a real desktop application.
-    // Breeze is not a QQC2 style name.
-    {
-        const QString conf = QStandardPaths::writableLocation(
-            QStandardPaths::GenericDataLocation) + QStringLiteral("/kdock/kdock.conf");
-        QSettings s(conf, QSettings::IniFormat);
-        const QString sval = s.value(QStringLiteral("qtStyle")).toString();
-        if (sval.isEmpty() || sval == QStringLiteral("Breeze"))
-            qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
-        else
-            qputenv("QT_QUICK_CONTROLS_STYLE", sval.toUtf8());
-    }
-
     QApplication app(argc, argv);
 
     // Qt has now loaded our layer-shell integration. Drop the variable so the
@@ -201,6 +181,15 @@ int main(int argc, char *argv[])
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())
         app.setStyle(style);
+
+    // QML files import QtQuick.Controls (no explicit style), so this call
+    // actually takes effect. Fusion is the safe desktop-style default
+    // everywhere (Xvfb, bare wlroots); org.kde.desktop needs a KDE session.
+    {
+        const QString qqc2 = style.isEmpty() || style == QStringLiteral("Breeze")
+                                 ? QStringLiteral("Fusion") : style;
+        QQuickStyle::setStyle(qqc2);
+    }
 
     // One-shot CLI (next-wall.sh): advance a monitor's slideshow and exit,
     // before building any dock.

@@ -5,7 +5,7 @@
 // one filled with the theme highlight), because they are the same gesture.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: tabs

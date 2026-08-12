@@ -8,7 +8,7 @@
 // its own `subMenu` property.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 IconMenuItem {
     id: control

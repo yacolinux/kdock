@@ -11,7 +11,7 @@
 // on only while this card is on screen (the backend has a flag for exactly that).
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

@@ -3,7 +3,7 @@
 // a light grey chrome that fights every dark panel background.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: button

@@ -11,7 +11,7 @@
 // tilde se mueve solo cuando KDE contesta, vía la señal `changed`.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

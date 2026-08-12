@@ -1,6 +1,5 @@
 #include <QApplication>
-#include <QSettings>
-#include <QStandardPaths>
+#include <QQuickStyle>
 #include <QTextStream>
 #include <QTimer>
 
@@ -61,18 +60,6 @@ int main(int argc, char *argv[])
     if (qgetenv("QT_WAYLAND_SHELL_INTEGRATION") == "kdock-layershell")
         qunsetenv("QT_WAYLAND_SHELL_INTEGRATION");
 
-    // Qt Quick Controls must be set before QApplication (see kdock's main.cpp).
-    {
-        const QString conf = QStandardPaths::writableLocation(
-            QStandardPaths::GenericDataLocation) + QStringLiteral("/kdock/kdock.conf");
-        QSettings s(conf, QSettings::IniFormat);
-        const QString sval = s.value(QStringLiteral("qtStyle")).toString();
-        if (sval.isEmpty() || sval == QStringLiteral("Breeze"))
-            qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
-        else
-            qputenv("QT_QUICK_CONTROLS_STYLE", sval.toUtf8());
-    }
-
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("kdock-weather"));
     app.setOrganizationName(QStringLiteral("kdock"));
@@ -85,6 +72,10 @@ int main(int argc, char *argv[])
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())
         app.setStyle(style);
+
+    const QString qqc2 = style.isEmpty() || style == QStringLiteral("Breeze")
+                             ? QStringLiteral("Fusion") : style;
+    QQuickStyle::setStyle(qqc2);
 
     const QStringList args = app.arguments();
 

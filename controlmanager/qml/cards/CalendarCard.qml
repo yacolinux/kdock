@@ -4,7 +4,7 @@
 // inside a QQuickView. The button opens it as the separate window it is.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {

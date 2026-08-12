@@ -1,8 +1,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QImage>
-#include <QSettings>
-#include <QStandardPaths>
+#include <QQuickStyle>
 #include <QTimer>
 #include <QtPlugin>
 
@@ -100,18 +99,6 @@ int main(int argc, char *argv[])
         qputenv("QT_WAYLAND_SHELL_INTEGRATION", "kdock-layershell");
     }
 
-    // Qt Quick Controls must be set before QApplication (see kdock's main.cpp).
-    {
-        const QString conf = QStandardPaths::writableLocation(
-            QStandardPaths::GenericDataLocation) + QStringLiteral("/kdock/kdock.conf");
-        QSettings s(conf, QSettings::IniFormat);
-        const QString sval = s.value(QStringLiteral("qtStyle")).toString();
-        if (sval.isEmpty() || sval == QStringLiteral("Breeze"))
-            qputenv("QT_QUICK_CONTROLS_STYLE", "Fusion");
-        else
-            qputenv("QT_QUICK_CONTROLS_STYLE", sval.toUtf8());
-    }
-
     QApplication app(argc, argv);
 
     // Qt has loaded the integration by now. Drop the variable so anything this
@@ -131,6 +118,10 @@ int main(int argc, char *argv[])
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())
         app.setStyle(style);
+
+    const QString qqc2 = style.isEmpty() || style == QStringLiteral("Breeze")
+                             ? QStringLiteral("Fusion") : style;
+    QQuickStyle::setStyle(qqc2);
 
     const QStringList args = app.arguments();
 

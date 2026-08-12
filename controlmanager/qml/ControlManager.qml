@@ -11,7 +11,7 @@
 // menu paid 783 MB for.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: root

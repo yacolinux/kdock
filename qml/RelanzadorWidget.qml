@@ -2,7 +2,7 @@
 // Shows an icon that opens a popup with launchers when clicked.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: relanzadorWidget

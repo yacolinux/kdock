@@ -9,7 +9,7 @@
 // finishes does C++ shrink the input mask.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 
 Item {
     id: root

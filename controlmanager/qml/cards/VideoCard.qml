@@ -9,7 +9,7 @@
 // dock's process can repaint from it, so it goes through org.kdock.Dock.
 
 import QtQuick
-import QtQuick.Controls.Basic
+import QtQuick.Controls
 import ".."
 
 Item {
