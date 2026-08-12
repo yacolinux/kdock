@@ -675,7 +675,10 @@ QWidget *SettingsDialog::createGeneralTab()
         for (const QString &k : keys)
             styleCombo->addItem(k, k);
         const int idx = styleCombo->findData(DockConfig::qtStyle());
-        styleCombo->setCurrentIndex(idx < 0 ? 0 : idx);
+        {
+            const QSignalBlocker b(styleCombo);
+            styleCombo->setCurrentIndex(idx < 0 ? 0 : idx);
+        }
         styleCombo->setToolTip(tr("Qt default (Breeze on KDE, Fusion elsewhere)"));
         connect(styleCombo, &QComboBox::currentIndexChanged, this,
                 [this, styleCombo](int i) {
