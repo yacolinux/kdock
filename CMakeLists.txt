@@ -57,6 +57,7 @@ add_library(kdock_core OBJECT
     src/desktopmaximize.cpp   src/desktopmaximize.h
     src/plasmascript.h
     src/brightnesscontrol.cpp src/brightnesscontrol.h
+    src/screenbrightness.cpp  src/screenbrightness.h
     src/batterycontrol.cpp    src/batterycontrol.h
     src/systray.cpp           src/systray.h
     src/dbusmenu.cpp          src/dbusmenu.h

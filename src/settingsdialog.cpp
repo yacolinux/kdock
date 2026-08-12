@@ -1,6 +1,9 @@
 #include "settingsdialog.h"
 
 #include "audiocontrol.h"
+#include "batterycontrol.h"
+#include "brightnesscontrol.h"
+#include "screenbrightness.h"
 #include "networksettingswidget.h"
 #include "appearancecontrol.h"
 #include "coloredtabbar.h"
@@ -104,6 +107,9 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
     , m_theme(theme)
 {
     m_scriptRunners = manager ? manager->scriptRunners() : nullptr;
+    m_brightness = manager ? manager->brightness() : nullptr;
+    m_screens = manager ? manager->screens() : nullptr;
+    m_battery = manager ? manager->battery() : nullptr;
     m_iconColors = new IconColorProvider(this);
     setWindowTitle(tr("kdock Settings"));
     setWindowIcon(QIcon::fromTheme(QStringLiteral("preferences-desktop")));
@@ -267,6 +273,13 @@ void SettingsDialog::buildTabs()
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
+    // Same reset for the video tab: buildTabs() runs again on a language
+    // change, and every widget the old tabs owned is already deleted.
+    m_videoTabIndex = -1;
+    m_videoBrightnessLayout = m_videoPowerLayout = nullptr;
+    m_videoWheelTarget = nullptr;
+    m_videoPowerGroup = nullptr;
+    m_videoAllButtons = nullptr;
     addTab(createLayoutTab(), tr("Layout"));
     if (m_relanzadores)
         addTab(createRelanzadoresTab(), tr("Relanzadores"));
@@ -295,6 +308,13 @@ void SettingsDialog::buildTabs()
     m_networkTabIndex = -1;
     addTab(createNetworkTab(), tr("Redes"));
     m_networkTabIndex = m_tabWidget->count() - 1;
+    // Same idea, for the brightness widget's right-click: per-monitor
+    // brightness plus the power profile, none of it per-dock.
+    m_videoTabIndex = -1;
+    if (m_brightness || m_screens || m_battery) {
+        addTab(createVideoTab(), tr("VideoEnergía"));
+        m_videoTabIndex = m_tabWidget->count() - 1;
+    }
     // Dead last on purpose: it is the tab that decides in which language every
     // other tab is written.
     m_translationsTabIndex = -1;
@@ -2463,6 +2483,262 @@ void SettingsDialog::rebuildAudioTab()
     populate(m_audioOutLayout, m_audioOutGroup, m_audio->outputs(), true);
     populate(m_audioInLayout, m_audioInGroup, m_audio->inputs(), true);
     populate(m_audioAppLayout, m_audioAppGroup, m_audio->apps(), false);
+}
+
+// Brightness of every monitor + the power profile, backed by ScreenBrightness
+// (PowerDevil), BrightnessControl (brightnessctl) and BatteryControl
+// (power-profiles-daemon). Invoked by the dock's brightness-widget right-click
+// (DockWindow::openVideoSettings -> showVideoTab).
+//
+// The dock widget itself only ever drives ONE monitor — the wheel is the
+// equivalent of the volume wheel on the default sink — so this tab is the only
+// place the other screens can be dimmed, and where that one monitor is chosen.
+QWidget *SettingsDialog::createVideoTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+
+    auto *brightGroup = new QGroupBox(tr("Brillo de los monitores"), tab);
+    m_videoBrightnessLayout = new QVBoxLayout(brightGroup);
+    m_videoBrightnessLayout->setSpacing(4);
+    layout->addWidget(brightGroup);
+
+    // "Todos al …": only useful with more than one monitor, so rebuildVideoTab()
+    // shows and hides it.
+    m_videoAllButtons = new QWidget(brightGroup);
+    {
+        auto *h = new QHBoxLayout(m_videoAllButtons);
+        h->setContentsMargins(0, 0, 0, 0);
+        auto *all100 = new QPushButton(tr("Todos al 100 %"), m_videoAllButtons);
+        auto *all50 = new QPushButton(tr("Todos al 50 %"), m_videoAllButtons);
+        connect(all100, &QPushButton::clicked, this, [this] {
+            if (m_screens)
+                m_screens->setAll(1.0);
+        });
+        connect(all50, &QPushButton::clicked, this, [this] {
+            if (m_screens)
+                m_screens->setAll(0.5);
+        });
+        h->addWidget(all100);
+        h->addWidget(all50);
+        h->addStretch(1);
+    }
+    m_videoBrightnessLayout->addWidget(m_videoAllButtons);
+
+    auto *wheelGroup = new QGroupBox(tr("Rueda del widget de brillo"), tab);
+    auto *wheelForm = new QFormLayout(wheelGroup);
+    m_videoWheelTarget = new QComboBox(wheelGroup);
+    m_videoWheelTarget->setToolTip(
+        tr("La rueda sobre el widget del dock cambia el brillo de este monitor y de ningún "
+           "otro. Los demás se ajustan desde acá."));
+    wheelForm->addRow(tr("Monitor:"), m_videoWheelTarget);
+    connect(m_videoWheelTarget, &QComboBox::activated, this, [this](int index) {
+        if (m_brightness && index >= 0)
+            m_brightness->setWheelTarget(m_videoWheelTarget->itemData(index).toString());
+    });
+    layout->addWidget(wheelGroup);
+
+    m_videoPowerGroup = new QGroupBox(tr("Perfil de energía"), tab);
+    m_videoPowerLayout = new QVBoxLayout(m_videoPowerGroup);
+    m_videoPowerLayout->setSpacing(4);
+    layout->addWidget(m_videoPowerGroup);
+
+    layout->addStretch(1);
+
+    rebuildVideoTab();
+
+    // Bound to `tab`, so the connections die when buildTabs() deletes it.
+    if (m_screens)
+        connect(m_screens, &ScreenBrightness::changed, tab, [this] { scheduleVideoRebuild(); });
+    if (m_brightness)
+        connect(m_brightness, &BrightnessControl::changed, tab,
+                [this] { scheduleVideoRebuild(); });
+    if (m_battery)
+        connect(m_battery, &BatteryControl::changed, tab, [this] { scheduleVideoRebuild(); });
+    return tab;
+}
+
+void SettingsDialog::scheduleVideoRebuild()
+{
+    if (m_videoRebuildQueued)
+        return;
+    m_videoRebuildQueued = true;
+    QTimer::singleShot(0, this, [this] {
+        m_videoRebuildQueued = false;
+        rebuildVideoTab();
+    });
+}
+
+QWidget *SettingsDialog::makeBrightnessRow(QWidget *parent, const QString &label, qreal value,
+                                           std::function<void(qreal)> setter)
+{
+    auto *row = new QWidget(parent);
+    auto *h = new QHBoxLayout(row);
+    h->setContentsMargins(0, 0, 0, 0);
+    h->setSpacing(6);
+
+    const int percent = qRound(value * 100.0);
+
+    auto *icon = new QLabel(row);
+    // breeze has no -medium, so the split is at half (same as the panel's card).
+    icon->setPixmap(QIcon::fromTheme(percent < 50 ? QStringLiteral("brightness-low")
+                                                  : QStringLiteral("brightness-high"))
+                        .pixmap(16, 16));
+    h->addWidget(icon);
+
+    auto *name = new QLabel(label, row);
+    name->setToolTip(label);
+    name->setMinimumWidth(150);
+    h->addWidget(name, 1);
+
+    auto *slider = new QSlider(Qt::Horizontal, row);
+    // Never all the way down: a screen at 0 looks broken and cannot be found
+    // again with the mouse. Same floor the backends clamp to.
+    slider->setRange(qRound(BrightnessControl::MinBrightness * 100), 100);
+    {
+        QSignalBlocker blk(slider);
+        slider->setValue(percent);
+    }
+    slider->setMinimumWidth(150);
+
+    auto *pct = new QLabel(row);
+    pct->setMinimumWidth(46);
+    pct->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    pct->setText(QString::number(percent) + QStringLiteral(" %"));
+
+    connect(slider, &QSlider::sliderPressed, this, [this] { m_videoSliderDown = true; });
+    connect(slider, &QSlider::sliderReleased, this, [this] {
+        m_videoSliderDown = false;
+        // Deferred: we're inside this slider's own signal, and a direct rebuild
+        // would delete it under our feet.
+        scheduleVideoRebuild();
+    });
+    connect(slider, &QSlider::valueChanged, this, [pct, setter](int v) {
+        pct->setText(QString::number(v) + QStringLiteral(" %"));
+        setter(v / 100.0);
+    });
+    h->addWidget(slider);
+    h->addWidget(pct);
+    return row;
+}
+
+void SettingsDialog::rebuildVideoTab()
+{
+    if (!m_videoBrightnessLayout)
+        return;
+    if (m_videoSliderDown)
+        return; // don't yank a slider handle out from under the user mid-drag
+
+    const auto clearLayout = [](QVBoxLayout *lay, QWidget *keep) {
+        for (int i = lay->count() - 1; i >= 0; --i) {
+            QLayoutItem *item = lay->itemAt(i);
+            if (item->widget() && item->widget() == keep)
+                continue;
+            delete lay->takeAt(i)->widget();
+        }
+    };
+
+    // --- one row per monitor -------------------------------------------------
+    clearLayout(m_videoBrightnessLayout, m_videoAllButtons);
+
+    const QVariantList displays = m_screens ? m_screens->displays() : QVariantList();
+    bool haveInternalDisplay = false;
+    int inserted = 0;
+    for (const QVariant &v : displays) {
+        const QVariantMap d = v.toMap();
+        const QString name = d.value(QStringLiteral("name")).toString();
+        QString label = d.value(QStringLiteral("label")).toString();
+        if (label.isEmpty())
+            label = name;
+        if (d.value(QStringLiteral("internal")).toBool())
+            haveInternalDisplay = true;
+        QWidget *row = makeBrightnessRow(
+            m_videoBrightnessLayout->parentWidget(), label, d.value(QStringLiteral("value")).toReal(),
+            [this, name](qreal value) {
+                if (m_screens)
+                    m_screens->setBrightness(name, value);
+            });
+        m_videoBrightnessLayout->insertWidget(inserted++, row);
+    }
+
+    // PowerDevil usually reports only the DDC monitors, so without this row the
+    // laptop panel would have no control at all in a docked session.
+    const bool internalRow = m_brightness && m_brightness->internalAvailable()
+                             && !haveInternalDisplay;
+    if (internalRow) {
+        QWidget *row = makeBrightnessRow(m_videoBrightnessLayout->parentWidget(),
+                                         tr("Pantalla interna"),
+                                         m_brightness->internalBrightness(), [this](qreal value) {
+                                             if (m_brightness)
+                                                 m_brightness->setInternalBrightness(value);
+                                         });
+        m_videoBrightnessLayout->insertWidget(inserted++, row);
+    }
+
+    if (inserted == 0) {
+        auto *none = new QLabel(tr("Ni PowerDevil ni brightnessctl responden."),
+                                m_videoBrightnessLayout->parentWidget());
+        none->setWordWrap(true);
+        m_videoBrightnessLayout->insertWidget(inserted++, none);
+    }
+    m_videoAllButtons->setVisible(displays.size() > 1);
+
+    // --- which monitor the wheel drives -------------------------------------
+    if (m_videoWheelTarget) {
+        QSignalBlocker blk(m_videoWheelTarget);
+        m_videoWheelTarget->clear();
+        m_videoWheelTarget->addItem(tr("Automático (interno, si no el primero)"), QString());
+        for (const QVariant &v : displays) {
+            const QVariantMap d = v.toMap();
+            const QString label = d.value(QStringLiteral("label")).toString();
+            // Keyed by label and not by the D-Bus object name, which PowerDevil
+            // renumbers whenever a monitor sleeps (see screenbrightness.h).
+            if (!label.isEmpty())
+                m_videoWheelTarget->addItem(label, label);
+        }
+        if (internalRow)
+            m_videoWheelTarget->addItem(tr("Pantalla interna"), BrightnessControl::InternalTarget);
+        const QString target = m_brightness ? m_brightness->wheelTarget() : QString();
+        const int idx = m_videoWheelTarget->findData(target);
+        m_videoWheelTarget->setCurrentIndex(qMax(0, idx));
+        m_videoWheelTarget->setEnabled(m_brightness != nullptr);
+    }
+
+    // --- power profile -------------------------------------------------------
+    if (m_videoPowerLayout) {
+        clearLayout(m_videoPowerLayout, nullptr);
+        const QStringList profiles = m_battery ? m_battery->profiles() : QStringList();
+        m_videoPowerGroup->setVisible(m_battery && m_battery->profilesAvailable()
+                                      && !profiles.isEmpty());
+        auto *bg = new QButtonGroup(m_videoPowerGroup);
+        for (const QString &profile : profiles) {
+            // Same three names the control panel's Video card uses.
+            const QString title = profile == QLatin1String("power-saver") ? tr("Ahorro")
+                                  : profile == QLatin1String("balanced")  ? tr("Equilibrado")
+                                  : profile == QLatin1String("performance")
+                                      ? tr("Rendimiento")
+                                      : profile;
+            auto *radio = new QRadioButton(title, m_videoPowerGroup);
+            radio->setChecked(m_battery->activeProfile() == profile);
+            bg->addButton(radio);
+            connect(radio, &QRadioButton::clicked, this, [this, profile] {
+                if (m_battery)
+                    m_battery->setProfile(profile);
+            });
+            m_videoPowerLayout->addWidget(radio);
+        }
+        if (m_battery && m_battery->available()) {
+            auto *state = new QLabel(m_battery->tooltipText(), m_videoPowerGroup);
+            state->setWordWrap(true);
+            m_videoPowerLayout->addWidget(state);
+        }
+    }
+}
+
+void SettingsDialog::showVideoTab()
+{
+    if (m_videoTabIndex >= 0 && m_videoTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_videoTabIndex);
 }
 
 void SettingsDialog::showAudioTab()

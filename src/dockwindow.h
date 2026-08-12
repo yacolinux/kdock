@@ -119,6 +119,9 @@ public:
     Q_INVOKABLE void openAudioSettings();
     // Same, on the Redes tab (network widget right-click).
     Q_INVOKABLE void openNetworkSettings();
+    // Same, on the VideoEnergía tab (brightness widget right-click): the wheel
+    // only drives one monitor, and this is where the others live.
+    Q_INVOKABLE void openVideoSettings();
     Q_INVOKABLE void quit();
     // Relaunch kdock with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restart();

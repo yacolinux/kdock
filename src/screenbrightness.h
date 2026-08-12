@@ -41,6 +41,14 @@ public:
     Q_INVOKABLE void setBrightness(const QString &name, qreal ratio);
     Q_INVOKABLE void setAll(qreal ratio);
 
+    // Test seam, off unless the variable is set: KDOCK_TEST_DISPLAYS holds a
+    // JSON array of display objects ([{"name":…,"label":…,"internal":…,
+    // "brightness":…,"max":…}]) and replaces the D-Bus scan, so the monitor
+    // logic can be exercised without PowerDevil — and without dimming anybody's
+    // screen. Setters still go out on D-Bus, where the invented object names
+    // resolve to nothing.
+    static QVariantList fixtureDisplays();
+
 public slots:
     // A slot, not just Q_INVOKABLE: QDBusConnection::connect() resolves the
     // SLOT() macro through indexOfSlot(), which does not see plain invokables.

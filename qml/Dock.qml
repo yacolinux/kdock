@@ -724,7 +724,11 @@ Item {
     function sectionTooltip(token) {
         switch (token) {
         case "volume": return volume.muted ? qsTr("Muted") : Math.round(volume.volume * 100) + " %"
-        case "brightness": return Math.round(brightness.brightness * 100) + " %"
+        // The monitor's name matters here: the wheel drives that one and no
+        // other, and with two screens the percentage alone is a riddle.
+        case "brightness": return (brightness.targetLabel.length > 0
+                                   ? brightness.targetLabel + " — " : "")
+                                  + Math.round(brightness.brightness * 100) + " %"
         case "clock": return Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy, HH:mm:ss")
         case "clock2": return Qt.formatDateTime(new Date(), "dddd, d MMMM yyyy, HH:mm:ss")
         case "overview": return overview && overview.active ? qsTr("Close Overview") : qsTr("Open Overview")
@@ -771,12 +775,16 @@ Item {
     // section menu. Shift+right-click still opens the menu on all of them
     // (see secMouse.onClicked).
     function sectionHasAltClick(token) {
-        return token === "volume" || token === "movetoscreen" || token === "maxmin"
+        return token === "volume" || token === "brightness" || token === "movetoscreen"
+               || token === "maxmin"
                || token === "closewindow" || token === "darkmode"
     }
 
     function sectionAltClick(token) {
         if (token === "volume") dockWindow.openAudioSettings()
+        // The wheel drives one monitor; every other screen (and the power
+        // profile) is in that tab.
+        else if (token === "brightness") dockWindow.openVideoSettings()
         else if (token === "movetoscreen" && monitorControl) monitorControl.moveToPreviousScreen()
         else if (token === "maxmin" && maxmin) maxmin.minimize()
         else if (token === "closewindow" && activeWindow) activeWindow.sendActiveToNextDesktop()

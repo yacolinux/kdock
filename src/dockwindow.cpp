@@ -638,6 +638,12 @@ void DockWindow::openAudioSettings()
     m_dialog->showAudioTab();
 }
 
+void DockWindow::openVideoSettings()
+{
+    openSettings();
+    m_dialog->showVideoTab();
+}
+
 void DockWindow::openNetworkSettings()
 {
     openSettings();

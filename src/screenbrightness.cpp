@@ -2,6 +2,9 @@
 
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QDBusMessage>
 #include <QDBusReply>
 #include <QVariantMap>
@@ -60,6 +63,27 @@ int ScreenBrightness::indexOf(const QString &name) const
     return -1;
 }
 
+QVariantList ScreenBrightness::fixtureDisplays()
+{
+    const QByteArray raw = qgetenv("KDOCK_TEST_DISPLAYS");
+    if (raw.isEmpty())
+        return {};
+    const QJsonDocument doc = QJsonDocument::fromJson(raw);
+    if (!doc.isArray())
+        return {};
+
+    QVariantList out;
+    const QJsonArray array = doc.array();
+    for (const QJsonValue &v : array) {
+        QVariantMap entry = v.toObject().toVariantMap();
+        const int max = entry.value(QStringLiteral("max")).toInt();
+        const int value = entry.value(QStringLiteral("brightness")).toInt();
+        entry[QStringLiteral("value")] = max > 0 ? qreal(value) / max : 0.0;
+        out.append(entry);
+    }
+    return out;
+}
+
 void ScreenBrightness::refresh()
 {
     const QVariantList before = m_displays;
@@ -67,6 +91,18 @@ void ScreenBrightness::refresh()
 
     m_displays.clear();
     m_available = false;
+
+    // Presence of the variable is what counts, not its contents: "[]" is how a
+    // test says "no PowerDevil here". Deciding by the parsed list instead would
+    // send that case out to the session bus, where the *real* PowerDevil
+    // answers and the test stops being a test.
+    if (qEnvironmentVariableIsSet("KDOCK_TEST_DISPLAYS")) {
+        m_displays = fixtureDisplays();
+        m_available = !m_displays.isEmpty();
+        if (wasAvailable != m_available || before != m_displays)
+            emit changed();
+        return;
+    }
 
     QDBusInterface root(kService, kRootPath, kPropsIface, QDBusConnection::sessionBus());
     if (!root.isValid()) {

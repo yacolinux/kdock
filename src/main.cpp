@@ -23,6 +23,7 @@
 #include "dockmodel.h"
 #include "dockwindow.h"
 #include "brightnesscontrol.h"
+#include "screenbrightness.h"
 #include "batterycontrol.h"
 #include "overviewcontrol.h"
 #include "desktopcontrol.h"
@@ -216,6 +217,11 @@ int main(int argc, char *argv[])
     VolumeControl volume;
     AudioControl audio;
     BrightnessControl brightness;
+    // PowerDevil's per-monitor brightness. The widget drives exactly one of
+    // these displays (which one is set in the VideoEnergía tab); brightnessctl
+    // stays as the fallback for a session without PowerDevil.
+    ScreenBrightness screenBrightness;
+    brightness.setScreens(&screenBrightness);
     BatteryControl battery;
     OverviewControl overview;
     DesktopControl desktopControl;
@@ -249,6 +255,7 @@ int main(int argc, char *argv[])
     shared.volume = &volume;
     shared.audio = &audio;
     shared.brightness = &brightness;
+    shared.screens = &screenBrightness;
     shared.battery = &battery;
     shared.overview = &overview;
     shared.desktopControl = &desktopControl;

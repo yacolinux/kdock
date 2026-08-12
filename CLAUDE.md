@@ -27,12 +27,17 @@ mano**, pero para verificar un cambio empezá por la suite. Tres cosas que impor
 - **Toda corrida es sandbox**: `XDG_DATA_HOME` descartable + herramientas falsas en el `PATH`
   (`tests/lib/`). Si escribís un test nuevo que arranca un binario, pasá por ahí o le vas a
   cambiar el brillo y el tema al usuario.
-- **Hay tres costuras de test en producción**, las tres apagadas por defecto y documentadas en
-  el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`),
-  `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`) y
+- **Hay cuatro costuras de test en producción**, las cuatro apagadas por defecto y documentadas
+  en el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`),
+  `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`),
   `KDOCK_WEATHER_FIXTURE` (una respuesta grabada del proveedor en vez de la red,
   `src/weathercontrol.cpp`) — esta última es lo que hace que `tst_weather` corra en CI, que no
-  tiene internet.
+  tiene internet — y `KDOCK_TEST_DISPLAYS` (la lista de monitores de PowerDevil como JSON,
+  `src/screenbrightness.cpp`), que es lo que deja probar a qué monitor le habla la rueda del
+  brillo sin PowerDevil y sin atenuarle la pantalla a nadie. En esa última **manda que la
+  variable esté puesta, no su contenido**: `[]` es como se dice "acá no hay PowerDevil", y
+  decidir por la lista parseada mandaría ese caso al bus de sesión, donde contesta el PowerDevil
+  de verdad y el test deja de ser un test.
 
 ## Build
 
@@ -524,6 +529,36 @@ el primero que se construyó (el de General) sino uno de DarkMode, que además e
 popup que nunca se creó y parece un bug del código (2026-08-05). Desambiguá por algo del
 propio widget (el tooltip, la página que lo contiene) e imprimí `isEnabled()` antes de
 concluir que el clic "no funcionó".
+
+### Probar el brillo sin atenuarle la pantalla al usuario
+
+Tres cosas que no son obvias y costaron una corrida cada una (2026-08-12):
+
+- **`brightnessctl` no es el brillo que el usuario ve.** Maneja el backlight interno y nada más.
+  En esta sesión el panel es `intel_backlight` y el monitor que se mira es un Samsung por DDC que
+  solo conoce PowerDevil (`busctl --user get-property org.kde.ScreenBrightness
+  /org/kde/ScreenBrightness DisplaysDBusNames`, y `GetAll` sobre cada display). O sea que un
+  arnés que verifica con `brightnessctl -m info` puede dar verde sobre una feature que no mueve
+  nada de lo que se ve.
+- **El `PATH` falso tapa `brightnessctl` pero NO PowerDevil**: es D-Bus al bus de sesión, y desde
+  adentro de Xvfb se llega igual. Un slider de la solapa VideoEnergía movido en una sonda le
+  cambia el brillo al monitor de verdad. Anotá y devolvé:
+
+  ```bash
+  busctl --user get-property org.kde.ScreenBrightness /org/kde/ScreenBrightness/<display> \
+         org.kde.ScreenBrightness.Display Brightness
+  busctl --user call org.kde.ScreenBrightness /org/kde/ScreenBrightness/<display> \
+         org.kde.ScreenBrightness.Display SetBrightness iu <valor> 0
+  ```
+
+  Para probar la *lógica* (qué monitor elige la rueda) no hace falta nada de eso: está la costura
+  `KDOCK_TEST_DISPLAYS` de más arriba.
+- **La rueda del widget sí se prueba de punta a punta bajo Xvfb**, porque el clic va por XTEST y
+  el brillo va por D-Bus al PowerDevil de verdad: dock del build con `showBrightness=true`,
+  `xdotool mousemove <x> <y> click 5`, y el `busctl` de arriba dice si bajó **ese** display y
+  ninguno más. Ojo con las coordenadas: bajo X no hay layer-shell, así que el dock queda en
+  `+0+0` con su grosor (1920x68) aunque el borde configurado sea el de abajo — sacá la posición
+  del ícono de una captura previa, no del `edge`.
 
 ### Probar los efectos sobre el escritorio sin tocarlo: herramientas falsas en el `PATH`
 

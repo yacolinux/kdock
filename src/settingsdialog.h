@@ -18,6 +18,9 @@ class SystrayHost;
 class RelanzadoresManager;
 class ScriptRunnersManager;
 class AudioControl;
+class BrightnessControl;
+class ScreenBrightness;
+class BatteryControl;
 class AppearanceControl;
 class ColoredTabWidget;
 class IconColorProvider;
@@ -56,6 +59,8 @@ public:
     void showAudioTab();
     // Same for the Redes tab (network widget's right-click).
     void showNetworkTab();
+    // Same for the VideoEnergía tab (brightness widget's right-click).
+    void showVideoTab();
     // Same for the Docks tab, also selecting the row of the given dockId
     // (used by the dock's right-click → Dock → Nombre).
     void showMonitorsTab(const QString &dockId);
@@ -82,6 +87,16 @@ private:
     // about the panel lives in its own settings dialog.
     QWidget *createControlManagerGroup(QWidget *parent);
     QWidget *createAudioTab();
+    // Brightness of every detected monitor plus the power profile. Not
+    // per-dock: the machine's screens look the same whichever dock is selected.
+    // This is where the dock's brightness widget sends its right click, and the
+    // only place the monitors it does *not* drive can be dimmed.
+    QWidget *createVideoTab();
+    void rebuildVideoTab();
+    void scheduleVideoRebuild();
+    // One brightness row (icon + label + slider + %). `setter` gets 0..1.
+    QWidget *makeBrightnessRow(QWidget *parent, const QString &label, qreal value,
+                               std::function<void(qreal)> setter);
     // Devices + connections editor for NetworkManager. Not per-dock: the
     // machine's networks look the same whichever dock is selected.
     QWidget *createNetworkTab();
@@ -206,6 +221,11 @@ private:
     RelanzadoresManager *m_relanzadores;
     ScriptRunnersManager *m_scriptRunners = nullptr;
     AudioControl *m_audio = nullptr;
+    // Pulled from the manager (not from the constructor, which the probes call
+    // with a null one): the three backends of the VideoEnergía tab.
+    BrightnessControl *m_brightness = nullptr;
+    ScreenBrightness *m_screens = nullptr;
+    BatteryControl *m_battery = nullptr;
     AppearanceControl *m_appearance = nullptr;
     Theme *m_theme = nullptr;
     DockManager *m_manager = nullptr;
@@ -259,6 +279,18 @@ private:
     QVBoxLayout *m_audioAppLayout = nullptr;
     bool m_audioSliderDown = false;
     bool m_audioRebuildQueued = false;
+    // VideoEnergía tab, same shape as Audio: the brightness rows are rebuilt
+    // from ScreenBrightness::changed (monitors come and go, and KDE moves the
+    // values behind our back), and m_videoSliderDown suppresses that while a
+    // slider is under the pointer.
+    int m_videoTabIndex = -1;
+    QVBoxLayout *m_videoBrightnessLayout = nullptr;
+    QComboBox *m_videoWheelTarget = nullptr;
+    QGroupBox *m_videoPowerGroup = nullptr;
+    QVBoxLayout *m_videoPowerLayout = nullptr;
+    QWidget *m_videoAllButtons = nullptr;
+    bool m_videoSliderDown = false;
+    bool m_videoRebuildQueued = false;
     QString m_selectedRelanzadorId;
     QString m_selectedScriptRunnerId;
     QListWidget *m_docksList = nullptr;

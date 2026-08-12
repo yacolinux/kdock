@@ -27,7 +27,6 @@ qt_add_executable(kdock-controlmanager
     src/cmservice.cpp         src/cmservice.h
     src/cmbackends.h
     # New backends, specific to this binary:
-    src/screenbrightness.cpp  src/screenbrightness.h
     src/mpriscontrol.cpp      src/mpriscontrol.h
     src/docklink.cpp          src/docklink.h
     # Shared with kdock, unmodified:
@@ -39,6 +38,7 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/audiocontrol.cpp     ${KDOCK_SHARED_SRC}/audiocontrol.h
     ${KDOCK_SHARED_SRC}/batterycontrol.cpp   ${KDOCK_SHARED_SRC}/batterycontrol.h
     ${KDOCK_SHARED_SRC}/brightnesscontrol.cpp ${KDOCK_SHARED_SRC}/brightnesscontrol.h
+    ${KDOCK_SHARED_SRC}/screenbrightness.cpp ${KDOCK_SHARED_SRC}/screenbrightness.h
     ${KDOCK_SHARED_SRC}/networkcontrol.cpp   ${KDOCK_SHARED_SRC}/networkcontrol.h
     ${KDOCK_SHARED_SRC}/weathercontrol.cpp   ${KDOCK_SHARED_SRC}/weathercontrol.h
     ${KDOCK_SHARED_SRC}/weatherconfig.cpp    ${KDOCK_SHARED_SRC}/weatherconfig.h

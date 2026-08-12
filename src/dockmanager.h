@@ -40,6 +40,7 @@ class AudioControl;
 class ClockWidget;
 class ClockWidget2;
 class BrightnessControl;
+class ScreenBrightness;
 class BatteryControl;
 class OverviewControl;
 class DesktopControl;
@@ -70,6 +71,10 @@ public:
         VolumeControl *volume = nullptr;
         AudioControl *audio = nullptr;
         BrightnessControl *brightness = nullptr;
+        // Per-monitor brightness (PowerDevil). Only the settings dialog uses it
+        // directly; the dock widget goes through BrightnessControl, which picks
+        // one display out of it.
+        ScreenBrightness *screens = nullptr;
         BatteryControl *battery = nullptr;
         OverviewControl *overview = nullptr;
         DesktopControl *desktopControl = nullptr;
@@ -225,6 +230,10 @@ public:
     ScriptRunnersManager *scriptRunners() const { return m_shared.scriptRunners; }
     SystrayHost *systrayHost() const { return m_shared.systrayHost; }
     AudioControl *audio() const { return m_shared.audio; }
+    // The three backends of the VideoEnergía tab (see SettingsDialog).
+    BrightnessControl *brightness() const { return m_shared.brightness; }
+    ScreenBrightness *screens() const { return m_shared.screens; }
+    BatteryControl *battery() const { return m_shared.battery; }
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
 
 signals:

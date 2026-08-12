@@ -42,7 +42,8 @@ src/
   waylandclipboard.{h,cpp} — ext-data-control-v1 client: focus-independent clipboard read/write
   clockwidget.{h,cpp}     — Live clock with configurable 12/24h, date, seconds
   clockwidget2.{h,cpp}    — Second clock (same display) with a larger styled tooltip
-  brightnesscontrol.{h,cpp} — Screen brightness via brightnessctl (no extra libraries)
+  brightnesscontrol.{h,cpp} — Brightness of the one monitor the widget drives (PowerDevil, brightnessctl as fallback)
+  screenbrightness.{h,cpp}  — Per-monitor brightness via PowerDevil's org.kde.ScreenBrightness; shared with kdock-controlmanager
   overviewcontrol.{h,cpp} — Toggles KWin's Overview effect via kglobalaccel (KDE only)
   desktopcontrol.{h,cpp}  — Moves active window to next virtual desktop via KWin shortcut (KDE only)
   monitorcontrol.{h,cpp}  — Moves active window to next monitor via KWin shortcut; right click = previous monitor (token movetoscreen)
@@ -382,6 +383,27 @@ que saber para tocar código:
 - The tab (`SettingsDialog::createAudioTab()`) is only added when `AudioControl::available()`, and is rebuilt live from `AudioControl::changed()`. Right-clicking the dock's volume widget opens it directly (`DockWindow::openAudioSettings()` → `showAudioTab()`).
 - The **only** preference the two backends share is the >100 % ceiling: `maxVolume` (checkbox "Raise maximum volume (up to 150%)"), persisted in the `audio` group of the shared settings file.
 
+### Solapa VideoEnergía (`SettingsDialog::createVideoTab()`)
+
+- Es a la rueda del brillo lo que la solapa Audio es a la del volumen: el widget maneja **un
+  solo** monitor, y acá están todos los demás. Tres grupos: *Brillo de los monitores* (un slider
+  por display de PowerDevil), *Rueda del widget de brillo* (a cuál de ellos le habla el widget) y
+  *Perfil de energía* (los tres de `BatteryControl`, o sea power-profiles-daemon, más el estado
+  de la batería). El clic derecho del widget entra directo (`DockWindow::openVideoSettings()` →
+  `showVideoTab()`).
+- **No es per-dock** —los monitores de la máquina son los mismos desde cualquier dock—, así que
+  va al final, junto a Audio y Redes. Los backends salen de `m_manager` (`brightness()`,
+  `screens()`, `battery()`, accesores nuevos de `DockManager`) y no del constructor, que las
+  sondas llaman con `manager == nullptr`.
+- Se reconstruye entero desde `ScreenBrightness::changed` / `BatteryControl::changed` con el
+  mismo patrón encolado de la solapa Audio (`scheduleVideoRebuild()` + `m_videoSliderDown`): los
+  monitores se enchufan y se van, y KDE mueve los valores por su cuenta.
+- **La fila extra "Pantalla interna"** aparece cuando `brightnessctl` existe y **ningún** display
+  de PowerDevil es interno, que es lo normal en una sesión con dock station: PowerDevil lista los
+  monitores DDC y no el panel del portátil, que si no se quedaría sin ningún control.
+- El combo guarda **etiquetas** de monitor, no los nombres de objeto de PowerDevil (volátiles);
+  el primer ítem es "(automático)" con id vacío, y `internal` clava la rueda al backlight.
+
 ### Solapas coloreadas de Configuración (`src/coloredtabbar.cpp` + `SettingsDialog::tabPalette()`)
 - El diálogo tiene ~10 solapas y todas se veían iguales. `ColoredTabBar` (subclase de `QTabBar`) pinta un fondo distinto por solapa; `ColoredTabWidget` existe solo porque `QTabWidget::setTabBar()` es protegido.
 - `paintEvent()` rellena `tabRect(i)` con `mix(palette().window(), tint, f)` — `f` = 0.80 seleccionada / 0.45 hover / 0.20 resto — y después dibuja **solo** `CE_TabBarTabLabel`: pintar `CE_TabBarTabShape` taparía el relleno. El color del texto sale por luminancia del relleno ya mezclado, así que anda en esquema claro y oscuro sin tocar nada.
@@ -549,7 +571,7 @@ tres diálogos vive.
 - **La solapa nueva desbordó la barra de solapas coloreadas**: con once solapas los títulos pedían 1086 px y el `QTabBar` caía sin avisar en modo flechas de scroll, escondiendo las últimas. El diálogo pasó de 1000 a 1120 px de ancho. Desde 2026-08-04 el problema no se puede repetir: la barra está en columna (ver *Solapas coloreadas*) y el ancho del diálogo ya no lo dicta ella.
 
 ### Clic derecho de un widget: acción vs. menú de sección
-- El clic derecho sobre un widget abre por defecto el **menú de sección** (agregar separador, color de fondo, etiquetas, renombrar, Configuración). Algunos widgets se lo gastan en una segunda acción, y eso se declara en **un solo lugar** de `Dock.qml`: `sectionHasAltClick(token)` dice cuáles, y `sectionAltClick(token)` hace qué. Hoy: `volume` → mezclador (solapa Audio), `movetoscreen` → monitor anterior, `maxmin` → minimizar, `closewindow` → mandar la ventana al escritorio siguiente sin seguirla, `darkmode` → modo oscuro (el clic izquierdo pone el modo normal).
+- El clic derecho sobre un widget abre por defecto el **menú de sección** (agregar separador, color de fondo, etiquetas, renombrar, Configuración). Algunos widgets se lo gastan en una segunda acción, y eso se declara en **un solo lugar** de `Dock.qml`: `sectionHasAltClick(token)` dice cuáles, y `sectionAltClick(token)` hace qué. Hoy: `volume` → mezclador (solapa Audio), `brightness` → solapa VideoEnergía, `movetoscreen` → monitor anterior, `maxmin` → minimizar, `closewindow` → mandar la ventana al escritorio siguiente sin seguirla, `darkmode` → modo oscuro (el clic izquierdo pone el modo normal).
 - **`Shift`+clic derecho siempre abre el menú de sección**, en todos los widgets (`secMouse.onClicked`). Es la única vía al menú en esos tres — antes el widget de volumen simplemente se quedaba sin menú.
 - Un widget nuevo con acción de clic derecho se agrega tocando **solo esas dos funciones**; no hay que tocar el `MouseArea`.
 
@@ -1329,8 +1351,11 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   nueva; y **la tarjeta compacta de Principal no cambia** —resumen, Wi-Fi y el botón que salta a
   la sección—, porque en 2x2 no entra nada de esto y el botón ya lleva a donde sí.
 - **Backends**: reusa `AudioControl`, `BatteryControl`, `BrightnessControl`, `NetworkControl`,
-  `WallpaperControl`, `PowerControl` y `DesktopEntryIndex` tal cual, y agrega tres propios:
-  - **`ScreenBrightness`** (`org.kde.ScreenBrightness`, PowerDevil): brillo **por monitor**, que
+  `WallpaperControl`, `PowerControl`, `ScreenBrightness` y `DesktopEntryIndex` tal cual, y agrega
+  dos propios:
+  - **`ScreenBrightness`** (`src/screenbrightness.{h,cpp}`, `org.kde.ScreenBrightness` de
+    PowerDevil): nació acá y desde 2026-08-12 es **compartido con el dock**, que lo usa para
+    elegir a qué monitor le habla su widget de brillo. Brillo **por monitor**, que
     es lo que `brightnessctl` no puede (maneja el backlight interno y nada más). Un objeto por
     display con `Label`, `Brightness`, `MaxBrightness` e `IsInternal`. **Los nombres de esos
     objetos son volátiles**: se renumeran cuando un monitor duerme y vuelve (visto en vivo:
@@ -1624,7 +1649,11 @@ still render and work; they just can't be toggled from the UI anymore).
     - **The first evaluation happens while the row is detached**, with every context property reading back undefined (even `console`), hence the `theme ?` guard and the `_ready` flag: once it flips, the binding re-runs with `theme` live, so a theme change still busts the icon cache.
     - **Reserve the arrow's room** (`rightPadding`): `IconMenuItem`'s `Row` does not know about the submenu arrow the way the stock `IconLabel` does, so the widest label runs underneath it.
     Related fix in the same pass: `IconMenuItem` now also reserves the **check indicator's** column with a spacer. `MenuItem` draws the tick at `leftPadding`, i.e. right on top of our icon, so every checked entry of `ModeMenu`/`IconLabelMenu`/`WidgetLabelMenu`/`BackgroundColorMenu` read as a smudge. (The color swatches of `BackgroundColorMenu` have their own `contentItem` and are still drawn under the tick.)
-10. **Brightness widget** — Uses `brightnessctl` (via QProcess, no extra library linkage). The widget is hidden if `brightnessctl` is not in `$PATH`.
+10. **Brightness widget** — Drives **exactly one monitor**, the same way the volume widget drives only the default sink: wheel = ±5 % on that monitor, left click = 100 %, **right click = the *VideoEnergía* tab** (`DockWindow::openVideoSettings()`), which is where every other screen and the power profile live. Shift+right-click still opens the section menu.
+    - **Which monitor**: `BrightnessControl::wheelDisplay()` resolves it fresh on every call from `ScreenBrightness` (PowerDevil, `org.kde.ScreenBrightness`) — `Brightness/wheelDisplay` empty means *auto* (the internal display if PowerDevil reports one, else the first), `internal` pins it to the `brightnessctl` backlight, and anything else is a monitor **label**. Labels and not the D-Bus object names, which PowerDevil renumbers when a monitor sleeps.
+    - **Why PowerDevil at all**: `brightnessctl` only ever sees the internal backlight, so in a docked session (external monitor over DDC, laptop panel not what the user is looking at) the wheel dimmed an invisible screen. `brightnessctl` stays as the fallback for a session without PowerDevil, and it is still the *only* path for the startup / resume-from-suspend restore — that saved value belongs to the internal panel and pushing it into a DDC monitor at every login would be a surprise.
+    - **`brightnessctl -m info` prints `device,class,current,percent,max`**, so the percentage is the *fourth* field. Reading the last one (as this did until 2026-08-12) gave `m_brightness = 960` on a panel whose max is 96000: the bar was pinned full and `decrease()` computed `960 - 0.05`, which the clamp put back at 1.0 — **the wheel down did literally nothing**, which is exactly how the bug was reported. Covered by `tests/unit/tst_brightness.cpp`.
+    - The widget is visible when *either* backend answers (`BrightnessControl::available()`), and its tooltip carries the monitor's name, because with two screens a bare percentage is a riddle.
 11. **Autohide toggle** — A dock widget button that toggles `config.autohide`. Uses `window-pin`/`window-unpin` icons.
 12. **Systray DBus (SNI)** — `SystrayHost` implements the StatusNotifierItem protocol using the **`org.kde.*`** bus names, which is what the ecosystem actually implements (KDE, libappindicator, Qt/GTK trays); the `org.freedesktop.*` names are only registered as extra aliases when kdock has to *become* the watcher (bare wlroots, no existing watcher). Key points (see `src/systray.cpp`):
     - **Watcher discovery**: prefer an existing `org.kde.StatusNotifierWatcher`, else `org.freedesktop.StatusNotifierWatcher`, else register both ourselves. The chosen name is `m_watcherService` (used for host registration, the item list and the `StatusNotifierItemRegistered/Unregistered` signal subscriptions).
@@ -1759,7 +1788,7 @@ a checkable *Wi-Fi*.
 | `IconColorProvider` | `iconColors.dominant(iconName, revision)`, `iconColors.contrasting(...)` | Dominant icon color (QColor) for the running-app background; `contrasting()` is the color for the dots/edge line drawn *over* that background. Cached, revision-invalidated |
 | `VirtualDesktops` | `virtualDesktops` | `count`, `current` (posición **1-based**, 0 = KWin no contesta), `names`, `nameOf(position)`, `switchTo(position)`. Lo usan el widget `pager`, el submenú *Escritorio* de los íconos de apps y —desde 2026-08-10, en `kdock-controlmanager`— la sección *Escritorios* |
 | `WindowMonitor` | `showdesktop` | `showDesktopSupported`, `showDesktopActive`, `toggleShowDesktop()`; null on X11 |
-| `BrightnessControl` | `brightness` | `available`, `brightness`, `setBrightness(v)`, `increase()`, `decrease()` |
+| `BrightnessControl` | `brightness` | `available`, `brightness`, `targetLabel` (nombre del monitor que maneja la rueda), `setBrightness(v)`, `increase()`, `decrease()`, `wheelTarget()`/`setWheelTarget(id)`, `internalAvailable()`/`internalBrightness()`/`setInternalBrightness(v)` (el backlight de `brightnessctl` aparte). Maneja **un solo** monitor: cuál, en `wheelDisplay()` |
 | `ClockWidget` | `clock` | `timeString`, `dateString`, `format24h`, `showDate`, `showSeconds` |
 | `ClockWidget2` | `clock2` | Same API as `ClockWidget`; rendered with a larger styled tooltip |
 | `OverviewControl` | `overview` | `available`, `active`, `toggle()` (KWin Overview via kglobalaccel) |
