@@ -1362,6 +1362,14 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
     `display11`/`display12` pasaron a `display13` entre dos corridas), así que nada los cachea
     y `DisplayAdded`/`DisplayRemoved` reescanean. Si el servicio no está, la sección cae al
     `BrightnessControl` de siempre con un solo slider.
+    **Y PowerDevil casi nunca lista el panel del portátil** (en esta sesión, con dock station,
+    reporta *solo* el monitor DDC), así que la tarjeta agrega una fila **"Pantalla interna"** por
+    `brightnessctl` cuando ninguno de sus displays es interno — sin eso el panel del portátil no
+    tenía slider en ningún lado, que es como se reportó el 2026-08-12 (captura de esta tarjeta con
+    un solo monitor). El slider **compacto** no elige monitor por su cuenta: lee
+    `brightness.brightness`, o sea el mismo que resuelve `BrightnessControl::wheelDisplay()` para
+    la rueda del dock, así que la tarjeta y el widget no pueden discrepar (`setScreens()` también
+    se llama en `controlmanager/src/main.cpp`).
   - **`MprisControl`** (`org.mpris.MediaPlayer2.*`): el reproductor "actual" es el que eligió el
     usuario, si no el que está `Playing`, si no el primero. La posición **se sondea**, y solo
     mientras la tarjeta está en pantalla (`setMonitoring`), porque es un round trip por tick.
@@ -1654,6 +1662,7 @@ still render and work; they just can't be toggled from the UI anymore).
     - **Why PowerDevil at all**: `brightnessctl` only ever sees the internal backlight, so in a docked session (external monitor over DDC, laptop panel not what the user is looking at) the wheel dimmed an invisible screen. `brightnessctl` stays as the fallback for a session without PowerDevil, and it is still the *only* path for the startup / resume-from-suspend restore — that saved value belongs to the internal panel and pushing it into a DDC monitor at every login would be a surprise.
     - **`brightnessctl -m info` prints `device,class,current,percent,max`**, so the percentage is the *fourth* field. Reading the last one (as this did until 2026-08-12) gave `m_brightness = 960` on a panel whose max is 96000: the bar was pinned full and `decrease()` computed `960 - 0.05`, which the clamp put back at 1.0 — **the wheel down did literally nothing**, which is exactly how the bug was reported. Covered by `tests/unit/tst_brightness.cpp`.
     - The widget is visible when *either* backend answers (`BrightnessControl::available()`), and its tooltip carries the monitor's name, because with two screens a bare percentage is a riddle.
+    - **El widget de batería comparte ese clic derecho** (`batteryComp`, no `sectionAltClick()`: es un bloque y maneja su propio `MouseArea`). Están uno al lado del otro, los dos dibujan la misma barrita y son el mismo tema, así que el clic derecho en cualquiera de los dos cae en la solapa; el izquierdo del de batería sigue abriendo el menú rápido de perfiles. Reportado el 2026-08-12 como *"el clic derecho sigue mostrando el menú de 3 opciones de performance"*: era el widget de al lado.
 11. **Autohide toggle** — A dock widget button that toggles `config.autohide`. Uses `window-pin`/`window-unpin` icons.
 12. **Systray DBus (SNI)** — `SystrayHost` implements the StatusNotifierItem protocol using the **`org.kde.*`** bus names, which is what the ecosystem actually implements (KDE, libappindicator, Qt/GTK trays); the `org.freedesktop.*` names are only registered as extra aliases when kdock has to *become* the watcher (bare wlroots, no existing watcher). Key points (see `src/systray.cpp`):
     - **Watcher discovery**: prefer an existing `org.kde.StatusNotifierWatcher`, else `org.freedesktop.StatusNotifierWatcher`, else register both ourselves. The chosen name is `m_watcherService` (used for host registration, the item list and the `StatusNotifierItemRegistered/Unregistered` signal subscriptions).

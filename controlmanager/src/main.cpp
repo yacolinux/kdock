@@ -239,6 +239,10 @@ int main(int argc, char *argv[])
     BatteryControl battery;
     BrightnessControl brightness;
     ScreenBrightness screenBrightness;
+    // Same wiring as the dock's main.cpp, and for the same reason: with this,
+    // `brightness` resolves to the *one* monitor the dock's wheel drives, so
+    // the compact card and the dock widget can never disagree.
+    brightness.setScreens(&screenBrightness);
     NetworkControl network;
     WeatherConfig weatherConfig;
     WeatherControl weather(&weatherConfig);

@@ -23,6 +23,10 @@ class BrightnessControl : public QObject
     // Label of the monitor the wheel drives, for the widget's tooltip. Empty
     // when that is the internal backlight (there is nothing better to call it).
     Q_PROPERTY(QString targetLabel READ targetLabel NOTIFY changed)
+    // The brightnessctl backlight on its own — properties and not just getters
+    // because the control panel's Video card draws a row from them.
+    Q_PROPERTY(bool internalAvailable READ internalAvailable NOTIFY changed)
+    Q_PROPERTY(qreal internalBrightness READ internalBrightness NOTIFY changed)
 
 public:
     // Never let the screen go fully dark; keep at least this fraction of brightness.

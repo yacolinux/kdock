@@ -28,17 +28,20 @@ Item {
 
     readonly property var displays: { card.rev; return screens ? screens.displays() : [] }
     readonly property bool perMonitor: screens && screens.available && card.displays.length > 0
-    readonly property bool haveFallback: brightness && brightness.available
+    readonly property bool haveFallback: brightness && brightness.internalAvailable
 
-    // The one the compact card drives: the internal panel if there is one, else
-    // the first display.
-    readonly property var mainDisplay: {
+    // PowerDevil usually lists the DDC monitors and NOT the laptop panel, so
+    // without this row the internal screen has no slider at all — which is
+    // exactly how it looked with a dock station: one monitor listed, the built-in
+    // one missing (reported 2026-08-12, with a screenshot of this card).
+    readonly property bool haveInternalDisplay: {
         for (var i = 0; i < card.displays.length; ++i) {
             if (card.displays[i].internal)
-                return card.displays[i]
+                return true
         }
-        return card.displays.length > 0 ? card.displays[0] : null
+        return false
     }
+    readonly property bool internalRow: card.haveFallback && !card.haveInternalDisplay
 
     // Only two brightness icons exist in breeze (there is no -medium, checked
     // against the iconset rather than guessed), so the split is at half.
@@ -53,23 +56,18 @@ Item {
         spacing: 4
         visible: card.compact
 
+        // One slider, and it drives exactly the monitor the dock's wheel drives:
+        // `brightness` resolves that itself (BrightnessControl::wheelDisplay),
+        // so the compact card and the dock widget can never disagree. The other
+        // screens are one click away, in the full section below.
         CmSlider {
             fg: card.fg
             width: parent.width
             compact: true
-            icon: card.brightnessIcon(card.perMonitor
-                                      ? (card.mainDisplay ? card.mainDisplay.value : 0)
-                                      : (card.haveFallback ? brightness.brightness : 0))
-            enabled: card.perMonitor || card.haveFallback
-            value: card.perMonitor
-                   ? (card.mainDisplay ? card.mainDisplay.value : 0)
-                   : (card.haveFallback ? brightness.brightness : 0)
-            onMoved: (v) => {
-                if (card.perMonitor && card.mainDisplay)
-                    screens.setBrightness(card.mainDisplay.name, v)
-                else if (card.haveFallback)
-                    brightness.setBrightness(v)
-            }
+            icon: card.brightnessIcon(brightness ? brightness.brightness : 0)
+            enabled: brightness ? brightness.available : false
+            value: brightness ? brightness.brightness : 0
+            onMoved: (v) => brightness.setBrightness(v)
         }
 
         Row {
@@ -142,16 +140,19 @@ Item {
                     }
                 }
 
-                // Fallback: no PowerDevil, so the internal backlight is all
-                // there is.
+                // The internal backlight, through brightnessctl. Shown whenever
+                // PowerDevil does not report an internal display of its own —
+                // with or without external monitors listed above, because that
+                // is the docked-laptop case where the built-in screen would
+                // otherwise have no slider anywhere.
                 CmSlider {
                     fg: card.fg
-                    visible: !card.perMonitor && card.haveFallback
+                    visible: card.internalRow
                     width: full.width
-                    icon: card.brightnessIcon(card.haveFallback ? brightness.brightness : 0)
-                    label: qsTr("Pantalla")
-                    value: card.haveFallback ? brightness.brightness : 0
-                    onMoved: (v) => brightness.setBrightness(v)
+                    icon: card.brightnessIcon(card.haveFallback ? brightness.internalBrightness : 0)
+                    label: qsTr("Pantalla interna")
+                    value: card.haveFallback ? brightness.internalBrightness : 0
+                    onMoved: (v) => brightness.setInternalBrightness(v)
                 }
 
                 Row {

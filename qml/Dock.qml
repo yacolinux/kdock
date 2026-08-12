@@ -2071,7 +2071,8 @@ Item {
                 visible: config.showTooltips && batteryMouse.containsMouse
                          && !profileMenu.visible
                 delay: 400
-                text: battery.tooltipText
+                text: battery.tooltipText + "\n"
+                      + qsTr("Clic derecho: brillo y energía")
             }
 
             function profileIcon(p) {
@@ -2115,8 +2116,15 @@ Item {
                 anchors.fill: parent
                 hoverEnabled: true
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: {
-                    if (battery.profilesAvailable)
+                onClicked: (mouse) => {
+                    // The right click goes where the brightness widget's goes:
+                    // the two sit side by side, they draw the same little bar
+                    // and they are the same subject (video y energía), so
+                    // whichever one gets the right button lands in that tab.
+                    // The left click keeps the quick profile menu.
+                    if (mouse.button === Qt.RightButton)
+                        dockWindow.openVideoSettings()
+                    else if (battery.profilesAvailable)
                         profileMenu.popup()
                 }
             }
