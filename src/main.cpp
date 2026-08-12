@@ -185,10 +185,19 @@ int main(int argc, char *argv[])
     // QML files import QtQuick.Controls (no explicit style), so this call
     // actually takes effect. Fusion is the safe desktop-style default
     // everywhere (Xvfb, bare wlroots); org.kde.desktop needs a KDE session.
+    // Only known QQC2 style names are passed through — widget-only styles
+    // like Breeze / Oxygen / Windows fall back to Fusion.
     {
-        const QString qqc2 = style.isEmpty() || style == QStringLiteral("Breeze")
-                                 ? QStringLiteral("Fusion") : style;
-        QQuickStyle::setStyle(qqc2);
+        const auto qqc2Style = [](const QString &s) -> QString {
+            if (s.isEmpty() || s == QStringLiteral("Breeze"))
+                return QStringLiteral("Fusion");
+            if (s == QStringLiteral("Basic") || s == QStringLiteral("Fusion")
+                || s == QStringLiteral("Material") || s == QStringLiteral("Universal")
+                || s == QStringLiteral("Imagine"))
+                return s;
+            return QStringLiteral("Fusion");
+        };
+        QQuickStyle::setStyle(qqc2Style(style));
     }
 
     // One-shot CLI (next-wall.sh): advance a monitor's slideshow and exit,

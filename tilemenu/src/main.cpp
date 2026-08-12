@@ -67,9 +67,16 @@ int main(int argc, char *argv[])
     if (!style.isEmpty())
         app.setStyle(style);
 
-    const QString qqc2 = style.isEmpty() || style == QStringLiteral("Breeze")
-                             ? QStringLiteral("Fusion") : style;
-    QQuickStyle::setStyle(qqc2);
+    const auto qqc2Style = [](const QString &s) -> QString {
+        if (s.isEmpty() || s == QStringLiteral("Breeze"))
+            return QStringLiteral("Fusion");
+        if (s == QStringLiteral("Basic") || s == QStringLiteral("Fusion")
+            || s == QStringLiteral("Material") || s == QStringLiteral("Universal")
+            || s == QStringLiteral("Imagine"))
+            return s;
+        return QStringLiteral("Fusion");
+    };
+    QQuickStyle::setStyle(qqc2Style(style));
 
     const QStringList args = app.arguments();
 
