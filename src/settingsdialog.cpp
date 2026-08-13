@@ -3579,7 +3579,10 @@ QWidget *SettingsDialog::createLayoutTab()
     // the larger share of whatever height is going.
     layout->addWidget(m_layoutList, 2);
 
-    auto *buttons = new QHBoxLayout;
+    // Two rows instead of one: the three "Add" buttons plus Remove/Rename plus
+    // Up/Down in a single row overflowed the dialog's width. Row 1 is the Add
+    // family; row 2 holds the rest, with Up/Down pushed to the right.
+    auto *addButtons = new QHBoxLayout;
     auto *addSep = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
                                    tr("Add separator"), tab);
     addSep->setToolTip(tr("Fixed gap of \"Separator size\" px between two sections."));
@@ -3591,6 +3594,12 @@ QWidget *SettingsDialog::createLayoutTab()
                           "not painted over it: the desktop shows through and the dock reads "
                           "as two. It only has room to open in panel mode or with a fixed "
                           "dock length."));
+    addButtons->addWidget(addSep);
+    addButtons->addWidget(addSpring);
+    addButtons->addWidget(addGap);
+    layout->addLayout(addButtons);
+
+    auto *actionButtons = new QHBoxLayout;
     auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
                                    tr("Remove separator"), tab);
     auto *rename = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")),
@@ -3600,15 +3609,12 @@ QWidget *SettingsDialog::createLayoutTab()
                           "empty to restore the default name."));
     auto *up = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), tab);
     auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), tab);
-    buttons->addWidget(addSep);
-    buttons->addWidget(addSpring);
-    buttons->addWidget(addGap);
-    buttons->addWidget(remove);
-    buttons->addWidget(rename);
-    buttons->addStretch();
-    buttons->addWidget(up);
-    buttons->addWidget(down);
-    layout->addLayout(buttons);
+    actionButtons->addWidget(remove);
+    actionButtons->addWidget(rename);
+    actionButtons->addStretch();
+    actionButtons->addWidget(up);
+    actionButtons->addWidget(down);
+    layout->addLayout(actionButtons);
 
     // The list can hide some tokens (see reloadLayoutList), so a list row is not
     // necessarily the same index as in config.widgetOrder. Each item carries its
