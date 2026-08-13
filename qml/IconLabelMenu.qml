@@ -12,6 +12,11 @@ Menu {
     // Read by SubMenuDelegate to draw the row that opens this submenu.
     property string menuIcon: "view-list-details"
     popupType: Popup.Window
+    // A Menu doesn't size itself to its widest item: the implicitWidth is the
+    // background floor (200 px), not the widest row, so "Nombre sobre el ícono"
+    // loses its last letters to the popup border (same reason as the parent
+    // menus in Dock.qml).
+    width: Math.max(implicitWidth + 64, 220)
 
     IconMenuItem {
         text: qsTr("Solo ícono")

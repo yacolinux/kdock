@@ -14,6 +14,9 @@ Menu {
     // Read by SubMenuDelegate to draw the row that opens this submenu.
     property string menuIcon: "view-list-tree"
     popupType: Popup.Window
+    // Same width fix as IconLabelMenu: the implicitWidth is the background
+    // floor, not the widest row, so a long label gets its last letters clipped.
+    width: Math.max(implicitWidth + 64, 220)
 
     IconMenuItem {
         text: qsTr("Sin nombre")

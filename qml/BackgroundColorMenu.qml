@@ -13,6 +13,9 @@ Menu {
     // Read by SubMenuDelegate to draw the row that opens this submenu.
     property string menuIcon: "color-management"
     popupType: Popup.Window
+    // Same width fix as IconLabelMenu: the implicitWidth is the background
+    // floor, not the widest row, so "Predeterminado (tema)" gets clipped.
+    width: Math.max(implicitWidth + 64, 220)
 
     // One swatch per entry of config.panelPresetColors.
     Instantiator {
