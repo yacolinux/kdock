@@ -842,6 +842,7 @@ Size of every static separator: both the ones inside the applications block and 
 Size of system tray icons as a percentage of the base icon size. = 系统托盘图标的大小，按基础图标大小的百分比计算。
 Size of the application icons inside the menu, in both the single-column list and the multi-column grid. = 菜单中应用程序图标的大小，单列列表和多列网格通用。
 Size of widget icons as a percentage of the icon size. Does not affect launchers or relanzadores. = 小部件图标的大小，按图标大小的百分比计算。不影响启动器和启动器组。
+Skip apps pinned in other Selectable apps = Skip apps pinned in other Selectable apps
 Skip the confirmation window: Apply replaces the configuration and restarts kdock right away. = Skip the confirmation window: Apply replaces the configuration and restarts kdock right away.
 Slideshow = 幻灯片
 Smallest size an application icon is shrunk to. Widget and systray icons keep their proportion, so they can end up smaller than this. = 应用程序图标能缩到的最小尺寸。小部件和托盘图标会保持各自比例，因此可能比这个值更小。
@@ -881,6 +882,7 @@ The name cannot be empty. = The name cannot be empty.
 The preset "%1" already exists. Replace it? = The preset "%1" already exists. Replace it?
 The preset "%1" is gone from disk. = The preset "%1" is gone from disk.
 The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = 分隔符依然在应用程序区域中占据它的尺寸，只是不绘制线条。与透明分隔符区段不同，Dock 的背景仍会绘制在它后面。
+The widget does not draw a window whose app is in another Selectable apps widget's list. With "Show pinned only" off, that turns this one into the catch-all block: everything that is open and is not already drawn somewhere else. The apps of its own list below are always drawn. = The widget does not draw a window whose app is in another Selectable apps widget's list. With "Show pinned only" off, that turns this one into the catch-all block: everything that is open and is not already drawn somewhere else. The apps of its own list below are always drawn.
 Theme default = 主题默认
 Tipo: %1 = 类型：%1
 Title: = 标题：

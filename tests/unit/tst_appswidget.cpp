@@ -16,9 +16,34 @@
 #include "dockconfig.h"
 #include "dockmodel.h"
 #include "sandbox.h"
+#include "windowmonitor.h"
 
 #include <QSettings>
 #include <QTest>
+
+namespace {
+// Una ventana falsa: WindowMonitor no es abstracto y registerWindow() es
+// público, así que el modelo se puede probar con ventanas sin compositor. Es la
+// única forma de ejercitar los dos filtros ("solo anclados" y "saltear lo que
+// ya dibuja otro widget"), que solo actúan sobre ventanas.
+class FakeWindow : public AbstractWindow
+{
+public:
+    explicit FakeWindow(const QString &id) { appId = id; title = id; }
+    void activate() override {}
+    void minimize() override {}
+    void requestClose() override {}
+};
+
+// Registra la ventana en el monitor y la deja viva mientras viva el monitor.
+FakeWindow *openWindow(WindowMonitor *monitor, const QString &appId)
+{
+    auto *w = new FakeWindow(appId);
+    w->setParent(monitor);
+    monitor->registerWindow(w);
+    return w;
+}
+} // namespace
 
 class TestAppsWidget : public QObject
 {
@@ -168,6 +193,96 @@ private slots:
         QCOMPARE(cfg.pinned().size(), 2);
         QCOMPARE(widget.rowCount(), 0);
         QCOMPARE(dockBlock.rowCount(), 2);
+    }
+
+    void onlyPinnedDropsTheWindowsThatAreNotItsApps()
+    {
+        const QString id = freshDockId("strays");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetApps(token, {QStringLiteral("mine.desktop")});
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, token);
+        openWindow(&monitor, QStringLiteral("ajena"));
+        // Con "ver solo anclados" (el default) la ventana ajena no entra…
+        QCOMPARE(widget.rowCount(), 1);
+        // …y apagándolo, sí: el widget pasa a ser un bloque de apps completo.
+        cfg.setWidgetOnlyPinned(token, false);
+        QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void theCatchAllWidgetSkipsWhatAnotherOneAlreadyDraws()
+    {
+        // El caso de la feature: un widget con la lista de siempre y otro que
+        // recoge todo lo demás sin repetir sus íconos.
+        const QString id = freshDockId("catchall");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = cfg.insertAppsWidget(0);
+        const QString catchAll = cfg.insertAppsWidget(1);
+        cfg.setWidgetApps(fixed, {QStringLiteral("mine.desktop")});
+        cfg.setWidgetOnlyPinned(catchAll, false);
+        cfg.setWidgetExcludeOthers(catchAll, true);
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("mine.desktop")); // la dibuja el otro
+        openWindow(&monitor, QStringLiteral("otra"));         // no la dibuja nadie
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(widget.index(0).data(DockModel::NameRole).toString(), QStringLiteral("otra"));
+
+        // Sin el filtro son las dos, o sea que el widget repetía el ícono.
+        cfg.setWidgetExcludeOthers(catchAll, false);
+        QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void theFilterFollowsTheOtherWidgetsList()
+    {
+        // La lista de los otros es una entrada de este modelo: sin reconstruir
+        // con la señal ajena, el ícono repetido se queda hasta el próximo
+        // arranque.
+        const QString id = freshDockId("follow");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = cfg.insertAppsWidget(0);
+        const QString catchAll = cfg.insertAppsWidget(1);
+        cfg.setWidgetOnlyPinned(catchAll, false);
+        cfg.setWidgetExcludeOthers(catchAll, true);
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("compartida"));
+        QCOMPARE(widget.rowCount(), 1);
+
+        // El otro widget se queda con esa app: acá tiene que desaparecer.
+        cfg.setWidgetApps(fixed, {QStringLiteral("compartida")});
+        QCOMPARE(widget.rowCount(), 0);
+        // Y al soltarla, vuelve.
+        cfg.setWidgetApps(fixed, {});
+        QCOMPARE(widget.rowCount(), 1);
+    }
+
+    void theFilterNeverHidesTheWidgetsOwnLaunchers()
+    {
+        // Decisión explícita: el filtro es para lo que el widget recoge solo. Un
+        // lanzador que el usuario le puso a mano se dibuja siempre, aunque esté
+        // también en la lista de otro widget.
+        const QString id = freshDockId("ownwins");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        const QString a = cfg.insertAppsWidget(0);
+        const QString b = cfg.insertAppsWidget(1);
+        cfg.setWidgetApps(a, {QStringLiteral("compartida.desktop")});
+        cfg.setWidgetApps(b, {QStringLiteral("compartida.desktop")});
+        cfg.setWidgetOnlyPinned(b, false);
+        cfg.setWidgetExcludeOthers(b, true);
+
+        DockModel widget(&cfg, &apps, nullptr, nullptr, b);
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(cfg.appsPinnedElsewhere(b),
+                 QStringList({QStringLiteral("compartida.desktop")}));
     }
 
     void aWidgetDrawsNoAppsBlockSeparators()

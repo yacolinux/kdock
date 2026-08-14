@@ -1042,6 +1042,36 @@ void DockConfig::setWidgetOnlyPinned(const QString &token, bool on)
     emit widgetOnlyPinnedChanged(token);
 }
 
+bool DockConfig::widgetExcludeOthers(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return false;
+    return m_settings.value(token + QStringLiteral("/excludeOthers"), false).toBool();
+}
+
+void DockConfig::setWidgetExcludeOthers(const QString &token, bool on)
+{
+    if (!isAppsWidgetToken(token) || widgetExcludeOthers(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/excludeOthers"), on);
+    emit widgetExcludeOthersChanged(token);
+}
+
+QStringList DockConfig::appsPinnedElsewhere(const QString &token) const
+{
+    QStringList ids;
+    for (const QString &other : appsWidgetTokens()) {
+        if (other == token)
+            continue;
+        for (const QString &id : widgetApps(other)) {
+            const QString key = id.toLower();
+            if (!ids.contains(key))
+                ids.append(key);
+        }
+    }
+    return ids;
+}
+
 void DockConfig::clearAppsWidget(const QString &token)
 {
     if (!isAppsWidgetToken(token))

@@ -847,6 +847,18 @@ public:
     // launchers above, so the widget is a fixed set of icons.
     Q_INVOKABLE bool widgetOnlyPinned(const QString &token) const;
     Q_INVOKABLE void setWidgetOnlyPinned(const QString &token, bool on);
+    // "Skip apps pinned in another selectable-apps widget": what turns this one
+    // into the catch-all block — with "only pinned" off it draws every open
+    // window, minus the ones another widget is already drawing. Only the
+    // windows it picks up on its own are filtered; a launcher the user put in
+    // *this* widget's list is always drawn, or an icon added by hand would
+    // vanish with no explanation.
+    Q_INVOKABLE bool widgetExcludeOthers(const QString &token) const;
+    Q_INVOKABLE void setWidgetExcludeOthers(const QString &token, bool on);
+    // The launchers of every *other* appsel widget of this dock, lowercased
+    // (the form DockModel keys its rows by). The dock's own `pinned` is not in
+    // here: the filter is about the other widgets, as its name says.
+    QStringList appsPinnedElsewhere(const QString &token) const;
     // Forget an instance's group. Called when its section is removed, so a
     // later widget that reuses the number does not inherit its launchers.
     void clearAppsWidget(const QString &token);
@@ -856,6 +868,7 @@ signals:
     // one only cares about its own.
     void widgetAppsChanged(const QString &token);
     void widgetOnlyPinnedChanged(const QString &token);
+    void widgetExcludeOthersChanged(const QString &token);
 
     void edgeChanged();
     void iconSizeChanged();

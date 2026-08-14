@@ -1377,6 +1377,19 @@ Lo que esos dos no pueden probar, y cómo se probó:
   entero no carga** y el dock sale de 160x160 con la ventana vacía. Si necesitás enganchar algo
   más al arranque, sumalo al handler que ya existe (`{ scheduleLabelMeasure(); scheduleGapRuns() }`).
   Lo agarró el arnés al primer intento, 2026-08-07.
+- **Un modelo cuya entrada es la config de OTRA instancia tiene que reconstruirse con la señal
+  ajena, no solo con la propia** (2026-08-13, el filtro *No ver apps ancladas en otros
+  Seleccionables*). Cada `DockModel` de un appsel escucha `widgetAppsChanged(token)` y descarta
+  los tokens que no son el suyo — que es lo correcto hasta que una opción hace que dependa de lo
+  que los demás tengan anclado. Ahí hay que ampliar la guarda (y sumar `widgetOrderChanged`:
+  agregar o quitar un widget cambia quiénes son "los otros"). El síntoma de olvidarlo es un ícono
+  repetido que se arregla solo al reiniciar el dock, o sea que parece un problema de arranque.
+- **Las ventanas se pueden falsificar en un test sin compositor**: `WindowMonitor` no es abstracto
+  y `registerWindow()` es público, así que un `AbstractWindow` de tres métodos vacíos y un
+  `WindowMonitor` en la pila alcanzan para ejercitar todo lo que el `DockModel` hace con ventanas
+  —agrupar, filtrar, contar— en el tier `unit`. Sin eso, cualquier filtro que solo actúe sobre
+  ventanas queda **sin probar** y el test da verde igual (con `monitor=nullptr` no hay ninguna).
+  Está en `tests/unit/tst_appswidget.cpp`.
 - **Un widget del que puede haber VARIOS por dock no se parece a los otros seis-archivos**
   (2026-08-13, *Apps Seleccionables*). Sus tokens se inventan en tiempo de ejecución
   (`appsel1`, `appsel2`…), así que no están en `knownWidgetTokens()` y `reconcileWidgetOrder()`

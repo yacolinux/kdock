@@ -1946,13 +1946,39 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     auto *box = new QGroupBox(m_config->widgetName(token), m_appsWidgetsBox);
     auto *layout = new QVBoxLayout(box);
 
+    // The two flags in one row, the filter first: it is the one that decides
+    // what this widget picks up, and it only has an effect on what "Show pinned
+    // only" lets through.
+    auto *flags = new QHBoxLayout;
+    auto *excludeOthers = new QCheckBox(tr("Skip apps pinned in other Selectable apps"), box);
+    excludeOthers->setChecked(m_config->widgetExcludeOthers(token));
+    excludeOthers->setToolTip(
+        tr("The widget does not draw a window whose app is in another Selectable apps "
+           "widget's list. With \"Show pinned only\" off, that turns this one into the "
+           "catch-all block: everything that is open and is not already drawn "
+           "somewhere else. The apps of its own list below are always drawn."));
+    connect(excludeOthers, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setWidgetExcludeOthers(token, on); });
+
     auto *onlyPinned = new QCheckBox(tr("Show pinned only"), box);
     onlyPinned->setChecked(m_config->widgetOnlyPinned(token));
     onlyPinned->setToolTip(tr("On: the widget draws exactly the apps below. Off: it also "
                               "draws every open window, like \"Show applications\"."));
     connect(onlyPinned, &QCheckBox::toggled, this,
             [this, token](bool on) { m_config->setWidgetOnlyPinned(token, on); });
-    layout->addWidget(onlyPinned);
+
+    flags->addWidget(excludeOthers);
+    flags->addWidget(onlyPinned);
+    flags->addStretch();
+    layout->addLayout(flags);
+
+    // The filter is what the other checkbox lets through, so it says nothing
+    // while the widget is a fixed list of icons.
+    const auto syncFlags = [excludeOthers, onlyPinned] {
+        excludeOthers->setEnabled(!onlyPinned->isChecked());
+    };
+    connect(onlyPinned, &QCheckBox::toggled, box, [syncFlags](bool) { syncFlags(); });
+    syncFlags();
 
     auto *list = new QListWidget(box);
     list->setMaximumHeight(140);

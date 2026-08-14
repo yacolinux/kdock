@@ -845,6 +845,7 @@ Size of every static separator: both the ones inside the applications block and 
 Size of system tray icons as a percentage of the base icon size. = Size of system tray icons as a percentage of the base icon size.
 Size of the application icons inside the menu, in both the single-column list and the multi-column grid. = Size of the application icons inside the menu, in both the single-column list and the multi-column grid.
 Size of widget icons as a percentage of the icon size. Does not affect launchers or relanzadores. = Size of widget icons as a percentage of the icon size. Does not affect launchers or relanzadores.
+Skip apps pinned in other Selectable apps = Skip apps pinned in other Selectable apps
 Skip the confirmation window: Apply replaces the configuration and restarts kdock right away. = Skip the confirmation window: Apply replaces the configuration and restarts kdock right away.
 Slideshow = Slideshow
 Smallest size an application icon is shrunk to. Widget and systray icons keep their proportion, so they can end up smaller than this. = Smallest size an application icon is shrunk to. Widget and systray icons keep their proportion, so they can end up smaller than this.
@@ -884,6 +885,7 @@ The name cannot be empty. = The name cannot be empty.
 The preset "%1" already exists. Replace it? = The preset "%1" already exists. Replace it?
 The preset "%1" is gone from disk. = The preset "%1" is gone from disk.
 The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it. = The separator still takes its size in the applications block, but no line is drawn. Unlike a transparent separator section, the dock background stays painted behind it.
+The widget does not draw a window whose app is in another Selectable apps widget's list. With "Show pinned only" off, that turns this one into the catch-all block: everything that is open and is not already drawn somewhere else. The apps of its own list below are always drawn. = The widget does not draw a window whose app is in another Selectable apps widget's list. With "Show pinned only" off, that turns this one into the catch-all block: everything that is open and is not already drawn somewhere else. The apps of its own list below are always drawn.
 Theme default = Theme default
 Tipo: %1 = Type: %1
 Title: = Title:

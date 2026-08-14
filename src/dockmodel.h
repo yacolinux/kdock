@@ -90,6 +90,12 @@ private:
     // only for a widget with "only pinned" on, which is then a fixed set of
     // icons that still shows the window state of its own apps.
     bool acceptsStrayWindows() const;
+    // Whether this model may give a row of its own to a window of `appId`. It
+    // is acceptsStrayWindows() plus the "skip apps pinned in another widget"
+    // filter, which is what lets one appsel widget be the catch-all for
+    // everything the others do not already draw. Only asked for windows with no
+    // row yet: the widget's own launchers are never filtered out.
+    bool acceptsStrayWindow(const QString &appId) const;
     void placeWindow(AbstractWindow *window);
     void removeWindow(AbstractWindow *window);
     void windowChanged(AbstractWindow *window);

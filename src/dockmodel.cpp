@@ -44,9 +44,13 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
         connect(m_config, &DockConfig::separator2TransparentChanged, this, &DockModel::rebuild);
     } else {
         // Both signals carry a token: several appsel models share this config
-        // and each one has to ignore the others' edits.
+        // and each one has to ignore the others' edits — *except* when this
+        // widget skips what the others pin, which makes their lists an input of
+        // this model.
         connect(m_config, &DockConfig::widgetAppsChanged, this, [this](const QString &token) {
-            if (token == m_widgetToken && !m_updatingPinned)
+            if (m_updatingPinned)
+                return;
+            if (token == m_widgetToken || m_config->widgetExcludeOthers(m_widgetToken))
                 rebuild();
         });
         connect(m_config, &DockConfig::widgetOnlyPinnedChanged, this,
@@ -54,6 +58,17 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
                     if (token == m_widgetToken)
                         rebuild();
                 });
+        connect(m_config, &DockConfig::widgetExcludeOthersChanged, this,
+                [this](const QString &token) {
+                    if (token == m_widgetToken)
+                        rebuild();
+                });
+        // A widget added or removed changes the set of "the others" too, and
+        // that arrives as an order change and nothing else.
+        connect(m_config, &DockConfig::widgetOrderChanged, this, [this] {
+            if (m_config->widgetExcludeOthers(m_widgetToken))
+                rebuild();
+        });
     }
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
     // App names come from the translation layer (see Item::displayName), so a
@@ -191,6 +206,17 @@ bool DockModel::acceptsStrayWindows() const
     return m_widgetToken.isEmpty() || !m_config->widgetOnlyPinned(m_widgetToken);
 }
 
+bool DockModel::acceptsStrayWindow(const QString &appId) const
+{
+    if (!acceptsStrayWindows())
+        return false;
+    if (m_widgetToken.isEmpty() || !m_config->widgetExcludeOthers(m_widgetToken))
+        return true;
+    // keyForAppId(), not keyForWindow(): ungrouped mode keys extra windows by
+    // pointer, and what the other widgets list are applications.
+    return !m_config->appsPinnedElsewhere(m_widgetToken).contains(keyForAppId(appId, nullptr));
+}
+
 void DockModel::rebuild()
 {
     beginResetModel();
@@ -206,7 +232,6 @@ void DockModel::rebuild()
     }
 
     if (m_monitor) {
-        const bool strays = acceptsStrayWindows();
         for (AbstractWindow *w : std::as_const(m_monitor->windows)) {
             if (w->skipTaskbar)
                 continue;
@@ -214,8 +239,10 @@ void DockModel::rebuild()
             const QString key = keyForWindow(w);
             int row = rowOfKey(key);
             if (row < 0) {
-                if (!strays)
-                    continue; // "only pinned": this window has no icon here
+                // "only pinned", or already drawn by another widget: this
+                // window gets no icon here.
+                if (!acceptsStrayWindow(w->appId))
+                    continue;
                 Item item;
                 item.key = key;
                 item.entry = m_apps->forAppId(w->appId);
@@ -259,7 +286,7 @@ void DockModel::placeWindow(AbstractWindow *window)
         m_items[row].windows.append(window);
         emit dataChanged(index(row), index(row));
     } else {
-        if (!acceptsStrayWindows())
+        if (!acceptsStrayWindow(window->appId))
             return;
         Item item;
         item.key = key;
