@@ -3710,9 +3710,10 @@ QWidget *SettingsDialog::createLayoutTab()
     // the larger share of whatever height is going.
     layout->addWidget(m_layoutList, 2);
 
-    // Two rows instead of one: the three "Add" buttons plus Remove/Rename plus
-    // Up/Down in a single row overflowed the dialog's width. Row 1 is the Add
-    // family; row 2 holds the rest, with Up/Down pushed to the right.
+    // Two rows instead of one: everything in a single row overflowed the
+    // dialog's width. Row 1 is the separator family; row 2 acts on a widget
+    // (remove / add a selectable-apps one / rename), with Up/Down pushed to the
+    // right.
     auto *addButtons = new QHBoxLayout;
     auto *addSep = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")),
                                    tr("Add separator"), tab);
@@ -3725,21 +3726,22 @@ QWidget *SettingsDialog::createLayoutTab()
                           "not painted over it: the desktop shows through and the dock reads "
                           "as two. It only has room to open in panel mode or with a fixed "
                           "dock length."));
+    addButtons->addWidget(addSep);
+    addButtons->addWidget(addSpring);
+    addButtons->addWidget(addGap);
+    layout->addLayout(addButtons);
+
+    auto *actionButtons = new QHBoxLayout;
+    auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
+                                   tr("Remove separator"), tab);
+    // Not with the "Add separator" family above: this one adds a *widget*, and
+    // it sits next to the two buttons that also act on one (Remove, Rename).
     auto *addApps = new QPushButton(QIcon::fromTheme(QStringLiteral("applications-all")),
                                     tr("Add selectable apps"), tab);
     addApps->setToolTip(tr("A block of app icons like the one \"Show applications\" draws, "
                            "but with its own list of apps: right-click an icon → \"Pin\" "
                            "adds it to this widget only. A dock can hold several, each with "
                            "its own apps (see the Widgets tab)."));
-    addButtons->addWidget(addSep);
-    addButtons->addWidget(addSpring);
-    addButtons->addWidget(addGap);
-    addButtons->addWidget(addApps);
-    layout->addLayout(addButtons);
-
-    auto *actionButtons = new QHBoxLayout;
-    auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
-                                   tr("Remove separator"), tab);
     auto *rename = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")),
                                    tr("Rename..."), tab);
     rename->setToolTip(tr("Name shown for this section in the dock (see the "
@@ -3748,6 +3750,7 @@ QWidget *SettingsDialog::createLayoutTab()
     auto *up = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), tab);
     auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), tab);
     actionButtons->addWidget(remove);
+    actionButtons->addWidget(addApps);
     actionButtons->addWidget(rename);
     actionButtons->addStretch();
     actionButtons->addWidget(up);
