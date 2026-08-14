@@ -469,6 +469,19 @@ kdock
 
 *配置 → 备份* 可以将上述所有内容导出/导入为一个 `.zip`。
 
+### Script Runner 示例（`scripts/`）
+
+*Script Runner* 组件可以运行任意 shell 脚本：示例集合存放在 [`scripts/`](scripts/) 中，
+不包含任何私人数据或硬编码路径。两者都使用 Plasma **壁纸幻灯片** 的现有配置来推进（不会
+写入文件夹）：
+
+- **`scripts/next2.sh`** — 仅推进**启动它的 Dock 所在显示器**的幻灯片（点击时会导出
+  `KDOCK_SCREEN`；通过 `wayland-info` 按几何坐标解析显示器）。
+- **`scripts/next-all.sh`** — 推进**所有已连接显示器**的幻灯片。
+
+仅作用于已经处于*幻灯片*模式的显示器（静态图片不会被动）。接入方式：*设置 → Script
+Runner* → 将 `scriptPath` 指向所选文件。运行时需要 `qdbus6` 和 `wayland-info`。
+
 ## 性能基线（RELEASE 0.1）
 
 Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个额外的虚拟桌面在首次进入
@@ -506,6 +519,7 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 |---|---|
 | `src/` | Dock 本体：后端、模型、配置、选项对话框 |
 | `qml/` | Dock 的 UI 及其弹出窗口 |
+| `scripts/` | Script Runner 示例（推进单个或全部显示器的幻灯片），无私人数据 |
 | `previews/` | 预览配套二进制文件（独立源码树，复用 `src/` 中的 5 个文件） |
 | `tilemenu/` | 磁贴菜单配套二进制文件（独立源码树，复用 `src/` 中的 8 个文件） |
 | `calendar/` | 月历配套二进制文件（独立源码树，完全自包含） |

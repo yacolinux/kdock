@@ -541,6 +541,22 @@ The configuration lives in the XDG data directory:
 in a single click — it replaces the `.conf` files and restarts kdock with its accessories —
 and exports or imports it as a `.zip`.
 
+### Example Script Runners (`scripts/`)
+
+The *Script Runner* widget runs any shell script: the example collection lives in
+[`scripts/`](scripts/), with no private data or hardcoded paths. Both advance Plasma's
+**wallpaper slideshow** using the configuration each monitor already has (they don't write
+folders):
+
+- **`scripts/next2.sh`** — advances the slideshow **only** on the monitor of the dock that
+  launched it (the click exports `KDOCK_SCREEN`; it resolves the monitor by geometry via
+  `wayland-info`).
+- **`scripts/next-all.sh`** — advances the slideshow on **all** connected monitors.
+
+They only act on monitors already in *Slideshow* mode (a static image is left alone).
+Wire-up: *Settings → Script Runner* → `scriptPath` pointing at the chosen file. Requires
+`qdbus6` and `wayland-info` at runtime.
+
 ## Performance baseline (RELEASE 0.1)
 
 The dock starts at ~240 MB RSS with the current desktop's set of docks; each additional
@@ -579,6 +595,7 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
 |---|---|
 | `src/` | The dock: backends, model, configuration, settings dialog |
 | `qml/` | The dock's UI and its popups |
+| `scripts/` | Example Script Runners (advance the slideshow on one monitor or on all), no private data |
 | `previews/` | Companion preview binary (own tree, reuses 5 files from `src/`) |
 | `tilemenu/` | Companion tile-menu binary (own tree, reuses 8 files from `src/`) |
 | `calendar/` | Companion month-calendar binary (own tree, self-contained) |

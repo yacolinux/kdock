@@ -739,6 +739,31 @@ tres diálogos vive.
 - **Targeting**: `KDOCK_SCREEN` set (dock icon) → only that monitor, mapping connector→Plasma screen index by geometry via `kscreen-doctor --json` (pos) matched against `screenGeometry(i)`. No var (console) → every connected screen currently in `org.kde.slideshow`.
 - **Gotchas**: use `qdbus6` (there is no `qdbus`); run it with `bash`/`./` not `sh` (Ubuntu `sh` is dash → the bash arrays / `<(...)` / `<<<` fail). `ScriptRunnersManager::run()` executes an **executable** script directly (honoring its shebang), else falls back to `sh <path>`.
 
+#### Script Runners de ejemplo (`scripts/next2.sh`, `scripts/next-all.sh`, 2026-08-14)
+
+Dos Script Runners de ejemplo, **sin datos privados ni carpetas hardcodeadas**: avanzan el
+slideshow del **escritorio de Plasma**, usando la config que el usuario ya tiene en cada monitor
+(las facilities del sistema). Son el reemplazo general de los scripts per-user tipo
+`next-wall.sh`: no escriben `SlidePaths`/`SlideInterval` (activar slideshow con una carpeta por
+monitor fue lo que terminó hardcodeando `colec-selec` en el script viejo — Plasma ya es dueño de
+esa config), solo hacen **avanzar**.
+
+- **`next2.sh`** — avanza el slideshow **solo** del monitor del dock que lo lanzó:
+  `$KDOCK_SCREEN` (exportado por `ScriptRunnersManager::run`), con fallback a
+  `activeOutputName`. Resuelve el conector → índice de pantalla por **geometría**
+  (`wayland-info` x,y → `screenGeometry(i)`), el mismo criterio que `WallpaperControl`.
+- **`next-all.sh`** — avanza el slideshow de **todos** los monitores conectados: itera
+  `0..screenCount-1` (`screenCount` ya cuenta solo las conectadas; los containments `screen=-1`
+  quedan fuera).
+- **Mecanismo** (verificado en vivo): el ciclo de plugin en **dos llamadas** `evaluateScript`
+  separadas — (1) `d.wallpaperPlugin='org.kde.image'` **sin** `reloadConfig()`, solo si el
+  containment ya es `org.kde.slideshow`; (2) `d.wallpaperPlugin='org.kde.slideshow'` +
+  `reloadConfig()` → KDE avanza a la siguiente imagen y repinta. Un containment que **no** es
+  slideshow (imagen fija) no se toca: el script no lo convierte a slideshow ni le cambia carpetas.
+- Dependencias en runtime: `qdbus6`, `wayland-info` (la posición del conector; falla en silencio
+  si no está conectado). Wire-up: *Configuración → Script Runner*, `scriptPath` apuntando al
+  archivo; el clic exporta `KDOCK_SCREEN`.
+
 ### Wallpapers por escritorio virtual (`src/desktopwallpapers.{h,cpp}`, 2026-08-06)
 
 - **Por qué hace falta**: en Plasma el *containment* del escritorio es **por pantalla, no por

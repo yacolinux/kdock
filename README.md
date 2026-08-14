@@ -556,6 +556,20 @@ La configuración vive en el directorio de datos XDG:
 lo aplica de una —reemplaza los `.conf` y reinicia kdock con sus accesorios— y lo exporta o
 importa como un `.zip`.
 
+### Script Runners de ejemplo (`scripts/`)
+
+El widget *Script Runner* ejecuta cualquier script shell: la colección de ejemplo vive en
+[`scripts/`](scripts/), sin datos privados ni rutas hardcodeadas. Ambos avanzan la **presentación
+de fondos de Plasma** usando la configuración que ya tiene cada monitor (no escriben carpetas):
+
+- **`scripts/next2.sh`** — avanza el slideshow **solo** del monitor del dock que lo lanzó (el
+  clic exporta `KDOCK_SCREEN`; resuelve el monitor por geometría vía `wayland-info`).
+- **`scripts/next-all.sh`** — avanza el slideshow de **todos** los monitores conectados.
+
+Solo actúan sobre monitores que ya están en modo *Presentación* (imagen fija no se toca).
+Wire-up: *Configuración → Script Runner* → `scriptPath` al archivo elegido. Requieren `qdbus6` y
+`wayland-info` en el runtime.
+
 ## Base de rendimiento (RELEASE 0.1)
 
 El dock arranca en ~240 MB RSS con el juego de docks del escritorio actual; cada escritorio
@@ -594,6 +608,7 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
 |---|---|
 | `src/` | El dock: backends, modelo, configuración, diálogo de opciones |
 | `qml/` | La UI del dock y sus popups |
+| `scripts/` | Script Runners de ejemplo (avanzar el slideshow de un monitor o de todos), sin datos privados |
 | `previews/` | Binario accesorio de vistas previas (árbol propio, reusa 5 archivos de `src/`) |
 | `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
 | `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
