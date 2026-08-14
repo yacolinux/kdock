@@ -178,6 +178,9 @@ class DockConfig : public QObject
     // Bumped on every rename; QML reads it inside the bindings that call
     // widgetName() so a custom name repaints (same trick as theme.revision).
     Q_PROPERTY(int widgetNamesRevision READ widgetNamesRevision NOTIFY widgetNamesChanged)
+    // Same idea for the per-instance width of the transparent separators (see
+    // gapRevision()).
+    Q_PROPERTY(int gapRevision READ gapRevision NOTIFY gapsChanged)
     // Shrink every icon (apps, widgets, systray) when the sections no longer
     // fit along the dock; see the "auto-shrink" block in Dock.qml.
     Q_PROPERTY(bool autoShrinkIcons READ autoShrinkIcons WRITE setAutoShrinkIcons NOTIFY autoShrinkIconsChanged)
@@ -256,16 +259,20 @@ public:
     static bool isRepeatableToken(const QString &token)
     {
         return token == QLatin1String("spring") || token == QLatin1String("sep")
-               || token == QLatin1String("gap") || isAppsWidgetToken(token);
+               || token == QLatin1String("gap") || isGapToken(token)
+               || isAppsWidgetToken(token);
     }
     // "appsel<n>", the token of one selectable-apps widget. The bare "appsel"
     // is not one: it is the catalog key its label is translated through.
     static bool isAppsWidgetToken(const QString &token);
-    // A separator that expands to fill the leftover room. The transparent one
-    // does it too, which is why several places have to test for both.
+    // A separator that *can* expand to fill the leftover room. The transparent
+    // one does it too, which is why several places have to test for both —
+    // though since gapFixedWidth() exists, whether a given gap actually expands
+    // is a per-instance setting, not a property of the token.
     static bool isSpringToken(const QString &token)
     {
-        return token == QLatin1String("spring") || token == QLatin1String("gap");
+        return token == QLatin1String("spring") || isGapToken(token)
+               || token == QLatin1String("gap");
     }
 
     // Up to this many docks can be configured on a single monitor. Six rather
@@ -822,12 +829,43 @@ public:
     // Drag & drop / context-menu editing of the section order (from QML).
     Q_INVOKABLE void moveSection(int from, int to);
     Q_INVOKABLE void insertSpring(int at);
-    // Same as insertSpring, but the section also punches a hole in the
-    // panel background and in the surface's input region.
-    Q_INVOKABLE void insertGap(int at);
+    // Same as insertSpring, but the section also punches a hole in the panel
+    // background and in the surface's input region — and, unlike a spring, it
+    // can be pinned to a fixed width instead of expanding (see gapFixedWidth).
+    // Numbered like an appsel widget, because that width is per instance:
+    // returns the new token.
+    Q_INVOKABLE QString insertGap(int at);
     // Fixed-size gap of separatorSize px between two sections.
     Q_INVOKABLE void insertSeparator(int at);
     Q_INVOKABLE void removeSectionAt(int at);
+
+    // ---- Transparent separators (gap<n>) -----------------------------------
+    // Each instance carries its own width setting in its own INI group
+    // ([gap1] fixedWidth=…, size=…), which is why the tokens are numbered: two
+    // bare "gap" entries in widgetOrder are indistinguishable, so there would be
+    // nothing to key the setting by. Configs written before the numbering are
+    // migrated on load (migrateGapTokens).
+    static bool isGapToken(const QString &token);
+    // Range of the fixed width, in px. The spinbox of the Layout tab reads
+    // these instead of repeating the numbers.
+    static constexpr int kGapMinSize = 4;
+    static constexpr int kGapMaxSize = 512;
+    static constexpr int kGapDefaultSize = 32;
+    // The gap tokens of this dock, in widgetOrder order.
+    Q_INVOKABLE QStringList gapTokens() const;
+    // Off: the separator expands like a spring (the original behaviour, and
+    // still the default). On: it measures gapSize px along the dock's main axis.
+    Q_INVOKABLE bool gapFixedWidth(const QString &token) const;
+    Q_INVOKABLE void setGapFixedWidth(const QString &token, bool on);
+    Q_INVOKABLE int gapSize(const QString &token) const;
+    Q_INVOKABLE void setGapSize(const QString &token, int px);
+    // Bumped by both setters. QML reads the two above through Q_INVOKABLE
+    // calls, which no signal can re-evaluate on their own, so a binding touches
+    // this first — the same trick widgetNamesRevision plays for widgetName().
+    int gapRevision() const { return m_gapRevision; }
+    // Forget an instance's group, so a later gap that reuses the number does
+    // not inherit its width.
+    void clearGap(const QString &token);
 
     // ---- Selectable-apps widgets ------------------------------------------
     // One appsel<n> widget is the apps block as a section: same delegate, same
@@ -864,6 +902,7 @@ public:
     void clearAppsWidget(const QString &token);
 
 signals:
+    void gapsChanged();
     // Both carry the token: every appsel model is connected to them and each
     // one only cares about its own.
     void widgetAppsChanged(const QString &token);
@@ -986,6 +1025,10 @@ private:
     // Ensure apps + every known widget token appears exactly once (append
     // any missing at the end); keep spring tokens; drop unknown tokens.
     void reconcileWidgetOrder();
+    // "gap" -> "gap1", "gap2"… in place, for configs written before the
+    // separators were numbered. Runs on load, before reconcileWidgetOrder(),
+    // and is idempotent (a preset or a backup can bring bare tokens back).
+    void migrateGapTokens();
     // Read every value from m_settings into the members; shared by both ctors.
     void load();
     // Refresh m_menuFavorites from the effective source (shared file if sharing
@@ -1049,6 +1092,7 @@ private:
     int m_autoShrinkMinIconSize = 16;
     QHash<QString, QString> m_widgetNames; // section token -> user rename
     int m_widgetNamesRevision = 0;
+    int m_gapRevision = 0;
     bool m_showAppIcons = true;
     bool m_showSystray = false;
     int m_systrayIconScale = 100; // % of iconSize applied to systray icons

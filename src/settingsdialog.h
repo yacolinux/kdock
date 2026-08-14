@@ -90,6 +90,11 @@ private:
     // is gone (or miss one that just appeared).
     void rebuildAppsWidgetsGroup();
     QWidget *createAppsWidgetPanel(const QString &token);
+    // The Layout tab's panel for the transparent separators: one row per
+    // gap<n>. Rebuilt whenever the section order changes, because that is what
+    // adds and removes them.
+    void rebuildGapsGroup();
+    QWidget *createGapRow(const QString &token);
     QWidget *createMenuTab();
     QWidget *createTileMenuGroup(QWidget *parent);
     // Same shape, in the Widgets tab: kdock only owns the widget, everything
@@ -303,6 +308,12 @@ private:
     QCheckBox *m_presetNoPrompt = nullptr;
     QGroupBox *m_appsWidgetsBox = nullptr;
     QVBoxLayout *m_appsWidgetsLayout = nullptr;
+    // Layout tab: one row per transparent separator (gap<n>) with its width
+    // setting. Same shape as the appsel panel above and for the same reason —
+    // the set of separators is edited right there in the list, and switching
+    // tabs does not rebuild the dialog.
+    QGroupBox *m_gapsBox = nullptr;
+    QVBoxLayout *m_gapsLayout = nullptr;
     QListWidget *m_scriptRunnersList = nullptr;
     QLineEdit *m_scriptRunnerTitle = nullptr;
     QPushButton *m_scriptRunnerIconButton = nullptr;

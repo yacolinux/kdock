@@ -142,7 +142,10 @@ The dock, across different edges and label layouts:
   right-click menu: the **dynamic** one (*spring*), which stretches and pushes the rest toward
   the other end; the **static** one, a fixed gap with a thin line; and the **transparent** one,
   which also cuts the dock background and its input region — the desktop shows through and
-  clicks pass, so one dock reads as two. And **inside the applications block**, up to two more
+  clicks pass, so one dock reads as two. The transparent one can also be **pinned to a width**,
+  one per separator (*Layout* tab): it then stops distributing the leftover room and measures
+  exactly the pixels you give it, which is how you split a dock into two blocks side by side
+  instead of pushing them to the edges. And **inside the applications block**, up to two more
   (*Layout* tab), splitting the pinned launchers from each other and from the merely running
   windows: each one can be a line or **transparent**, i.e. blank room with no line, the dock
   background left painted behind it.

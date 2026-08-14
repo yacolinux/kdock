@@ -144,7 +144,10 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   derecho de cualquier widget: el **dinámico** (*spring*), que se estira y empuja el resto
   hacia el otro extremo; el **estático**, un hueco fijo con una línea fina; y el
   **transparente**, que además recorta el fondo del dock y su región de entrada — se ve el
-  escritorio por el medio y los clics pasan, así que un dock se lee como dos. Y **dentro del
+  escritorio por el medio y los clics pasan, así que un dock se lee como dos. El transparente
+  puede además **fijarse a un ancho**, uno por separador (solapa *Diseño*): así deja de
+  repartir el sobrante y mide los píxeles que le digas, que es la forma de partir un dock en
+  dos bloques pegados en vez de mandarlos a los extremos. Y **dentro del
   bloque de aplicaciones**, hasta dos separadores más (solapa *Layout*), que dividen los
   lanzadores anclados entre sí y del resto de las ventanas: cada uno puede ser una línea o
   **transparente**, o sea espacio en blanco sin línea, con el fondo del dock intacto detrás.

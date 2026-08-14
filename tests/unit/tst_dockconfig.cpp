@@ -115,6 +115,58 @@ private slots:
         QCOMPARE(order.count(QStringLiteral("gap")), 1);
     }
 
+    void bareGapTokensAreNumberedOnLoad()
+    {
+        // Los "gap" pelados de cualquier config anterior al ancho por instancia
+        // tienen que quedar numerados: sin identidad no hay dónde guardar el
+        // ancho, y dos "gap" en widgetOrder son indistinguibles. La migración
+        // corre en load(), así que lo que la prueba es una SEGUNDA instancia
+        // sobre el mismo archivo — la primera solo siembra.
+        const QString id = freshDockId("gap-migrate");
+        {
+            QSettings s(DockConfig::instanceSettingsFilePath(id), QSettings::IniFormat);
+            s.setValue(QStringLiteral("widgetOrder"),
+                       QStringList{QStringLiteral("menu"), QStringLiteral("gap"),
+                                   QStringLiteral("apps"), QStringLiteral("gap")});
+        }
+        DockConfig cfg(id);
+        const QStringList order = cfg.widgetOrder();
+        QVERIFY(!order.contains(QStringLiteral("gap")));
+        QCOMPARE(cfg.gapTokens(),
+                 QStringList({QStringLiteral("gap1"), QStringLiteral("gap2")}));
+        // Y en el orden en que estaban, que es como se numeran en la solapa.
+        QCOMPARE(order.indexOf(QStringLiteral("gap1")), 1);
+        QCOMPARE(order.indexOf(QStringLiteral("gap2")), 3);
+    }
+
+    void gapWidthIsPerInstanceAndRecycledOnRemoval()
+    {
+        DockConfig cfg(freshDockId("gap-width"));
+        cfg.setWidgetOrder({QStringLiteral("clock")});
+        const QString first = cfg.insertGap(0);
+        const QString second = cfg.insertGap(1);
+        QCOMPARE(first, QStringLiteral("gap1"));
+        QCOMPARE(second, QStringLiteral("gap2"));
+
+        cfg.setGapFixedWidth(first, true);
+        cfg.setGapSize(first, 90);
+        // Cada instancia con lo suyo: el ancho de una no puede pisar a la otra.
+        QVERIFY(cfg.gapFixedWidth(first));
+        QCOMPARE(cfg.gapSize(first), 90);
+        QVERIFY(!cfg.gapFixedWidth(second));
+        QCOMPARE(cfg.gapSize(second), DockConfig::kGapDefaultSize);
+        // Acotado al rango, o el dock se come la pantalla con un typo.
+        cfg.setGapSize(second, 99999);
+        QCOMPARE(cfg.gapSize(second), DockConfig::kGapMaxSize);
+
+        // Sacarlo devuelve el número a la circulación **sin** su ancho: heredar
+        // el del anterior se leería como "el separador nuevo salió mal".
+        cfg.removeSectionAt(cfg.widgetOrder().indexOf(first));
+        QCOMPARE(cfg.insertGap(0), first);
+        QVERIFY(!cfg.gapFixedWidth(first));
+        QCOMPARE(cfg.gapSize(first), DockConfig::kGapDefaultSize);
+    }
+
     void knownTokensAreAppendedToAnOldOrder()
     {
         // Un widget nuevo se auto-agrega al widgetOrder ya guardado: por eso no

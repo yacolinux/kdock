@@ -2063,6 +2063,79 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     return box;
 }
 
+void SettingsDialog::rebuildGapsGroup()
+{
+    if (!m_gapsLayout)
+        return;
+    while (QLayoutItem *item = m_gapsLayout->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+
+    const QStringList tokens = m_config->gapTokens();
+    if (tokens.isEmpty()) {
+        auto *hint = new QLabel(
+            tr("No transparent separator on this dock. Add one with \"Add transparent "
+               "separator\" above: it leaves a hole in the dock's background, so the "
+               "desktop shows through and the dock reads as two."),
+            m_gapsBox);
+        hint->setWordWrap(true);
+        m_gapsLayout->addWidget(hint);
+        return;
+    }
+
+    for (const QString &token : tokens)
+        m_gapsLayout->addWidget(createGapRow(token));
+}
+
+QWidget *SettingsDialog::createGapRow(const QString &token)
+{
+    auto *row = new QWidget(m_gapsBox);
+    auto *layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+
+    auto *name = new QLabel(m_config->widgetName(token), row);
+    name->setMinimumWidth(180);
+    layout->addWidget(name);
+
+    auto *fixed = new QCheckBox(tr("Fixed width"), row);
+    fixed->setChecked(m_config->gapFixedWidth(token));
+    fixed->setToolTip(tr("Off: the separator expands like a dynamic one and pushes the "
+                         "sections apart. On: it measures exactly the width below, so the "
+                         "hole is a gap of its own between two blocks of dock."));
+    connect(fixed, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setGapFixedWidth(token, on); });
+    layout->addWidget(fixed);
+
+    auto *size = new QSpinBox(row);
+    // The range lives in DockConfig, next to the value it clamps.
+    size->setRange(DockConfig::kGapMinSize, DockConfig::kGapMaxSize);
+    size->setSuffix(tr(" px"));
+    size->setValue(m_config->gapSize(token));
+    connect(size, &QSpinBox::valueChanged, this,
+            [this, token](int px) { m_config->setGapSize(token, px); });
+    layout->addWidget(size);
+    layout->addStretch();
+
+    // The width says nothing while the separator expands.
+    const auto sync = [fixed, size] { size->setEnabled(fixed->isChecked()); };
+    connect(fixed, &QCheckBox::toggled, row, [sync](bool) { sync(); });
+    sync();
+
+    // The dock's own right-click menu writes the same keys, and a rename shows
+    // up in the label: without this the panel goes stale behind the user's back.
+    connect(m_config, &DockConfig::gapsChanged, row, [this, token, fixed, size, sync] {
+        QSignalBlocker b1(fixed), b2(size);
+        fixed->setChecked(m_config->gapFixedWidth(token));
+        size->setValue(m_config->gapSize(token));
+        sync();
+    });
+    connect(m_config, &DockConfig::widgetNamesChanged, name,
+            [this, token, name] { name->setText(m_config->widgetName(token)); });
+
+    return row;
+}
+
 QWidget *SettingsDialog::createMenuTab()
 {
     auto *tab = new QWidget;
@@ -3751,7 +3824,8 @@ QWidget *SettingsDialog::createLayoutTab()
     addGap->setToolTip(tr("Expands like a dynamic separator, and the dock's background is "
                           "not painted over it: the desktop shows through and the dock reads "
                           "as two. It only has room to open in panel mode or with a fixed "
-                          "dock length."));
+                          "dock length — or give it a fixed width below, which needs no room "
+                          "to distribute and works in any mode."));
     addButtons->addWidget(addSep);
     addButtons->addWidget(addSpring);
     addButtons->addWidget(addGap);
@@ -3894,6 +3968,9 @@ QWidget *SettingsDialog::createLayoutTab()
     connect(m_config, &DockConfig::widgetOrderChanged, this, [this, updateRemove] {
         reloadLayoutList();
         updateRemove();
+        // A separator may have come or gone with the new order, and its width
+        // row lives right below this list.
+        rebuildGapsGroup();
     });
     connect(m_config, &DockConfig::widgetNamesChanged, this, [this] { reloadLayoutList(); });
     reloadLayoutList();
@@ -4012,6 +4089,14 @@ QWidget *SettingsDialog::createLayoutTab()
     sizeForm->addRow(tr("Separator size:"), sepSize);
     layout->addLayout(sizeForm);
 
+    // One row per transparent separator: its width is per instance, so there is
+    // nothing to put in the form above. Rebuilt in place, because the list right
+    // above is where they are added and removed.
+    m_gapsBox = new QGroupBox(tr("Transparent separators"), tab);
+    m_gapsLayout = new QVBoxLayout(m_gapsBox);
+    layout->addWidget(m_gapsBox);
+    rebuildGapsGroup();
+
     for (auto signal : {&DockConfig::separator1Changed, &DockConfig::separator2Changed,
                         &DockConfig::separator1TransparentChanged,
                         &DockConfig::separator2TransparentChanged,
@@ -4123,18 +4208,22 @@ void SettingsDialog::reloadLayoutList()
     // one's number.
     int springNumber = 0;
     int sepNumber = 0;
-    int gapNumber = 0;
     for (int i = 0; i < order.size(); ++i) {
         const QString token = order.at(i);
         if (kHiddenFromLayout.contains(token))
             continue;
         const bool spring = token == QLatin1String("spring");
-        const bool gap = token == QLatin1String("gap");
+        // A transparent separator carries its own number in its token (it keys
+        // the width setting), so it is named like an appsel widget rather than
+        // counted positionally — the two would disagree the moment one is
+        // removed from the middle, and the width panel below reads the token.
+        const bool gap = DockConfig::isGapToken(token);
         // A selectable-apps widget repeats like a separator (that is what lets
         // a dock hold several), but it reads as a widget: its own name, its own
         // icon, and no number appended — its label already carries one.
         const bool appsWidget = DockConfig::isAppsWidgetToken(token);
-        const bool separator = DockConfig::isRepeatableToken(token) && !appsWidget;
+        const bool separator =
+            DockConfig::isRepeatableToken(token) && !appsWidget && !gap;
         // Separators are numbered (each kind on its own count): they are
         // otherwise indistinguishable, so there is no way to tell that Up/Down
         // moved the one that was selected. Renamed sections keep the default
@@ -4143,7 +4232,7 @@ void SettingsDialog::reloadLayoutList()
         QString shown;
         if (separator)
             shown = tr("%1 %2").arg(sectionLabel(token))
-                        .arg(spring ? ++springNumber : gap ? ++gapNumber : ++sepNumber);
+                        .arg(spring ? ++springNumber : ++sepNumber);
         else if (name == sectionLabel(token))
             shown = sectionLabel(token);
         else
@@ -4154,9 +4243,9 @@ void SettingsDialog::reloadLayoutList()
             shown += tr("  (oculto)");
         auto *item = new QListWidgetItem(
             QIcon::fromTheme(appsWidget  ? QStringLiteral("applications-all")
+                             : gap       ? QStringLiteral("edit-clear-all")
                              : !separator ? QStringLiteral("view-list-symbolic")
                              : spring    ? QStringLiteral("distribute-horizontal-margin")
-                             : gap       ? QStringLiteral("edit-clear-all")
                                          : QStringLiteral("distribute-vertical-margin")),
             shown, m_layoutList);
         item->setData(Qt::UserRole, token);

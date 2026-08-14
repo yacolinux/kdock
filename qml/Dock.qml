@@ -170,10 +170,27 @@ Item {
         return config.widgetNamesRevision, config.widgetName(token)
     }
 
-    // ---- Transparent separators (token "gap") -----------------------------
-    // A gap expands like a spring and, on top of that, the panel background is
-    // not painted over it: the dock is drawn as one rectangle per *run* between
-    // gaps, so the desktop shows through in between and the dock reads as two.
+    // ---- Transparent separators (tokens "gap1", "gap2"…) ------------------
+    // "gap<n>": one transparent separator. Numbered because its width is a
+    // per-instance setting (see config.gapFixedWidth) and two bare "gap" tokens
+    // in widgetOrder would be indistinguishable.
+    function isGapToken(token) {
+        return /^gap[1-9][0-9]*$/.test(token)
+    }
+    // Both read through Q_INVOKABLE calls, which no signal re-evaluates on their
+    // own: touching gapRevision first is what makes the binding follow the
+    // setting (same trick as widgetNameOf above).
+    function gapFixedOf(token) {
+        return config.gapRevision, config.gapFixedWidth(token)
+    }
+    function gapSizeOf(token) {
+        return config.gapRevision, config.gapSize(token)
+    }
+
+    // A gap expands like a spring (unless it is pinned to a fixed width) and, on
+    // top of that, the panel background is not painted over it: the dock is
+    // drawn as one rectangle per *run* between gaps, so the desktop shows
+    // through in between and the dock reads as two.
     // The same rectangles go to C++ (dockWindow.setGapRects) to be cut out of
     // the surface's input region, or the hole would be see-through but still
     // eat the clicks.
@@ -599,8 +616,18 @@ Item {
 
     // Dynamic separators only distribute space when the dock spans the whole
     // edge (panel mode). Outside panel mode they are no-ops (size 0).
-    readonly property bool hasSpring: config.widgetOrder.indexOf("spring") >= 0
-                                      || config.widgetOrder.indexOf("gap") >= 0
+    // A gap pinned to a fixed width no longer distributes anything, so it does
+    // not count here: with only those left, alignment applies again.
+    readonly property bool hasSpring: {
+        var order = config.widgetOrder
+        if (order.indexOf("spring") >= 0)
+            return true
+        for (var i = 0; i < order.length; ++i) {
+            if (root.isGapToken(order[i]) && !root.gapFixedOf(order[i]))
+                return true
+        }
+        return false
+    }
     readonly property bool fillMain: config.panelMode && hasSpring
 
     // Relanzadores shown on this dock (per-dock visibility). Primary dock shows
@@ -699,8 +726,10 @@ Item {
         case "settings": return config.showSettingsButton
         case "spring": return true
         case "sep": return true
-        case "gap": return true
         }
+        // Separators placed by hand: always drawn, there is no flag to check.
+        if (root.isGapToken(token))
+            return true
         // A selectable-apps widget is always visible: it is placed by hand from
         // the Layout tab (and removed the same way), so there is no flag to
         // check — and hiding an empty one would take away the right-click that
@@ -755,8 +784,9 @@ Item {
         case "settings": return settingsComp
         case "spring": return springComp
         case "sep": return staticSepComp
-        case "gap": return springComp
         }
+        if (root.isGapToken(token))
+            return gapComp
         if (root.isAppsWidget(token))
             return appsComp
         return null
@@ -808,8 +838,9 @@ Item {
                         : qsTr("Clima: elegí una ciudad")
         case "spring": return qsTr("Dynamic separator")
         case "sep": return qsTr("Static separator")
-        case "gap": return qsTr("Transparent separator")
         }
+        if (root.isGapToken(token))
+            return root.widgetNameOf(token)
         return ""
     }
 
@@ -992,10 +1023,15 @@ Item {
                     required property string modelData
 
                     readonly property string token: modelData
-                    // The transparent separator expands exactly like a spring;
-                    // what it adds is the hole (see root.gapRuns).
-                    readonly property bool isGap: token === "gap"
-                    readonly property bool isSpring: token === "spring" || isGap
+                    // A transparent separator expands exactly like a spring —
+                    // what it adds is the hole (see root.gapRuns) — *unless* it
+                    // is pinned to a width, and then it is an ordinary section
+                    // that happens to draw nothing. Everything below that keys
+                    // off isSpring therefore takes the right branch on its own:
+                    // the fill, the zero implicit size, the minimum of 0.
+                    readonly property bool isGap: root.isGapToken(token)
+                    readonly property bool fixedGap: isGap && root.gapFixedOf(token)
+                    readonly property bool isSpring: token === "spring" || (isGap && !fixedGap)
                     readonly property bool isStaticSep: token === "sep"
                     readonly property bool block: root.isBlock(token)
                     readonly property bool draggable: !block
@@ -1022,8 +1058,12 @@ Item {
                     // Name of this section, drawn around its content. The apps
                     // block is excluded: it labels each of its own icons with
                     // the separate app setting; the separators draw no name.
+                    // isGap and not just isSpring: a gap pinned to a width is no
+                    // longer a spring, and a name drawn inside the hole would
+                    // float on the desktop with no dock behind it.
                     readonly property bool labelled: root.widgetLabelVisible && !isSpring
-                                                     && !isStaticSep && token !== "apps"
+                                                     && !isStaticSep && !isGap
+                                                     && token !== "apps"
                                                      && !root.isAppsWidget(token)
                     readonly property string label: labelled ? root.widgetNameOf(token) : ""
                     // Renames and show/hide both move the widest drawn name.
@@ -1182,7 +1222,8 @@ Item {
                                 property: "sectionToken"
                                 value: sec.token
                                 when: contentLoader.item !== null
-                                      && root.isAppsWidget(sec.token)
+                                      && (root.isAppsWidget(sec.token)
+                                          || root.isGapToken(sec.token))
                             }
                             Binding {
                                 target: contentLoader.item
@@ -1190,8 +1231,10 @@ Item {
                                 value: secMouse.containsMouse
                                 // Separators draw no hover state and declare no
                                 // such property: binding it warns on every load.
+                                // isGap covers the fixed ones, which are not
+                                // springs any more.
                                 when: contentLoader.item !== null && !sec.block
-                                      && !sec.isSpring && !sec.isStaticSep
+                                      && !sec.isSpring && !sec.isStaticSep && !sec.isGap
                             }
                         }
 
@@ -1295,7 +1338,10 @@ Item {
                                 onTriggered: config.insertGap(sec.index + 1)
                             }
                             IconMenuItem {
-                                visible: sec.isSpring || sec.isStaticSep
+                                // isGap on its own: a gap pinned to a width is
+                                // not a spring any more, and it must not lose
+                                // the item that removes it.
+                                visible: sec.isSpring || sec.isStaticSep || sec.isGap
                                 height: visible ? implicitHeight : 0
                                 text: sec.isGap ? qsTr("Remove transparent separator")
                                                 : sec.isSpring ? qsTr("Remove dynamic separator")
@@ -3488,6 +3534,26 @@ Item {
             // Expansion handled by the section wrapper's Layout.fill*.
             implicitWidth: 0
             implicitHeight: 0
+        }
+    }
+
+    // Transparent separator. Draws nothing at all — the hole is punched by
+    // root.gapRuns, from this section's geometry — so the whole component is its
+    // size: 0 while it expands (the wrapper's Layout.fill* does the work, same
+    // as a spring), its configured width once it is pinned.
+    Component {
+        id: gapComp
+        Item {
+            // Which instance this is. A Component declared up here cannot see
+            // the delegate's ids, so the token is pushed in by a Binding.
+            property string sectionToken: ""
+            readonly property bool fixed: sectionToken !== ""
+                                          && root.gapFixedOf(sectionToken)
+            readonly property int px: fixed ? root.gapSizeOf(sectionToken) : 0
+            implicitWidth: root.horizontal ? px : (fixed ? root.widgetIconPx : 0)
+            // Never zero across the dock while it is fixed: the section is
+            // draggable, and a section with no height has nothing to grab.
+            implicitHeight: root.horizontal ? (fixed ? root.widgetIconPx : 0) : px
         }
     }
 

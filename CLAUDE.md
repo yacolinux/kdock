@@ -1445,14 +1445,27 @@ Lo que esos dos no pueden probar, y cómo se probó:
   nuevo), pero un test que escribe, reemplaza y relee por `QSettings` falla una vez cada tantas
   corridas y parece un bug del import. En un test, leé el archivo (`QFile`) y no `QSettings`:
   `tests/unit/tst_configarchive.cpp` lo hace y lo explica.
-- **Una sección que se repite (`spring`, `sep`, `gap`) NO va en `knownWidgetTokens()`**: esa lista
-  se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
+- **Una sección que se repite (`spring`, `sep`, `gap<n>`) NO va en `knownWidgetTokens()`**: esa
+  lista se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
   `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te
   olvidás, el token **desaparece del `widgetOrder` en el próximo load** sin imprimir nada.
+  Y si además le vas a dar un ajuste **por instancia** (el ancho del separador transparente,
+  2026-08-14), el token tiene que estar **numerado** como los `appsel<n>`: dos `gap` pelados en
+  `widgetOrder` son indistinguibles y no hay por dónde keyear el ajuste. Eso arrastra una
+  migración en `load()` **antes** de `reconcileWidgetOrder()` (idempotente: un preset trae los
+  pelados de vuelta), el `case "<token>"` de `Dock.qml` reemplazado por un helper de prefijo en
+  las tres funciones (`sectionVisible`, `componentFor`, `sectionTooltip`), y una entrada en el
+  dict `numbered` de `tests/static/check-widget-tokens.py`, que si no falla pidiendo el `case`
+  del token pelado — que ya no existe.
   Y en `Dock.qml`, además del `Component` + `componentFor()` + `sectionVisible()`, hay que
   excluirla del `Binding` de `hovered` del delegate: un componente de sección que no declara
   esa property escupe *"Property 'hovered' does not exist on QQuickItem"* en cada arranque
   (lo agarró el arnés de Xvfb al primer intento, 2026-08-02).
+  **Y si una condición que ya existía deja de valer para un caso, buscá todo lo que colgaba de
+  ella**: al hacerse configurable el ancho del `gap`, `sec.isSpring` pasó a ser falso para los
+  fijos, y con eso se les venían encima el nombre de sección dibujado sobre el agujero, el
+  warning del `hovered` y la desaparición del ítem *Quitar* de su menú. Ninguna de las tres da
+  error de compilación ni la ve `qmllint`.
 - **Una clave nueva del grupo del menú se toca en CINCO lugares**: `Q_PROPERTY` + getter +
   señal, `load()`, `reloadMenuConfig()`, el `seedKey()` de `setMenuConfigShared()` y el setter
   vía `writeMenuConfigValue()` (no `m_settings.setValue()` directo). Si te salteás alguno

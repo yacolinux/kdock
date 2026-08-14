@@ -874,7 +874,31 @@ void DockConfig::load()
     m_separatorSize = m_settings.value(QStringLiteral("separatorSize"), 16).toInt();
     m_widgetOrder = m_settings.value(QStringLiteral("widgetOrder"), knownWidgetTokens()).toStringList();
     m_dockLength = m_settings.value(QStringLiteral("dockLength"), 0).toInt();
+    migrateGapTokens();
     reconcileWidgetOrder();
+}
+
+void DockConfig::migrateGapTokens()
+{
+    if (!m_widgetOrder.contains(QStringLiteral("gap")))
+        return;
+    // Numbers already in use stay where they are; the bare ones take the lowest
+    // free number each, left to right, so the order the user sees in the Layout
+    // tab is the order they are numbered in.
+    QStringList taken;
+    for (const QString &token : std::as_const(m_widgetOrder))
+        if (isGapToken(token))
+            taken.append(token);
+    int next = 1;
+    for (QString &token : m_widgetOrder) {
+        if (token != QLatin1String("gap"))
+            continue;
+        while (taken.contains(QStringLiteral("gap") + QString::number(next)))
+            ++next;
+        token = QStringLiteral("gap") + QString::number(next);
+        taken.append(token);
+    }
+    m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
 }
 
 QStringList DockConfig::knownWidgetTokens()
@@ -952,12 +976,21 @@ void DockConfig::insertSpring(int at)
     emit widgetOrderChanged();
 }
 
-void DockConfig::insertGap(int at)
+QString DockConfig::insertGap(int at)
 {
+    // Lowest free number, same as insertAppsWidget(): removing the middle one
+    // of three and adding another does not leave a hole in the names.
+    const QStringList taken = gapTokens();
+    int n = 1;
+    while (taken.contains(QStringLiteral("gap") + QString::number(n)))
+        ++n;
+    const QString token = QStringLiteral("gap") + QString::number(n);
+
     at = qBound(0, at, m_widgetOrder.size());
-    m_widgetOrder.insert(at, QStringLiteral("gap"));
+    m_widgetOrder.insert(at, token);
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
     emit widgetOrderChanged();
+    return token;
 }
 
 void DockConfig::insertSeparator(int at)
@@ -966,6 +999,72 @@ void DockConfig::insertSeparator(int at)
     m_widgetOrder.insert(at, QStringLiteral("sep"));
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
     emit widgetOrderChanged();
+}
+
+bool DockConfig::isGapToken(const QString &token)
+{
+    static const QRegularExpression re(QStringLiteral("^gap[1-9][0-9]*$"));
+    return re.match(token).hasMatch();
+}
+
+QStringList DockConfig::gapTokens() const
+{
+    QStringList tokens;
+    for (const QString &token : m_widgetOrder)
+        if (isGapToken(token) && !tokens.contains(token))
+            tokens.append(token);
+    return tokens;
+}
+
+bool DockConfig::gapFixedWidth(const QString &token) const
+{
+    if (!isGapToken(token))
+        return false;
+    // Off by default: a gap that expands is what the section has always done,
+    // and turning every existing one into a 32 px hole on upgrade would be a
+    // layout change nobody asked for.
+    return m_settings.value(token + QStringLiteral("/fixedWidth"), false).toBool();
+}
+
+void DockConfig::setGapFixedWidth(const QString &token, bool on)
+{
+    if (!isGapToken(token) || gapFixedWidth(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/fixedWidth"), on);
+    ++m_gapRevision;
+    emit gapsChanged();
+}
+
+int DockConfig::gapSize(const QString &token) const
+{
+    if (!isGapToken(token))
+        return kGapDefaultSize;
+    return qBound(kGapMinSize,
+                  m_settings.value(token + QStringLiteral("/size"), kGapDefaultSize).toInt(),
+                  kGapMaxSize);
+}
+
+void DockConfig::setGapSize(const QString &token, int px)
+{
+    px = qBound(kGapMinSize, px, kGapMaxSize);
+    if (!isGapToken(token) || gapSize(token) == px)
+        return;
+    m_settings.setValue(token + QStringLiteral("/size"), px);
+    ++m_gapRevision;
+    emit gapsChanged();
+}
+
+void DockConfig::clearGap(const QString &token)
+{
+    if (!isGapToken(token))
+        return;
+    m_settings.remove(token);
+    m_widgetNames.remove(token);
+    m_settings.remove(QStringLiteral("widgetNames/") + token);
+    ++m_gapRevision;
+    ++m_widgetNamesRevision;
+    emit gapsChanged();
+    emit widgetNamesChanged();
 }
 
 bool DockConfig::isAppsWidgetToken(const QString &token)
@@ -1099,6 +1198,11 @@ void DockConfig::removeSectionAt(int at)
     // widget's launchers would look like the new one came with junk in it.
     if (isAppsWidgetToken(token) && !m_widgetOrder.contains(token))
         clearAppsWidget(token);
+    // Same for a transparent separator's width: its number goes back into
+    // circulation, and the next gap must not come up pre-set to the old one's
+    // size (which reads as "the new separator came out wrong").
+    if (isGapToken(token) && !m_widgetOrder.contains(token))
+        clearGap(token);
     emit widgetOrderChanged();
     if (isAppsWidgetToken(token))
         emit dockThicknessChanged();
@@ -2090,6 +2194,8 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("settings"),      QStringLiteral("Settings button")},
         {QStringLiteral("spring"),        QStringLiteral("Dynamic separator")},
         {QStringLiteral("sep"),           QStringLiteral("Static separator")},
+        // Same deal as "appsel" below: the instances are "gap1", "gap2"… and
+        // the bare token is the catalog key their label is built from.
         {QStringLiteral("gap"),           QStringLiteral("Transparent separator")},
         // Base name of the selectable-apps widgets: the instances are
         // "appsel1", "appsel2"… and each is labelled with this plus its number
@@ -2100,6 +2206,10 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
     if (isAppsWidgetToken(token)) {
         return labels.value(QStringLiteral("appsel")) + QLatin1Char(' ')
                + token.mid(6); // "appsel3" -> "… 3"
+    }
+    if (isGapToken(token)) {
+        return labels.value(QStringLiteral("gap")) + QLatin1Char(' ')
+               + token.mid(3); // "gap2" -> "… 2"
     }
     return labels.value(token, token);
 }
@@ -2124,6 +2234,12 @@ QString DockConfig::translatedWidgetLabel(const QString &token)
             const QString base = layer->widget(QStringLiteral("appsel"));
             if (!base.isEmpty())
                 return base + QLatin1Char(' ') + token.mid(6);
+        }
+        // Same for a transparent separator (gap1, gap2…).
+        if (isGapToken(token)) {
+            const QString base = layer->widget(QStringLiteral("gap"));
+            if (!base.isEmpty())
+                return base + QLatin1Char(' ') + token.mid(3);
         }
         const QString translated = layer->widget(token);
         if (!translated.isEmpty())

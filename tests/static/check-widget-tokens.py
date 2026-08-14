@@ -67,8 +67,25 @@ for token in tokens:
     if f'case "{token}"' not in component_body:
         problems.append(f"{token}: falta su rama en componentFor() (el Loader queda vacío)")
 
+# Un repetible puede estar *numerado*: sus instancias se llaman gap1, gap2… y
+# Dock.qml no las despacha con un `case` (el token pelado nunca aparece en
+# widgetOrder, la migración lo convierte al cargar) sino con un helper de
+# prefijo. Para esos, lo que hay que exigir es el helper, en las dos funciones —
+# y la etiqueta del token pelado, que es la clave del catálogo por la que se
+# traducen todas las instancias.
+numbered = {"gap": "isGapToken("}
+
 for token in repeatables:
-    if f'case "{token}"' not in component_body:
+    helper = numbered.get(token)
+    if helper:
+        if token not in labels:
+            problems.append(f"{token}: falta en defaultWidgetLabel() (es la clave "
+                            "del catálogo de todas sus instancias)")
+        if helper not in visible_body:
+            problems.append(f"{token} (numerado): falta {helper} en sectionVisible()")
+        if helper not in component_body:
+            problems.append(f"{token} (numerado): falta {helper} en componentFor()")
+    elif f'case "{token}"' not in component_body:
         problems.append(f"{token} (repetible): falta su rama en componentFor()")
     if token in tokens:
         problems.append(f"{token}: es repetible y además está en knownWidgetTokens() "
