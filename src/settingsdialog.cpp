@@ -1946,8 +1946,8 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     auto *box = new QGroupBox(m_config->widgetName(token), m_appsWidgetsBox);
     auto *layout = new QVBoxLayout(box);
 
-    // The two flags in one row, the filter first: it is the one that decides
-    // what this widget picks up, and it only has an effect on what "Show pinned
+    // The three flags in one row, the filters first: they are what decides what
+    // this widget picks up, and they only have an effect on what "Show pinned
     // only" lets through.
     auto *flags = new QHBoxLayout;
     auto *excludeOthers = new QCheckBox(tr("Skip apps pinned in other Selectable apps"), box);
@@ -1967,17 +1967,39 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     connect(onlyPinned, &QCheckBox::toggled, this,
             [this, token](bool on) { m_config->setWidgetOnlyPinned(token, on); });
 
+    auto *excludeMonitor = new QCheckBox(tr("Skip apps pinned on this monitor"), box);
+    excludeMonitor->setChecked(m_config->widgetExcludeMonitor(token));
+    excludeMonitor->setToolTip(
+        tr("The same filter, one screen wide: the widget skips a window whose app is in "
+           "the list of any Selectable apps widget of any dock on this monitor. It is the "
+           "wider version of the checkbox on the left, so turning it on turns that one off. "
+           "Other monitors are never looked at. The apps of its own list below are always "
+           "drawn."));
+    connect(excludeMonitor, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setWidgetExcludeMonitor(token, on); });
+
     flags->addWidget(excludeOthers);
+    flags->addWidget(excludeMonitor);
     flags->addWidget(onlyPinned);
     flags->addStretch();
     layout->addLayout(flags);
 
-    // The filter is what the other checkbox lets through, so it says nothing
-    // while the widget is a fixed list of icons.
-    const auto syncFlags = [excludeOthers, onlyPinned] {
-        excludeOthers->setEnabled(!onlyPinned->isChecked());
+    // The filters are what the other checkbox lets through, so they say nothing
+    // while the widget is a fixed list of icons. And the monitor-wide one is a
+    // superset of the dock-local one: with it on, the other is off and stays
+    // that way (unchecked here *and* written to the config, so the two filters
+    // never run at once).
+    const auto syncFlags = [excludeOthers, excludeMonitor, onlyPinned] {
+        const bool live = !onlyPinned->isChecked();
+        excludeMonitor->setEnabled(live);
+        excludeOthers->setEnabled(live && !excludeMonitor->isChecked());
     };
     connect(onlyPinned, &QCheckBox::toggled, box, [syncFlags](bool) { syncFlags(); });
+    connect(excludeMonitor, &QCheckBox::toggled, box, [excludeOthers, syncFlags](bool on) {
+        if (on)
+            excludeOthers->setChecked(false); // its own toggled() persists the false
+        syncFlags();
+    });
     syncFlags();
 
     auto *list = new QListWidget(box);

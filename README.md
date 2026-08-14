@@ -252,6 +252,7 @@ Frameworks:
 
 | Widget | Qué hace | Backend |
 |---|---|---|
+| Apps Seleccionables | El bloque de apps como sección repetible, con su propia lista de lanzadores: un dock puede tener **varios**. Tres filtros por instancia — *Ver solo anclados*, *No ver apps ancladas en otros Seleccionables* (del mismo dock) y *No ver apps ancladas en el monitor* (de cualquier dock de esa pantalla) — con los que un widget se vuelve el bloque de sobrantes: todo lo que está abierto y no dibuja ya ningún otro | Protocolo del compositor |
 | Volumen | Sink por defecto: scroll, mute, nivel | `wpctl` / `pactl` (PipeWire) |
 | Brillo | Brillo de pantalla | `brightnessctl` |
 | Batería | Carga, estado y perfil de energía | UPower + power-profiles-daemon |

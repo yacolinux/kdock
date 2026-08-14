@@ -586,11 +586,17 @@ DockConfig::DockConfig(const QString &dockId, QObject *parent)
     const QString screen = screenOfDockId(dockId);
     if (!screen.isEmpty() && m_screenName != screen)
         setScreenName(screen);
+    // A dock joining the monitor brings its appsel lists with it, so anyone
+    // filtering monitor-wide has a bigger set to skip from this moment on.
+    notifyMonitorAppsChanged();
 }
 
 DockConfig::~DockConfig()
 {
     s_instances.removeAll(this);
+    // …and one leaving takes its lists away. Done after the removal, so the
+    // siblings that re-sweep no longer see this one.
+    notifyMonitorAppsChanged();
 }
 
 bool DockConfig::menuConfigShared()
@@ -1096,6 +1102,10 @@ QString DockConfig::insertAppsWidget(int at)
     m_widgetOrder.insert(at, token);
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
     emit widgetOrderChanged();
+    // A new (still empty) widget changes nothing yet, but it is one more list a
+    // monitor-wide filter has to sweep: tell the siblings now, not on its first
+    // pin, or that first icon stays invisible to them.
+    notifyMonitorAppsChanged();
     // First app cells on a dock whose apps block is off: the cross axis grows.
     emit dockThicknessChanged();
     return token;
@@ -1119,6 +1129,7 @@ void DockConfig::setWidgetApps(const QString &token, const QStringList &ids)
     // list from before the pin.
     m_settings.sync();
     emit widgetAppsChanged(token);
+    notifyMonitorAppsChanged();
     // The block gains or loses its first icon: with no other app cells on the
     // dock that changes the cross-axis size, and with it the exclusive zone.
     emit dockThicknessChanged();
@@ -1171,6 +1182,56 @@ QStringList DockConfig::appsPinnedElsewhere(const QString &token) const
     return ids;
 }
 
+bool DockConfig::widgetExcludeMonitor(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return false;
+    return m_settings.value(token + QStringLiteral("/excludeMonitor"), false).toBool();
+}
+
+void DockConfig::setWidgetExcludeMonitor(const QString &token, bool on)
+{
+    if (!isAppsWidgetToken(token) || widgetExcludeMonitor(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/excludeMonitor"), on);
+    emit widgetExcludeMonitorChanged(token);
+}
+
+QStringList DockConfig::appsPinnedOnMonitor(const QString &token) const
+{
+    // Scoped to one output on purpose: the whole point of this flag over
+    // excludeOthers is to stay a bounded sweep, and a dock only ever competes
+    // for room with the docks it shares a screen with.
+    const QString screen = screenOfDockId(m_dockId);
+    QStringList ids;
+    for (const DockConfig *cfg : std::as_const(s_instances)) {
+        if (screenOfDockId(cfg->m_dockId) != screen)
+            continue;
+        for (const QString &other : cfg->appsWidgetTokens()) {
+            // Only this widget's own list is exempt. Another widget of *this*
+            // dock counts too: monitor-wide is the superset of excludeOthers,
+            // which is why the dialog turns that one off when this is on.
+            if (cfg == this && other == token)
+                continue;
+            for (const QString &id : cfg->widgetApps(other)) {
+                const QString key = id.toLower();
+                if (!ids.contains(key))
+                    ids.append(key);
+            }
+        }
+    }
+    return ids;
+}
+
+void DockConfig::notifyMonitorAppsChanged() const
+{
+    const QString screen = screenOfDockId(m_dockId);
+    for (DockConfig *cfg : std::as_const(s_instances)) {
+        if (cfg != this && screenOfDockId(cfg->m_dockId) == screen)
+            emit cfg->monitorAppsChanged();
+    }
+}
+
 void DockConfig::clearAppsWidget(const QString &token)
 {
     if (!isAppsWidgetToken(token))
@@ -1180,6 +1241,7 @@ void DockConfig::clearAppsWidget(const QString &token)
     m_settings.remove(QStringLiteral("widgetNames/") + token);
     ++m_widgetNamesRevision;
     emit widgetAppsChanged(token);
+    notifyMonitorAppsChanged();
     emit widgetNamesChanged();
 }
 

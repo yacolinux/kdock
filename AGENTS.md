@@ -151,8 +151,8 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
   **número libre más bajo** y devuelve el token; al remover la sección se borra su grupo
   (`clearAppsWidget()`), o el próximo widget que reuse el número heredaría sus apps.
 - **Config por instancia**, en su propio grupo del `.conf` del dock: `[appsel1] apps=…` (los
-  `.desktop` que dibuja, o sea su "pinned"), `onlyPinned` (**default true**) y `excludeOthers`
-  (default false). El nombre sale del
+  `.desktop` que dibuja, o sea su "pinned"), `onlyPinned` (**default true**), `excludeOthers`
+  (default false) y `excludeMonitor` (default false). El nombre sale del
   mecanismo de siempre (`widgetNames/appsel1`), así que *Renombrar…* en la solapa Diseño anda sin
   nada nuevo. `setWidgetApps()` hace `sync()`: la lista se edita anclando desde el propio dock, y
   un logout no desenrolla (ver el handler de SIGTERM).
@@ -180,6 +180,37 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
     quiénes son "los otros"). Sin eso el ícono repetido se queda hasta el próximo arranque.
   En el diálogo el casillero está **a la izquierda** de *Ver solo anclados* y se **grisa** cuando
   ese está prendido: el filtro solo puede actuar sobre lo que el otro deja pasar.
+- **Bloque de sobrantes del monitor** (`excludeMonitor`, 2026-08-14): el mismo filtro **una
+  pantalla de ancho**. Con él prendido el widget no le da fila a ninguna ventana cuya app esté en
+  la lista de **cualquier appsel de cualquier dock del monitor** — los de otros docks y los del
+  propio, o sea que es el **superconjunto** de `excludeOthers`. Lo que hay que saber:
+  - **Es código paralelo, a propósito**: clave propia (`[appsel1] excludeMonitor`), getter/setter
+    propios, señal propia (`widgetExcludeMonitorChanged`), barrido propio
+    (`DockConfig::appsPinnedOnMonitor(token)`) y su propia rama en `acceptsStrayWindow()`.
+    Ninguna de las dos banderas lee ni escribe nada de la otra: el pedido era que prender una no
+    pudiera cambiar lo que hace la otra. Lo único compartido es que la del monitor se pregunta
+    **primero** y corta.
+  - **El barrido es acotado y no abre archivos**: recorre `DockConfig::s_instances` (los docks
+    vivos del proceso, uno por dock habilitado) quedándose con los que comparten
+    `screenOfDockId()`. Los docks de otros monitores no se miran nunca — es el punto de la
+    opción. Un dock habilitado pero atado a otro escritorio virtual **sí** cuenta: su config está
+    viva aunque su superficie esté desmapeada.
+  - **La entrada vive en otro objeto**, así que la señal se **relaya**: `notifyMonitorAppsChanged()`
+    emite `monitorAppsChanged()` en los *demás* `DockConfig` de la pantalla, y cada `DockModel`
+    sigue conectado únicamente a su propia config. Se llama desde `setWidgetApps()`,
+    `clearAppsWidget()`, `insertAppsWidget()` y los dos ctor/dtor del dockId (un dock que entra o
+    sale del monitor cambia el conjunto). Para lo que pasa dentro del propio dock alcanzan
+    `widgetAppsChanged` de otro token y `widgetOrderChanged`, que el modelo también escucha con
+    su guarda de `widgetExcludeMonitor`.
+  - **El resultado se cachea por rebuild** (`DockModel::m_monitorPinned`, un `QSet` llenado por
+    `refreshMonitorPinned()` al principio de `rebuild()`): `acceptsStrayWindow()` se pregunta una
+    vez por ventana y el barrido es de todo el monitor. Con la bandera apagada el set queda vacío
+    y no se barre nada.
+  - **Tampoco esconde sus propios lanzadores**, por la misma razón que el filtro local: está en
+    `acceptsStrayWindow()`.
+  - En el diálogo va **entre** los otros dos casilleros. Se grisa con *Ver solo anclados* igual
+    que el local, y prenderlo **destilda y persiste en false** `excludeOthers` y lo deja grisado
+    mientras siga prendido: es su superconjunto, así que los dos filtros nunca corren a la vez.
 - **Grosor**: `DockConfig::drawsAppCells()` (apps block **o** algún appsel) reemplazó a
   `showAppIcons` en `dockThickness()` y en `root.labelVisible` de `Dock.qml`. Sin eso, un dock con
   el bloque nativo apagado le reservaba a la zona exclusiva el alto de sus widgets y el widget
@@ -187,7 +218,7 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
   los modelos (`config.appsWidgetTokens()` + `dockWindow.appsModelFor`), no solo los del bloque.
 - **UI**: *Diseño → "Agregar Apps Seleccionables"* lo inserta (y *Quitar separador* lo saca:
   ambos botones lo aceptan, y *Renombrar…* también, que es la única excepción a "separador =
-  sin renombrar"). Sus apps y su casilla *Ver solo anclados* están en **Widgets → Apps
+  sin renombrar"). Sus apps y sus tres casillas están en **Widgets → Apps
   Seleccionables**, un panel por instancia (`rebuildAppsWidgetsGroup()`), que se reconstruye al
   agregar o quitar uno porque cambiar de solapa no reconstruye el diálogo.
 - **Traducción**: el token pelado `appsel` está en `defaultWidgetLabel()` solo para eso — es la

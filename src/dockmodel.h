@@ -5,6 +5,7 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <QSet>
 
 #include "desktopentry.h"
 
@@ -96,6 +97,11 @@ private:
     // everything the others do not already draw. Only asked for windows with no
     // row yet: the widget's own launchers are never filtered out.
     bool acceptsStrayWindow(const QString &appId) const;
+    // Recompute m_monitorPinned. Cheap no-op unless this widget filters
+    // monitor-wide: the sweep walks every dock of the screen, so it runs once
+    // per change instead of once per window (acceptsStrayWindow is asked for
+    // each of them).
+    void refreshMonitorPinned();
     void placeWindow(AbstractWindow *window);
     void removeWindow(AbstractWindow *window);
     void windowChanged(AbstractWindow *window);
@@ -111,4 +117,7 @@ private:
     VirtualDesktops *m_desktops = nullptr;
     QList<Item> m_items;
     bool m_updatingPinned = false;
+    // Cached result of DockConfig::appsPinnedOnMonitor() for this widget. Empty
+    // (and never filled) unless "skip apps pinned on this monitor" is on.
+    QSet<QString> m_monitorPinned;
 };

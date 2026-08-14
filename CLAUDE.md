@@ -137,7 +137,9 @@ instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin bus
 tarjetas caen a ícono). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager` y
 `kdock-weather` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
 el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos tres, saltealo
-y evitás el riesgo de abajo. (El panel de control **es** una superficie layer-shell, pero
+y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las seis líneas
+de `.desktop` dicen `Up-to-date`, ksycoca ya los tiene y no hay nada que refrescar, sin importar
+cuántos binarios se hayan reemplazado. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier
 cliente, verificado con `wayland-info`.) Y ojo:
 **`kbuildsycoca6` a secas es peligroso en esta máquina** (ver abajo):
@@ -469,6 +471,15 @@ queda dentro del nombre de la clave. Una clave `Wallpapers/desktop2/eDP-1` no da
 entran en las reglas de escapado. Si la segunda mitad es un dato (un nombre de conector, una
 ruta), usá **una sección por valor** (`[Wallpapers2]`, `[Wallpapers3]`) o metelo todo en una
 sola clave como JSON — que es lo que hace el snapshot de `DesktopWallpapers`.
+
+**Y para *ver* un control que está abajo de todo en su solapa, no captures el diálogo: capturá
+el widget.** Las solapas van adentro de un `QScrollArea`, así que un `dlg.grab()` devuelve el
+viewport y el grupo que te interesa puede quedar afuera — se ve igual que "mi widget no se
+agregó". `findChildren<QGroupBox*>()` filtrando por `title()` y un `->grab()` sobre **ese**
+sale entero y sin scrollear (2026-08-14, los casilleros de *Apps Seleccionables*).
+Ojo también con `Translations::instance()`, que devuelve **nullptr** si la sonda no construyó
+ninguna: el `->setActive("spanish")` de rigor para ver la UI traducida es un segfault sin más
+explicación. Se instancia una en la pila, como hace `main.cpp`.
 
 El `main.cpp` de prueba instancia el widget, y con un `QTimer::singleShot` hace
 `w.grab().save("/tmp/p/out.png")` y sale; el PNG se lee directo. Vale la pena correrlo dos
@@ -1409,6 +1420,22 @@ Lo que esos dos no pueden probar, y cómo se probó:
   entero no carga** y el dock sale de 160x160 con la ventana vacía. Si necesitás enganchar algo
   más al arranque, sumalo al handler que ya existe (`{ scheduleLabelMeasure(); scheduleGapRuns() }`).
   Lo agarró el arnés al primer intento, 2026-08-07.
+- **Un filtro cuya entrada vive en el `DockConfig` de OTRO dock se prueba entero en el tier
+  `unit`, sin ventanas ni compositor** (2026-08-14, *No ver apps ancladas en el monitor*). Dos
+  docks del mismo monitor son dos `DockConfig` cuyos dockId comparten el nombre de pantalla
+  (`VIRT-x` y `DockConfig::makeDockId("VIRT-x", 1)`, o sea `VIRT-x#1`), y con monitores
+  inventados ninguno arma ventana: se construyen los dos en la pila, se edita uno y se afirma
+  sobre el `DockModel` del otro. Ver `tests/unit/tst_appswidget.cpp`.
+  **Y el control positivo es lo que separa "el test pasa" de "el test prueba la feature"**: acá
+  el `QCOMPARE` podía dar verde sin que la señal cruzara de un config al otro. Anular a mano el
+  `emit` del relay, recompilar y confirmar que el caso **falla** cuesta un minuto — y si no
+  falla, el test estaba mirando otra cosa.
+- **Una señal que hay que hacerle llegar a otro `DockConfig` se RELAYA, no se conecta cruzada.**
+  El idiom del proyecto es que cada modelo escucha únicamente su propia config: quien escribe
+  recorre `s_instances`, filtra por lo que corresponda (acá `screenOfDockId()`) y **emite la
+  señal en el objeto ajeno** (`notifyMonitorAppsChanged()`, igual que `writeMenuConfigValue()` y
+  `notifyDarkModeChanged()`). Conectar un `DockModel` a la config de otro dock parece más corto
+  y te deja con conexiones colgando cuando ese dock se destruye.
 - **Un modelo cuya entrada es la config de OTRA instancia tiene que reconstruirse con la señal
   ajena, no solo con la propia** (2026-08-13, el filtro *No ver apps ancladas en otros
   Seleccionables*). Cada `DockModel` de un appsel escucha `widgetAppsChanged(token)` y descarta

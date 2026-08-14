@@ -246,6 +246,7 @@ Frameworks:
 
 | Widget | What it does | Backend |
 |---|---|---|
+| Selectable apps | The apps block as a repeatable section, with a launcher list of its own: one dock can hold **several**. Three per-instance filters — *Show pinned only*, *Skip apps pinned in other Selectable apps* (same dock) and *Skip apps pinned on this monitor* (any dock on that screen) — turn a widget into the catch-all block: everything that is open and no other one already draws | Compositor protocol |
 | Volume | Default sink: scroll, mute, level | `wpctl` / `pactl` (PipeWire) |
 | Brightness | Screen brightness | `brightnessctl` |
 | Battery | Charge, status and power profile | UPower + power-profiles-daemon |

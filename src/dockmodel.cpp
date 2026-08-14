@@ -69,6 +69,29 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
             if (m_config->widgetExcludeOthers(m_widgetToken))
                 rebuild();
         });
+        // The monitor-wide filter, kept on its own wires end to end so it can
+        // neither read nor disturb the dock-local one above. Its input is every
+        // appsel list of the screen, which is why it also listens to a signal
+        // relayed from the other docks' configs (monitorAppsChanged).
+        connect(m_config, &DockConfig::widgetExcludeMonitorChanged, this,
+                [this](const QString &token) {
+                    if (token == m_widgetToken)
+                        rebuild();
+                });
+        connect(m_config, &DockConfig::monitorAppsChanged, this, [this] {
+            if (m_config->widgetExcludeMonitor(m_widgetToken))
+                rebuild();
+        });
+        connect(m_config, &DockConfig::widgetAppsChanged, this, [this](const QString &token) {
+            if (m_updatingPinned)
+                return;
+            if (token != m_widgetToken && m_config->widgetExcludeMonitor(m_widgetToken))
+                rebuild();
+        });
+        connect(m_config, &DockConfig::widgetOrderChanged, this, [this] {
+            if (m_config->widgetExcludeMonitor(m_widgetToken))
+                rebuild();
+        });
     }
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
     // App names come from the translation layer (see Item::displayName), so a
@@ -210,15 +233,34 @@ bool DockModel::acceptsStrayWindow(const QString &appId) const
 {
     if (!acceptsStrayWindows())
         return false;
-    if (m_widgetToken.isEmpty() || !m_config->widgetExcludeOthers(m_widgetToken))
+    if (m_widgetToken.isEmpty())
         return true;
     // keyForAppId(), not keyForWindow(): ungrouped mode keys extra windows by
     // pointer, and what the other widgets list are applications.
-    return !m_config->appsPinnedElsewhere(m_widgetToken).contains(keyForAppId(appId, nullptr));
+    const QString key = keyForAppId(appId, nullptr);
+    // The monitor-wide filter reads its own cached set and never touches the
+    // dock-local one below, so turning either on leaves the other's behaviour
+    // exactly as it was.
+    if (m_config->widgetExcludeMonitor(m_widgetToken) && m_monitorPinned.contains(key))
+        return false;
+    if (!m_config->widgetExcludeOthers(m_widgetToken))
+        return true;
+    return !m_config->appsPinnedElsewhere(m_widgetToken).contains(key);
+}
+
+void DockModel::refreshMonitorPinned()
+{
+    if (m_widgetToken.isEmpty() || !m_config->widgetExcludeMonitor(m_widgetToken)) {
+        m_monitorPinned.clear();
+        return;
+    }
+    const QStringList ids = m_config->appsPinnedOnMonitor(m_widgetToken);
+    m_monitorPinned = QSet<QString>(ids.cbegin(), ids.cend());
 }
 
 void DockModel::rebuild()
 {
+    refreshMonitorPinned();
     beginResetModel();
     m_items.clear();
 

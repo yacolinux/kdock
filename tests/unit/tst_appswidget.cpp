@@ -285,6 +285,110 @@ private slots:
                  QStringList({QStringLiteral("compartida.desktop")}));
     }
 
+    void theMonitorFilterReachesTheOtherDocksOfTheScreen()
+    {
+        // Lo que distingue al filtro nuevo del viejo: la lista que lo alimenta
+        // vive en OTRO DockConfig. Dos docks del mismo monitor son dos dockIds
+        // que comparten el nombre de pantalla (slot 0 pelado, slot 1 con "#1").
+        const QString screen = freshDockId("mon");
+        DockConfig a(screen);
+        DockConfig b(DockConfig::makeDockId(screen, 1));
+        QCOMPARE(DockConfig::screenOfDockId(b.dockId()), screen);
+
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = a.insertAppsWidget(0);
+        const QString catchAll = b.insertAppsWidget(0);
+        b.setWidgetOnlyPinned(catchAll, false);
+        b.setWidgetExcludeMonitor(catchAll, true);
+
+        DockModel widget(&b, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("compartida"));
+        openWindow(&monitor, QStringLiteral("propia"));
+        QCOMPARE(widget.rowCount(), 2);
+
+        // El dock vecino se queda con esa app: acá tiene que desaparecer, y sin
+        // que nadie reconstruya el modelo a mano (la señal viaja entre configs).
+        a.setWidgetApps(fixed, {QStringLiteral("compartida")});
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(widget.index(0).data(DockModel::NameRole).toString(),
+                 QStringLiteral("propia"));
+        // Y al soltarla, vuelve.
+        a.setWidgetApps(fixed, {});
+        QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void theMonitorFilterIgnoresTheDocksOfOtherScreens()
+    {
+        // El acotamiento *es* la feature: un dock de otro monitor no entra en el
+        // barrido, por más que tenga la app anclada.
+        const QString here = freshDockId("here");
+        DockConfig mine(here);
+        DockConfig alien(freshDockId("there"));
+
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString alienToken = alien.insertAppsWidget(0);
+        alien.setWidgetApps(alienToken, {QStringLiteral("compartida")});
+        const QString catchAll = mine.insertAppsWidget(0);
+        mine.setWidgetOnlyPinned(catchAll, false);
+        mine.setWidgetExcludeMonitor(catchAll, true);
+
+        DockModel widget(&mine, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("compartida"));
+        QCOMPARE(widget.rowCount(), 1);
+        QVERIFY(!mine.appsPinnedOnMonitor(catchAll).contains(QStringLiteral("compartida")));
+    }
+
+    void theMonitorFilterIsASupersetOfTheDockLocalOne()
+    {
+        // Los dos widgets del mismo dock también cuentan, que es por qué el
+        // diálogo apaga "otros Seleccionables" al prender este. Y las dos
+        // banderas viven en claves distintas: prender una no toca la otra.
+        const QString id = freshDockId("superset");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = cfg.insertAppsWidget(0);
+        const QString catchAll = cfg.insertAppsWidget(1);
+        cfg.setWidgetApps(fixed, {QStringLiteral("compartida")});
+        cfg.setWidgetOnlyPinned(catchAll, false);
+        cfg.setWidgetExcludeMonitor(catchAll, true);
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("compartida"));
+        openWindow(&monitor, QStringLiteral("otra"));
+        QCOMPARE(widget.rowCount(), 1);
+        // Sin haber tocado el filtro viejo, que sigue apagado y guardado así.
+        QVERIFY(!cfg.widgetExcludeOthers(catchAll));
+        QVERIFY(cfg.widgetExcludeMonitor(catchAll));
+
+        // Y apagarlo devuelve el ícono, o sea que era él quien filtraba.
+        cfg.setWidgetExcludeMonitor(catchAll, false);
+        QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void theMonitorFilterNeverHidesTheWidgetsOwnLaunchers()
+    {
+        // Misma decisión que en el filtro local: un lanzador puesto a mano se
+        // dibuja siempre, esté donde esté anclado en el monitor.
+        const QString screen = freshDockId("monown");
+        DockConfig a(screen);
+        DockConfig b(DockConfig::makeDockId(screen, 1));
+        DesktopEntryIndex apps;
+        const QString fixed = a.insertAppsWidget(0);
+        const QString mine = b.insertAppsWidget(0);
+        a.setWidgetApps(fixed, {QStringLiteral("compartida.desktop")});
+        b.setWidgetApps(mine, {QStringLiteral("compartida.desktop")});
+        b.setWidgetOnlyPinned(mine, false);
+        b.setWidgetExcludeMonitor(mine, true);
+
+        DockModel widget(&b, &apps, nullptr, nullptr, mine);
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(b.appsPinnedOnMonitor(mine),
+                 QStringList({QStringLiteral("compartida.desktop")}));
+    }
+
     void aWidgetDrawsNoAppsBlockSeparators()
     {
         // Los dos separadores estáticos son del bloque de apps: sus índices no

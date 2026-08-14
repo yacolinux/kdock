@@ -897,6 +897,19 @@ public:
     // (the form DockModel keys its rows by). The dock's own `pinned` is not in
     // here: the filter is about the other widgets, as its name says.
     QStringList appsPinnedElsewhere(const QString &token) const;
+    // "Skip apps pinned anywhere on this monitor": the same filter one screen
+    // wider. Deliberately a separate flag, a separate key and a separate sweep
+    // from widgetExcludeOthers() above, so neither can change what the other
+    // does; the settings dialog is what keeps the two from being on at once
+    // (this one is the superset, so it turns the other off).
+    Q_INVOKABLE bool widgetExcludeMonitor(const QString &token) const;
+    Q_INVOKABLE void setWidgetExcludeMonitor(const QString &token, bool on);
+    // The launchers of every appsel widget of every *live* dock whose screen is
+    // this one's, minus this widget's own, lowercased. Live docks only: the set
+    // is read off the DockConfig objects the process already holds (one per
+    // enabled dock), so the sweep opens no files. The dock's own `pinned` is
+    // not in here, same as appsPinnedElsewhere().
+    QStringList appsPinnedOnMonitor(const QString &token) const;
     // Forget an instance's group. Called when its section is removed, so a
     // later widget that reuses the number does not inherit its launchers.
     void clearAppsWidget(const QString &token);
@@ -908,6 +921,12 @@ signals:
     void widgetAppsChanged(const QString &token);
     void widgetOnlyPinnedChanged(const QString &token);
     void widgetExcludeOthersChanged(const QString &token);
+    void widgetExcludeMonitorChanged(const QString &token);
+    // Some appsel list on this monitor changed — possibly on *another* dock.
+    // Carries no token because the change is not this config's: it is relayed
+    // here (see notifyMonitorAppsChanged) so a model only ever connects to its
+    // own config, the way every other model in the process does.
+    void monitorAppsChanged();
 
     void edgeChanged();
     void iconSizeChanged();
@@ -1045,6 +1064,12 @@ private:
     // exceptions and the two colors are process-global, so a change to any of
     // them has to repaint all the docks, not just the one being edited.
     static void notifyDarkModeChanged();
+
+    // Emit monitorAppsChanged() on every *other* live dock of this screen.
+    // Called wherever an appsel list (or the set of appsel widgets) changes, so
+    // a widget filtering monitor-wide rebuilds when a sibling dock is edited.
+    // Nothing of the dock-local excludeOthers filter goes through here.
+    void notifyMonitorAppsChanged() const;
 
     // Quick colors are shared by every dock: read them from the shared file
     // (seeding it from this dock's legacy per-screen key on first run) and
