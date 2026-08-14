@@ -30,8 +30,17 @@ public:
         SeparatorTransparentRole,
     };
 
+    // `widgetToken` empty: the dock's own apps block — launchers come from
+    // DockConfig::pinned() and the two static separators are drawn.
+    // `widgetToken` = "appsel<n>": the model of one selectable-apps widget. Its
+    // launchers are that widget's own list (DockConfig::widgetApps), it draws no
+    // static separators (those belong to the apps block), and with the widget's
+    // "only pinned" flag on it ignores every window that is not one of its
+    // launchers. Everything else — grouping, activation, the context menu — is
+    // the same code, which is the point: the widget *is* the apps block.
     DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
-              VirtualDesktops *desktops = nullptr, QObject *parent = nullptr);
+              VirtualDesktops *desktops = nullptr, const QString &widgetToken = {},
+              QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -72,6 +81,15 @@ private:
     };
 
     void rebuild();
+    // The launcher list this model persists to: the dock's `pinned` or the
+    // widget's own list. Every read and write of the pinned set goes through
+    // these two, so a widget never writes the dock's launchers and vice versa.
+    QStringList pinnedIds() const;
+    void savePinnedIds(const QStringList &ids);
+    // Whether a window that matches no launcher row gets one of its own. False
+    // only for a widget with "only pinned" on, which is then a fixed set of
+    // icons that still shows the window state of its own apps.
+    bool acceptsStrayWindows() const;
     void placeWindow(AbstractWindow *window);
     void removeWindow(AbstractWindow *window);
     void windowChanged(AbstractWindow *window);
@@ -81,6 +99,7 @@ private:
     QString keyForWindow(AbstractWindow *w) const;
 
     DockConfig *m_config;
+    QString m_widgetToken; // empty = the dock's apps block
     DesktopEntryIndex *m_apps;
     WindowMonitor *m_monitor;
     VirtualDesktops *m_desktops = nullptr;

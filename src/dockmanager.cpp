@@ -685,7 +685,10 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
 {
     DockConfig *cfg = configFor(dockId);
 
-    auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, m_shared.desktops, this);
+    // No widget token: this is the dock's own apps block. The models of the
+    // selectable-apps widgets are created by DockWindow::appsModelFor().
+    auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, m_shared.desktops,
+                                QString(), this);
     // Every dock gets its own view of the shared tray host: the model is a
     // filtered list over SystrayHost::items(), so several are harmless. Which
     // dock actually draws it is the per-dock "showSystray" flag, gated in QML —

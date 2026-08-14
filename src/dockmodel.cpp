@@ -25,21 +25,36 @@ QString DockModel::Item::iconName() const
 }
 
 DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
-                     VirtualDesktops *desktops, QObject *parent)
+                     VirtualDesktops *desktops, const QString &widgetToken, QObject *parent)
     : QAbstractListModel(parent)
     , m_config(config)
+    , m_widgetToken(widgetToken)
     , m_apps(apps)
     , m_monitor(monitor)
     , m_desktops(desktops)
 {
-    connect(m_config, &DockConfig::pinnedChanged, this, [this] {
-        if (!m_updatingPinned)
-            rebuild();
-    });
-    connect(m_config, &DockConfig::separator1Changed, this, &DockModel::rebuild);
-    connect(m_config, &DockConfig::separator2Changed, this, &DockModel::rebuild);
-    connect(m_config, &DockConfig::separator1TransparentChanged, this, &DockModel::rebuild);
-    connect(m_config, &DockConfig::separator2TransparentChanged, this, &DockModel::rebuild);
+    if (m_widgetToken.isEmpty()) {
+        connect(m_config, &DockConfig::pinnedChanged, this, [this] {
+            if (!m_updatingPinned)
+                rebuild();
+        });
+        connect(m_config, &DockConfig::separator1Changed, this, &DockModel::rebuild);
+        connect(m_config, &DockConfig::separator2Changed, this, &DockModel::rebuild);
+        connect(m_config, &DockConfig::separator1TransparentChanged, this, &DockModel::rebuild);
+        connect(m_config, &DockConfig::separator2TransparentChanged, this, &DockModel::rebuild);
+    } else {
+        // Both signals carry a token: several appsel models share this config
+        // and each one has to ignore the others' edits.
+        connect(m_config, &DockConfig::widgetAppsChanged, this, [this](const QString &token) {
+            if (token == m_widgetToken && !m_updatingPinned)
+                rebuild();
+        });
+        connect(m_config, &DockConfig::widgetOnlyPinnedChanged, this,
+                [this](const QString &token) {
+                    if (token == m_widgetToken)
+                        rebuild();
+                });
+    }
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
     // App names come from the translation layer (see Item::displayName), so a
     // language change is a rename of every row at once.
@@ -155,12 +170,33 @@ QString DockModel::keyForWindow(AbstractWindow *w) const
     return QStringLiteral("win:") + QString::number(reinterpret_cast<quintptr>(w));
 }
 
+QStringList DockModel::pinnedIds() const
+{
+    return m_widgetToken.isEmpty() ? m_config->pinned()
+                                   : m_config->widgetApps(m_widgetToken);
+}
+
+void DockModel::savePinnedIds(const QStringList &ids)
+{
+    m_updatingPinned = true;
+    if (m_widgetToken.isEmpty())
+        m_config->setPinned(ids);
+    else
+        m_config->setWidgetApps(m_widgetToken, ids);
+    m_updatingPinned = false;
+}
+
+bool DockModel::acceptsStrayWindows() const
+{
+    return m_widgetToken.isEmpty() || !m_config->widgetOnlyPinned(m_widgetToken);
+}
+
 void DockModel::rebuild()
 {
     beginResetModel();
     m_items.clear();
 
-    for (const QString &id : m_config->pinned()) {
+    for (const QString &id : pinnedIds()) {
         Item item;
         item.key = id.toLower();
         item.entry = m_apps->byId(id);
@@ -170,6 +206,7 @@ void DockModel::rebuild()
     }
 
     if (m_monitor) {
+        const bool strays = acceptsStrayWindows();
         for (AbstractWindow *w : std::as_const(m_monitor->windows)) {
             if (w->skipTaskbar)
                 continue;
@@ -177,6 +214,8 @@ void DockModel::rebuild()
             const QString key = keyForWindow(w);
             int row = rowOfKey(key);
             if (row < 0) {
+                if (!strays)
+                    continue; // "only pinned": this window has no icon here
                 Item item;
                 item.key = key;
                 item.entry = m_apps->forAppId(w->appId);
@@ -188,8 +227,13 @@ void DockModel::rebuild()
         }
     }
 
-    // Insert separators (descending order so indices don't shift)
-    QList<int> sepPos = {m_config->separator1(), m_config->separator2()};
+    // Insert separators (descending order so indices don't shift). They belong
+    // to the dock's apps block: an appsel widget places its own icons and would
+    // otherwise draw the same two lines again, at indices that mean nothing in
+    // its list.
+    QList<int> sepPos = m_widgetToken.isEmpty()
+        ? QList<int>{m_config->separator1(), m_config->separator2()}
+        : QList<int>{};
     std::sort(sepPos.begin(), sepPos.end(), std::greater<int>());
     for (int pos : sepPos) {
         if (pos < 0 || pos > m_items.size())
@@ -215,6 +259,8 @@ void DockModel::placeWindow(AbstractWindow *window)
         m_items[row].windows.append(window);
         emit dataChanged(index(row), index(row));
     } else {
+        if (!acceptsStrayWindows())
+            return;
         Item item;
         item.key = key;
         item.entry = m_apps->forAppId(window->appId);
@@ -366,7 +412,7 @@ void DockModel::togglePinned(int row)
     if (row < 0 || row >= m_items.size() || m_items.at(row).isSeparator)
         return;
     Item &item = m_items[row];
-    QStringList pinned = m_config->pinned();
+    QStringList pinned = pinnedIds();
 
     if (item.pinned) {
         pinned.removeAll(item.entry.isValid() ? item.entry.id : item.fallbackAppId);
@@ -398,9 +444,7 @@ void DockModel::togglePinned(int row)
         emit dataChanged(index(row), index(row));
     }
 
-    m_updatingPinned = true;
-    m_config->setPinned(pinned);
-    m_updatingPinned = false;
+    savePinnedIds(pinned);
 }
 
 QVariantList DockModel::windowList(int row) const
@@ -444,9 +488,7 @@ void DockModel::moveItem(int from, int to)
             if (item.pinned && !item.isSeparator)
                 pinned.append(item.entry.isValid() ? item.entry.id : item.fallbackAppId);
         }
-        m_updatingPinned = true;
-        m_config->setPinned(pinned);
-        m_updatingPinned = false;
+        savePinnedIds(pinned);
     }
 }
 

@@ -116,6 +116,10 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     connect(m_config, &DockConfig::compactChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::alignmentChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::dockLengthChanged, this, &DockWindow::applyLayerProperties);
+    // A selectable-apps widget removed from the Layout tab would otherwise leave
+    // its model behind, still connected and still rebuilding itself.
+    connect(m_config, &DockConfig::widgetOrderChanged, this,
+            &DockWindow::dropUnusedAppsModels);
 
     // The wl_output is fixed at layer-surface creation, so moving to
     // another screen recreates the platform window. Runtime changes are
@@ -662,6 +666,35 @@ void DockWindow::openNetworkSettings()
 {
     openSettings();
     m_dialog->showNetworkTab();
+}
+
+void DockWindow::dropUnusedAppsModels()
+{
+    const QStringList alive = m_config->appsWidgetTokens();
+    for (auto it = m_appsModels.begin(); it != m_appsModels.end();) {
+        if (alive.contains(it.key())) {
+            ++it;
+            continue;
+        }
+        // Not just memory: the model is connected to the window monitor and
+        // rebuilds itself on every config change, for a widget nobody draws.
+        delete it.value();
+        it = m_appsModels.erase(it);
+    }
+}
+
+QObject *DockWindow::appsModelFor(const QString &token)
+{
+    if (token.isEmpty() || !DockConfig::isAppsWidgetToken(token))
+        return m_model;
+    DockModel *&model = m_appsModels[token];
+    if (!model) {
+        model = new DockModel(m_config, m_apps, m_monitor, m_desktops, token, this);
+        // Same deferred re-scan the dock's own model gets: the window list of
+        // the compositor is not complete when the surface is built.
+        QTimer::singleShot(0, model, &DockModel::syncWindows);
+    }
+    return model;
 }
 
 void DockWindow::quit()

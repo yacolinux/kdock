@@ -1377,6 +1377,29 @@ Lo que esos dos no pueden probar, y cómo se probó:
   entero no carga** y el dock sale de 160x160 con la ventana vacía. Si necesitás enganchar algo
   más al arranque, sumalo al handler que ya existe (`{ scheduleLabelMeasure(); scheduleGapRuns() }`).
   Lo agarró el arnés al primer intento, 2026-08-07.
+- **Un widget del que puede haber VARIOS por dock no se parece a los otros seis-archivos**
+  (2026-08-13, *Apps Seleccionables*). Sus tokens se inventan en tiempo de ejecución
+  (`appsel1`, `appsel2`…), así que no están en `knownWidgetTokens()` y `reconcileWidgetOrder()`
+  los tira **sin imprimir nada** a menos que `isRepeatableToken()` los acepte; su configuración
+  no puede ser un par de `Q_PROPERTY` porque hay una por instancia (va en un grupo propio del
+  INI, `[appsel1] apps=…`); y su casillero no alcanza — se agrega y se quita desde la solapa
+  Diseño, como un separador. Si copiás el patrón, mirá los cuatro lugares que no son obvios:
+  `isRepeatableToken()`, el `sectionVisible`/`componentFor`/`isBlock` de `Dock.qml` (que hacen
+  `switch` sobre el token y necesitan una rama por prefijo), `defaultWidgetLabel()` (el token
+  pelado va en la tabla **solo** para que exista la clave del catálogo, y el número se pega
+  aparte) y el panel de la solapa Widgets, que hay que reconstruir a mano al agregar o quitar
+  uno porque cambiar de solapa no reconstruye el diálogo.
+- **Un `Component` declarado en la raíz de `Dock.qml` no ve los ids del delegate que lo carga**
+  (es el mismo scope por archivo de siempre): para parametrizarlo —qué modelo dibuja, en el caso
+  de las Apps Seleccionables— se le empuja una property con un `Binding` desde el delegate de la
+  sección, al lado del de `hovered`. Leer `sec.token` desde adentro del componente compila y
+  queda `undefined`.
+- **`QSettings` comparte un caché por ruta y lo revalida por (mtime, tamaño)**, así que un
+  archivo reemplazado dentro del mismo segundo por otro **del mismo tamaño** se lee con el
+  contenido viejo — sin error. En la app no muerde (el que aplica un preset es un proceso
+  nuevo), pero un test que escribe, reemplaza y relee por `QSettings` falla una vez cada tantas
+  corridas y parece un bug del import. En un test, leé el archivo (`QFile`) y no `QSettings`:
+  `tests/unit/tst_configarchive.cpp` lo hace y lo explica.
 - **Una sección que se repite (`spring`, `sep`, `gap`) NO va en `knownWidgetTokens()`**: esa lista
   se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
   `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te

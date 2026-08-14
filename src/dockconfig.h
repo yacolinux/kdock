@@ -247,11 +247,20 @@ public:
     // separator, which expands; the static one, a separatorSize px gap; and the
     // transparent one, which expands *and* cuts the panel background so the
     // desktop shows through (see gapRects()).
+    // The "selectable apps" widgets (appsel1, appsel2, …) are in here too: they
+    // are the only widget a dock can hold more than one of, so they are the
+    // only ones reconcileWidgetOrder() must not deduplicate away and the only
+    // ones removeSectionAt() may delete. Their number is what tells two
+    // instances apart — it keys their launcher list, their "only pinned" flag
+    // and their rename.
     static bool isRepeatableToken(const QString &token)
     {
         return token == QLatin1String("spring") || token == QLatin1String("sep")
-               || token == QLatin1String("gap");
+               || token == QLatin1String("gap") || isAppsWidgetToken(token);
     }
+    // "appsel<n>", the token of one selectable-apps widget. The bare "appsel"
+    // is not one: it is the catalog key its label is translated through.
+    static bool isAppsWidgetToken(const QString &token);
     // A separator that expands to fill the leftover room. The transparent one
     // does it too, which is why several places have to test for both.
     static bool isSpringToken(const QString &token)
@@ -532,6 +541,12 @@ public:
     // Cross-axis extent (px) of one app cell, label included; == iconSize in
     // IconOnly mode.
     int appCellThickness() const;
+    // Whether anything on this dock draws app cells: the apps block, or any
+    // selectable-apps widget. It is what gates the app part of dockThickness()
+    // and the app-name measurement in Dock.qml (root.labelVisible) — both used
+    // to ask showAppIcons alone, which left an appsel widget drawing cells the
+    // dock had reserved no room for.
+    Q_INVOKABLE bool drawsAppCells() const;
     // Geometry shared by both label settings; see the .cpp.
     int cellThicknessFor(int mode, int iconPx) const;
     // Same for a widget section. Its icon is smaller than an app's, but blocks
@@ -814,7 +829,34 @@ public:
     Q_INVOKABLE void insertSeparator(int at);
     Q_INVOKABLE void removeSectionAt(int at);
 
+    // ---- Selectable-apps widgets ------------------------------------------
+    // One appsel<n> widget is the apps block as a section: same delegate, same
+    // right-click menu, but its launchers are its own list instead of the
+    // dock's `pinned`, and it can be dropped into the order more than once.
+    // Everything about one instance lives in its own INI group ([appsel1]…).
+    //
+    // Adds an appsel widget at `at` with the lowest number no other instance of
+    // this dock is using, and returns its token.
+    Q_INVOKABLE QString insertAppsWidget(int at);
+    // The appsel tokens of this dock, in widgetOrder order.
+    Q_INVOKABLE QStringList appsWidgetTokens() const;
+    // The .desktop ids this widget draws as launchers (its own "pinned").
+    Q_INVOKABLE QStringList widgetApps(const QString &token) const;
+    Q_INVOKABLE void setWidgetApps(const QString &token, const QStringList &ids);
+    // "Only pinned": drop the running windows that are not one of the
+    // launchers above, so the widget is a fixed set of icons.
+    Q_INVOKABLE bool widgetOnlyPinned(const QString &token) const;
+    Q_INVOKABLE void setWidgetOnlyPinned(const QString &token, bool on);
+    // Forget an instance's group. Called when its section is removed, so a
+    // later widget that reuses the number does not inherit its launchers.
+    void clearAppsWidget(const QString &token);
+
 signals:
+    // Both carry the token: every appsel model is connected to them and each
+    // one only cares about its own.
+    void widgetAppsChanged(const QString &token);
+    void widgetOnlyPinnedChanged(const QString &token);
+
     void edgeChanged();
     void iconSizeChanged();
     void widgetIconScaleChanged();

@@ -1904,7 +1904,137 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(m_config, &DockConfig::pinnedChanged, this, &SettingsDialog::reloadPinnedList);
     reloadPinnedList();
 
+    // One panel per selectable-apps widget. Rebuilt in place, because the set of
+    // widgets is edited from the *Layout* tab and changing tabs does not
+    // reconstruct the dialog.
+    m_appsWidgetsBox = new QGroupBox(tr("Selectable apps"), tab);
+    m_appsWidgetsLayout = new QVBoxLayout(m_appsWidgetsBox);
+    layout->addWidget(m_appsWidgetsBox);
+    rebuildAppsWidgetsGroup();
+
     return tab;
+}
+
+void SettingsDialog::rebuildAppsWidgetsGroup()
+{
+    if (!m_appsWidgetsLayout)
+        return;
+    while (QLayoutItem *item = m_appsWidgetsLayout->takeAt(0)) {
+        delete item->widget();
+        delete item;
+    }
+
+    const QStringList tokens = m_config->appsWidgetTokens();
+    m_appsWidgetsBox->setVisible(true);
+    if (tokens.isEmpty()) {
+        auto *hint = new QLabel(
+            tr("No selectable-apps widget on this dock. Add one from the Layout tab "
+               "(\"Add selectable apps\"): it is a block of app icons with its own "
+               "list, and a dock can hold several."),
+            m_appsWidgetsBox);
+        hint->setWordWrap(true);
+        m_appsWidgetsLayout->addWidget(hint);
+        return;
+    }
+
+    for (const QString &token : tokens)
+        m_appsWidgetsLayout->addWidget(createAppsWidgetPanel(token));
+}
+
+QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
+{
+    auto *box = new QGroupBox(m_config->widgetName(token), m_appsWidgetsBox);
+    auto *layout = new QVBoxLayout(box);
+
+    auto *onlyPinned = new QCheckBox(tr("Show pinned only"), box);
+    onlyPinned->setChecked(m_config->widgetOnlyPinned(token));
+    onlyPinned->setToolTip(tr("On: the widget draws exactly the apps below. Off: it also "
+                              "draws every open window, like \"Show applications\"."));
+    connect(onlyPinned, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setWidgetOnlyPinned(token, on); });
+    layout->addWidget(onlyPinned);
+
+    auto *list = new QListWidget(box);
+    list->setMaximumHeight(140);
+    layout->addWidget(list);
+
+    // The list is rebuilt from the config after every edit, so the buttons never
+    // work from what the widget happens to show.
+    const auto reload = [this, token, list] {
+        const int row = list->currentRow();
+        list->clear();
+        for (const QString &id : m_config->widgetApps(token)) {
+            const DesktopEntry entry = m_apps->byId(id);
+            auto *item = new QListWidgetItem(
+                QIcon::fromTheme(entry.isValid() ? entry.icon
+                                                 : QStringLiteral("application-x-executable")),
+                entry.isValid() ? entry.name : id, list);
+            item->setData(Qt::UserRole, id);
+        }
+        list->setCurrentRow(qMin(row, list->count() - 1));
+    };
+    reload();
+    // Pinning from the dock's own right-click writes the same list: without
+    // this the panel goes stale the moment the user uses the widget.
+    connect(m_config, &DockConfig::widgetAppsChanged, list,
+            [token, reload](const QString &changed) {
+                if (changed == token)
+                    reload();
+            });
+
+    auto *buttons = new QHBoxLayout;
+    auto *add = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), tr("Add..."), box);
+    auto *remove = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")),
+                                   tr("Remove"), box);
+    auto *up = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), box);
+    auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), box);
+    buttons->addWidget(add);
+    buttons->addWidget(remove);
+    buttons->addStretch();
+    buttons->addWidget(up);
+    buttons->addWidget(down);
+    layout->addLayout(buttons);
+
+    connect(add, &QPushButton::clicked, this, [this, token] {
+        const QList<DesktopEntry> entries = m_apps->all();
+        QStringList names;
+        for (const DesktopEntry &e : entries)
+            names.append(e.name);
+        bool ok = false;
+        const QString chosen = QInputDialog::getItem(this, tr("Add app"), tr("Application:"),
+                                                     names, 0, false, &ok);
+        if (!ok)
+            return;
+        const int idx = names.indexOf(chosen);
+        if (idx < 0)
+            return;
+        QStringList apps = m_config->widgetApps(token);
+        if (!apps.contains(entries[idx].id)) {
+            apps.append(entries[idx].id);
+            m_config->setWidgetApps(token, apps);
+        }
+    });
+    connect(remove, &QPushButton::clicked, this, [this, token, list] {
+        QListWidgetItem *item = list->currentItem();
+        if (!item)
+            return;
+        QStringList apps = m_config->widgetApps(token);
+        apps.removeAll(item->data(Qt::UserRole).toString());
+        m_config->setWidgetApps(token, apps);
+    });
+    const auto move = [this, token, list](int delta) {
+        const int row = list->currentRow();
+        QStringList apps = m_config->widgetApps(token);
+        if (row < 0 || row + delta < 0 || row + delta >= apps.size())
+            return;
+        apps.move(row, row + delta);
+        m_config->setWidgetApps(token, apps);
+        list->setCurrentRow(row + delta);
+    };
+    connect(up, &QPushButton::clicked, this, [move] { move(-1); });
+    connect(down, &QPushButton::clicked, this, [move] { move(1); });
+
+    return box;
 }
 
 QWidget *SettingsDialog::createMenuTab()
@@ -3595,9 +3725,16 @@ QWidget *SettingsDialog::createLayoutTab()
                           "not painted over it: the desktop shows through and the dock reads "
                           "as two. It only has room to open in panel mode or with a fixed "
                           "dock length."));
+    auto *addApps = new QPushButton(QIcon::fromTheme(QStringLiteral("applications-all")),
+                                    tr("Add selectable apps"), tab);
+    addApps->setToolTip(tr("A block of app icons like the one \"Show applications\" draws, "
+                           "but with its own list of apps: right-click an icon → \"Pin\" "
+                           "adds it to this widget only. A dock can hold several, each with "
+                           "its own apps (see the Widgets tab)."));
     addButtons->addWidget(addSep);
     addButtons->addWidget(addSpring);
     addButtons->addWidget(addGap);
+    addButtons->addWidget(addApps);
     layout->addLayout(addButtons);
 
     auto *actionButtons = new QHBoxLayout;
@@ -3631,9 +3768,15 @@ QWidget *SettingsDialog::createLayoutTab()
     // renaming is the other way round (a separator draws no name).
     auto updateRemove = [this, remove, rename] {
         QListWidgetItem *it = m_layoutList->currentItem();
-        const bool sep = it && DockConfig::isRepeatableToken(it->data(Qt::UserRole).toString());
+        const QString token = it ? it->data(Qt::UserRole).toString() : QString();
+        const bool appsWidget = DockConfig::isAppsWidgetToken(token);
+        const bool sep = it && DockConfig::isRepeatableToken(token);
+        // A selectable-apps widget is on both sides of this: it is removed like
+        // a separator (nothing else brings it back) and renamed like a widget
+        // (its name is drawn, and with several of them the default numbers are
+        // all the user has to tell them apart).
         remove->setEnabled(sep);
-        rename->setEnabled(it && !sep);
+        rename->setEnabled(it && (!sep || appsWidget));
     };
     connect(m_layoutList, &QListWidget::currentRowChanged, this, [updateRemove](int) { updateRemove(); });
 
@@ -3665,6 +3808,16 @@ QWidget *SettingsDialog::createLayoutTab()
         m_config->insertGap(at);
         m_layoutList->setCurrentRow(row + 1);
     });
+    connect(addApps, &QPushButton::clicked, this, [this, orderIndexOfRow] {
+        const int row = m_layoutList->currentRow();
+        const int oi = orderIndexOfRow(row);
+        const int at = oi >= 0 ? oi + 1 : m_config->widgetOrder().size();
+        m_config->insertAppsWidget(at);
+        m_layoutList->setCurrentRow(row + 1);
+        // The new widget has no apps yet and its own panel is in the Widgets
+        // tab, so that tab has to grow a group for it right now.
+        rebuildAppsWidgetsGroup();
+    });
     connect(addSep, &QPushButton::clicked, this, [this, orderIndexOfRow] {
         const int row = m_layoutList->currentRow();
         const int oi = orderIndexOfRow(row);
@@ -3674,8 +3827,13 @@ QWidget *SettingsDialog::createLayoutTab()
     });
     connect(remove, &QPushButton::clicked, this, [this, orderIndexOfRow] {
         const int oi = orderIndexOfRow(m_layoutList->currentRow());
-        if (oi >= 0)
-            m_config->removeSectionAt(oi);
+        if (oi < 0)
+            return;
+        const bool wasAppsWidget =
+            DockConfig::isAppsWidgetToken(m_config->widgetOrder().value(oi));
+        m_config->removeSectionAt(oi);
+        if (wasAppsWidget)
+            rebuildAppsWidgetsGroup();
     });
     // Up/Down move the item to the neighbouring *visible* row's index, so a
     // hidden token in between is jumped over. QList::move() keeps the relative
@@ -3943,7 +4101,11 @@ void SettingsDialog::reloadLayoutList()
             continue;
         const bool spring = token == QLatin1String("spring");
         const bool gap = token == QLatin1String("gap");
-        const bool separator = DockConfig::isRepeatableToken(token);
+        // A selectable-apps widget repeats like a separator (that is what lets
+        // a dock hold several), but it reads as a widget: its own name, its own
+        // icon, and no number appended — its label already carries one.
+        const bool appsWidget = DockConfig::isAppsWidgetToken(token);
+        const bool separator = DockConfig::isRepeatableToken(token) && !appsWidget;
         // Separators are numbered (each kind on its own count): they are
         // otherwise indistinguishable, so there is no way to tell that Up/Down
         // moved the one that was selected. Renamed sections keep the default
@@ -3962,10 +4124,11 @@ void SettingsDialog::reloadLayoutList()
         if (token == QLatin1String("apps") && !m_config->showAppIcons())
             shown += tr("  (oculto)");
         auto *item = new QListWidgetItem(
-            QIcon::fromTheme(!separator ? QStringLiteral("view-list-symbolic")
-                             : spring   ? QStringLiteral("distribute-horizontal-margin")
-                             : gap      ? QStringLiteral("edit-clear-all")
-                                        : QStringLiteral("distribute-vertical-margin")),
+            QIcon::fromTheme(appsWidget  ? QStringLiteral("applications-all")
+                             : !separator ? QStringLiteral("view-list-symbolic")
+                             : spring    ? QStringLiteral("distribute-horizontal-margin")
+                             : gap       ? QStringLiteral("edit-clear-all")
+                                         : QStringLiteral("distribute-vertical-margin")),
             shown, m_layoutList);
         item->setData(Qt::UserRole, token);
         item->setData(Qt::UserRole + 1, i); // index in widgetOrder, springs included

@@ -5,6 +5,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -929,6 +930,8 @@ void DockConfig::setWidgetOrder(const QStringList &order)
     reconcileWidgetOrder();
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
     emit widgetOrderChanged();
+    // An appsel widget may have come or gone with the new order (drawsAppCells).
+    emit dockThicknessChanged();
 }
 
 void DockConfig::moveSection(int from, int to)
@@ -965,15 +968,110 @@ void DockConfig::insertSeparator(int at)
     emit widgetOrderChanged();
 }
 
+bool DockConfig::isAppsWidgetToken(const QString &token)
+{
+    static const QRegularExpression re(QStringLiteral("^appsel[1-9][0-9]*$"));
+    return re.match(token).hasMatch();
+}
+
+QStringList DockConfig::appsWidgetTokens() const
+{
+    QStringList tokens;
+    for (const QString &token : m_widgetOrder)
+        if (isAppsWidgetToken(token) && !tokens.contains(token))
+            tokens.append(token);
+    return tokens;
+}
+
+QString DockConfig::insertAppsWidget(int at)
+{
+    // Lowest free number, so removing the middle one of three and adding
+    // another does not leave a gap in the names the user reads.
+    const QStringList taken = appsWidgetTokens();
+    int n = 1;
+    while (taken.contains(QStringLiteral("appsel") + QString::number(n)))
+        ++n;
+    const QString token = QStringLiteral("appsel") + QString::number(n);
+
+    at = qBound(0, at, m_widgetOrder.size());
+    m_widgetOrder.insert(at, token);
+    m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
+    emit widgetOrderChanged();
+    // First app cells on a dock whose apps block is off: the cross axis grows.
+    emit dockThicknessChanged();
+    return token;
+}
+
+QStringList DockConfig::widgetApps(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return {};
+    return m_settings.value(token + QStringLiteral("/apps")).toStringList();
+}
+
+void DockConfig::setWidgetApps(const QString &token, const QStringList &ids)
+{
+    if (!isAppsWidgetToken(token) || widgetApps(token) == ids)
+        return;
+    m_settings.setValue(token + QStringLiteral("/apps"), ids);
+    // Flushed on the spot, like clock2Command: this list is edited by pinning
+    // from the dock's own right-click, and a restart (or a logout, which never
+    // unwinds — see the SIGTERM handler in main.cpp) right after would read the
+    // list from before the pin.
+    m_settings.sync();
+    emit widgetAppsChanged(token);
+    // The block gains or loses its first icon: with no other app cells on the
+    // dock that changes the cross-axis size, and with it the exclusive zone.
+    emit dockThicknessChanged();
+}
+
+bool DockConfig::widgetOnlyPinned(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return false;
+    // On by default: a widget that starts out showing every open window is
+    // indistinguishable from the apps block, which is not what it is for.
+    return m_settings.value(token + QStringLiteral("/onlyPinned"), true).toBool();
+}
+
+void DockConfig::setWidgetOnlyPinned(const QString &token, bool on)
+{
+    if (!isAppsWidgetToken(token) || widgetOnlyPinned(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/onlyPinned"), on);
+    emit widgetOnlyPinnedChanged(token);
+}
+
+void DockConfig::clearAppsWidget(const QString &token)
+{
+    if (!isAppsWidgetToken(token))
+        return;
+    m_settings.remove(token);
+    m_widgetNames.remove(token);
+    m_settings.remove(QStringLiteral("widgetNames/") + token);
+    ++m_widgetNamesRevision;
+    emit widgetAppsChanged(token);
+    emit widgetNamesChanged();
+}
+
 void DockConfig::removeSectionAt(int at)
 {
     if (at < 0 || at >= m_widgetOrder.size())
         return;
-    if (!isRepeatableToken(m_widgetOrder.at(at)))
+    const QString token = m_widgetOrder.at(at);
+    if (!isRepeatableToken(token))
         return; // only separators are removable; widgets use their show* flags
     m_widgetOrder.removeAt(at);
     m_settings.setValue(QStringLiteral("widgetOrder"), m_widgetOrder);
+    // Drop the instance's own group *after* the order no longer mentions it, so
+    // nothing rebuilds a model for a widget that is on its way out. Its number
+    // goes back into circulation (insertAppsWidget), and inheriting the removed
+    // widget's launchers would look like the new one came with junk in it.
+    if (isAppsWidgetToken(token) && !m_widgetOrder.contains(token))
+        clearAppsWidget(token);
     emit widgetOrderChanged();
+    if (isAppsWidgetToken(token))
+        emit dockThicknessChanged();
 }
 
 void DockConfig::setAlignment(int alignment)
@@ -1805,6 +1903,16 @@ int DockConfig::appCellThickness() const
     return cellThicknessFor(m_iconLabelMode, m_iconSize);
 }
 
+bool DockConfig::drawsAppCells() const
+{
+    if (m_showAppIcons)
+        return true;
+    for (const QString &token : m_widgetOrder)
+        if (isAppsWidgetToken(token))
+            return true;
+    return false;
+}
+
 int DockConfig::widgetCellThickness() const
 {
     // Widget icons are scaled down, but blocks (systray, relanzadores…) draw
@@ -1817,8 +1925,10 @@ int DockConfig::dockThickness() const
     // The icon size stays the floor even in label-only mode: the widget
     // sections (volume, clock, systray…) are still drawn at that size. With the
     // apps block off, its cells (and the app names measured for them) drop out
-    // of the formula, so a widgets-only dock is as thin as its widgets.
-    const int appThickness = m_showAppIcons ? appCellThickness() : 0;
+    // of the formula, so a widgets-only dock is as thin as its widgets — unless
+    // a selectable-apps widget is drawing app cells of its own, which are the
+    // same size and would be cut off by the exclusive zone otherwise.
+    const int appThickness = drawsAppCells() ? appCellThickness() : 0;
     return qMax(m_iconSize, qMax(appThickness, widgetCellThickness()))
            + (m_compact ? 12 : 20);
 }
@@ -1951,7 +2061,16 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("spring"),        QStringLiteral("Dynamic separator")},
         {QStringLiteral("sep"),           QStringLiteral("Static separator")},
         {QStringLiteral("gap"),           QStringLiteral("Transparent separator")},
+        // Base name of the selectable-apps widgets: the instances are
+        // "appsel1", "appsel2"… and each is labelled with this plus its number
+        // (see below). Keeping the bare token in the table is also what puts it
+        // in the translation catalog, which is keyed by token.
+        {QStringLiteral("appsel"),        QStringLiteral("Apps Seleccionables")},
     };
+    if (isAppsWidgetToken(token)) {
+        return labels.value(QStringLiteral("appsel")) + QLatin1Char(' ')
+               + token.mid(6); // "appsel3" -> "… 3"
+    }
     return labels.value(token, token);
 }
 
@@ -1968,6 +2087,14 @@ QString DockConfig::widgetName(const QString &token) const
 QString DockConfig::translatedWidgetLabel(const QString &token)
 {
     if (Translations *layer = Translations::instance()) {
+        // An appsel instance has no catalog entry of its own (the tokens are
+        // created at runtime): it is translated through the base token and
+        // keeps its number.
+        if (isAppsWidgetToken(token)) {
+            const QString base = layer->widget(QStringLiteral("appsel"));
+            if (!base.isEmpty())
+                return base + QLatin1Char(' ') + token.mid(6);
+        }
         const QString translated = layer->widget(token);
         if (!translated.isEmpty())
             return translated;

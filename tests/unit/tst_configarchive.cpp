@@ -28,10 +28,22 @@ private:
         s.sync();
     }
 
+    // Leído del archivo, no con QSettings: QSettings comparte un caché por ruta
+    // y lo revalida por (mtime, tamaño), así que un archivo reemplazado dentro
+    // del mismo segundo por otro **del mismo tamaño** —justo lo que hace
+    // importFrom() acá— devuelve el contenido viejo. En la app no pasa: el
+    // preset lo aplica un proceso nuevo, que no tiene nada cacheado. En el test
+    // era un fallo intermitente sobre un import que había funcionado bien.
     static QString markerOf(const QString &name)
     {
-        QSettings s(ConfigArchive::configDir() + QLatin1Char('/') + name, QSettings::IniFormat);
-        return s.value(QStringLiteral("marker")).toString();
+        QFile f(ConfigArchive::configDir() + QLatin1Char('/') + name);
+        if (!f.open(QIODevice::ReadOnly))
+            return {};
+        for (const QByteArray &line : f.readAll().split('\n')) {
+            if (line.startsWith("marker="))
+                return QString::fromUtf8(line.mid(7)).trimmed();
+        }
+        return {};
     }
 
     // Deja el directorio de config con un juego conocido de archivos.

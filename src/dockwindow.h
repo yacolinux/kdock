@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <QHash>
 #include <QQuickView>
 #include <QRect>
 #include <QVariantList>
@@ -126,6 +127,14 @@ public:
     Q_INVOKABLE void openVideoSettings();
     // The ColorAuto tab (the colorauto widget's right-click).
     Q_INVOKABLE void openColorAutoSettings();
+    // The model one selectable-apps widget (token "appsel<n>") draws. Created
+    // on first ask and cached: the apps component is loaded and unloaded as
+    // sections move, and a model rebuilt on every load would lose nothing but
+    // cost a full window scan each time. Returns the dock's own model for an
+    // empty token, so the apps block and the widgets go through one path in
+    // QML.
+    Q_INVOKABLE QObject *appsModelFor(const QString &token);
+
     Q_INVOKABLE void quit();
     // Relaunch kdock with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restart();
@@ -161,10 +170,15 @@ private:
     // false so Dock.qml's binding is inert).
     void updateWindowsOverlap();
     void watchWindow(AbstractWindow *window);
+    // Destroy the models of the selectable-apps widgets that are no longer in
+    // widgetOrder (the user removed the section from the Layout tab).
+    void dropUnusedAppsModels();
 
     DockConfig *m_config;
     Theme *m_theme;
     DockModel *m_model;
+    // token -> model of that selectable-apps widget (see appsModelFor).
+    QHash<QString, DockModel *> m_appsModels;
     DesktopEntryIndex *m_apps;
     SystrayHost *m_systrayHost;
     RelanzadoresManager *m_relanzadores;

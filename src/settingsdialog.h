@@ -83,6 +83,13 @@ private:
     // Every font size option of the dock, copied (synced) from the Widgets tab.
     QWidget *createFuentesTab();
     QWidget *createWidgetsTab();
+    // The Widgets tab's panel for the selectable-apps widgets: one group per
+    // appsel instance (its "only pinned" box and its own app list). Rebuilt
+    // whenever the Layout tab adds or removes one — switching tabs does not
+    // reconstruct the dialog, so the panel would otherwise show a widget that
+    // is gone (or miss one that just appeared).
+    void rebuildAppsWidgetsGroup();
+    QWidget *createAppsWidgetPanel(const QString &token);
     QWidget *createMenuTab();
     QWidget *createTileMenuGroup(QWidget *parent);
     // Same shape, in the Widgets tab: kdock only owns the widget, everything
@@ -294,6 +301,8 @@ private:
     QPushButton *m_presetDeleteBtn = nullptr;
     QPushButton *m_presetApplyBtn = nullptr;
     QCheckBox *m_presetNoPrompt = nullptr;
+    QGroupBox *m_appsWidgetsBox = nullptr;
+    QVBoxLayout *m_appsWidgetsLayout = nullptr;
     QListWidget *m_scriptRunnersList = nullptr;
     QLineEdit *m_scriptRunnerTitle = nullptr;
     QPushButton *m_scriptRunnerIconButton = nullptr;

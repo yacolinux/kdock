@@ -19,9 +19,18 @@ Item {
     // fitLabelsDropped is the auto-shrink's last resort (see below): the names
     // go away, config is left alone, and the mode comes back on its own.
     readonly property int labelMode: fitLabelsDropped ? 0 : config.iconLabelMode
-    // Also false with the apps block off: no app name is drawn, so none of them
-    // must reach measureLabels() and reserve room in the dock's thickness.
-    readonly property bool labelVisible: labelMode !== 0 && config.showAppIcons
+    // Also false with no app cells at all: no app name is drawn, so none of them
+    // must reach measureLabels() and reserve room in the dock's thickness. It is
+    // drawsAppCells() and not showAppIcons because a selectable-apps widget
+    // draws app cells of its own with the apps block switched off (the C++ side
+    // of the same question is DockConfig::dockThickness).
+    readonly property bool labelVisible: labelMode !== 0 && root.appCellsDrawn
+    // The two reads before the call are the dependencies — drawsAppCells() is a
+    // method, so nothing would re-evaluate this without them: widgetOrder is
+    // what changes when an appsel widget is added or removed, showAppIcons when
+    // the apps block is switched on or off.
+    readonly property bool appCellsDrawn: (config.widgetOrder, config.showAppIcons,
+                                           config.drawsAppCells())
     readonly property bool labelShowsIcon: labelMode !== 3
     readonly property int labelGap: config.iconLabelGap
     // Label metrics follow the auto-shrink factor: leaving the name box at its
@@ -81,7 +90,17 @@ Item {
     function measureLabels() {
         let max = 0
         if (root.labelVisible) {
-            const names = dockModel.labelStrings()
+            // Every model that draws app cells, not just the apps block's: a
+            // selectable-apps widget uses the same delegate and the same label
+            // box, so a name of its own that goes unmeasured is a name drawn
+            // wider than the room the dock reserved, i.e. elided.
+            let names = config.showAppIcons ? dockModel.labelStrings() : []
+            const widgets = config.appsWidgetTokens()
+            for (let w = 0; w < widgets.length; ++w) {
+                const wm = dockWindow.appsModelFor(widgets[w])
+                if (wm)
+                    names = names.concat(wm.labelStrings())
+            }
             for (let i = 0; i < names.length; ++i) {
                 appNameProbe.text = names[i]
                 max = Math.max(max, Math.ceil(appNameProbe.advanceWidth))
@@ -682,7 +701,19 @@ Item {
         case "sep": return true
         case "gap": return true
         }
+        // A selectable-apps widget is always visible: it is placed by hand from
+        // the Layout tab (and removed the same way), so there is no flag to
+        // check — and hiding an empty one would take away the right-click that
+        // is how apps get into it in the first place.
+        if (root.isAppsWidget(token))
+            return true
         return false
+    }
+
+    // "appsel<n>": one selectable-apps widget. Same block as the apps section,
+    // drawing its own launcher list (see dockWindow.appsModelFor).
+    function isAppsWidget(token) {
+        return /^appsel[1-9][0-9]*$/.test(token)
     }
 
     function componentFor(token) {
@@ -726,6 +757,8 @@ Item {
         case "sep": return staticSepComp
         case "gap": return springComp
         }
+        if (root.isAppsWidget(token))
+            return appsComp
         return null
     }
 
@@ -733,6 +766,8 @@ Item {
     // they are drop-only anchors (not draggable as a unit). Single widgets
     // and springs are draggable and dispatch their action from the section.
     function isBlock(token) {
+        if (root.isAppsWidget(token))
+            return true
         return token === "apps" || token === "systray" || token === "relanzadores"
                || token === "pager"
                || token === "scriptrunners" || token === "menu" || token === "tilemenu"
@@ -989,6 +1024,7 @@ Item {
                     // the separate app setting; the separators draw no name.
                     readonly property bool labelled: root.widgetLabelVisible && !isSpring
                                                      && !isStaticSep && token !== "apps"
+                                                     && !root.isAppsWidget(token)
                     readonly property string label: labelled ? root.widgetNameOf(token) : ""
                     // Renames and show/hide both move the widest drawn name.
                     onLabelChanged: root.scheduleLabelMeasure()
@@ -1137,6 +1173,17 @@ Item {
                                  ? root.labelBoxHeight + root.labelGap
                                  : (secVisual.height - secVisual.contentH) / 2
                             sourceComponent: root.componentFor(sec.token)
+                            // Which selectable-apps widget this is: the
+                            // component is declared in the root scope and
+                            // cannot see `sec`, so the token is pushed in. It
+                            // decides the model the block draws.
+                            Binding {
+                                target: contentLoader.item
+                                property: "sectionToken"
+                                value: sec.token
+                                when: contentLoader.item !== null
+                                      && root.isAppsWidget(sec.token)
+                            }
                             Binding {
                                 target: contentLoader.item
                                 property: "hovered"
@@ -1308,6 +1355,13 @@ Item {
         id: appsComp
         Grid {
             id: appsGrid
+            // Empty for the dock's own apps block; "appsel<n>" when this same
+            // component is loaded as a selectable-apps widget (see the Binding
+            // in the section delegate). The model follows from it — and every
+            // call below goes through appsGrid.appsModel, never `dockModel`,
+            // which is only the apps block's.
+            property string sectionToken: ""
+            readonly property var appsModel: dockWindow.appsModelFor(sectionToken)
             columns: root.horizontal ? Math.max(1, dockRepeater.count) : 1
             spacing: root.spacingPx
             // No-ops while every cell is the same size (icon-only mode); they
@@ -1319,9 +1373,22 @@ Item {
                 NumberAnimation { properties: "x,y"; duration: 150; easing.type: Easing.OutQuad }
             }
 
+            // The root-level Connections only watches the apps block's model;
+            // a widget's rows move on their own (its apps are its own list, and
+            // its windows come and go), and the widest name is measured across
+            // all of them.
+            Connections {
+                target: appsGrid.appsModel
+                enabled: appsGrid.sectionToken !== ""
+                function onRowsInserted() { root.scheduleLabelMeasure() }
+                function onRowsRemoved() { root.scheduleLabelMeasure() }
+                function onModelReset() { root.scheduleLabelMeasure() }
+                function onDataChanged() { root.scheduleLabelMeasure() }
+            }
+
             Repeater {
                 id: dockRepeater
-                model: dockModel
+                model: appsGrid.appsModel
 
                 delegate: Item {
                     id: delegateRoot
@@ -1402,7 +1469,7 @@ Item {
                         onEntered: (drag) => {
                             if (drag.source && drag.source.itemIndex !== undefined
                                     && drag.source.itemIndex !== delegateRoot.index)
-                                dockModel.moveItem(drag.source.itemIndex, delegateRoot.index)
+                                appsGrid.appsModel.moveItem(drag.source.itemIndex, delegateRoot.index)
                         }
                     }
 
@@ -1643,9 +1710,9 @@ Item {
                             onReleased: content.Drag.drop()
                             onClicked: (mouse) => {
                                 if (mouse.button === Qt.LeftButton)
-                                    dockModel.activate(delegateRoot.index)
+                                    appsGrid.appsModel.activate(delegateRoot.index)
                                 else if (mouse.button === Qt.MiddleButton)
-                                    dockModel.launch(delegateRoot.index)
+                                    appsGrid.appsModel.launch(delegateRoot.index)
                                 else
                                     contextMenu.popup()
                             }
@@ -1665,7 +1732,7 @@ Item {
                             width: Math.max(implicitWidth + 64, 220)
                             onAboutToShow: {
                                 root.menuOpen = true
-                                windowMenuInstantiator.model = dockModel.windowList(delegateRoot.index)
+                                windowMenuInstantiator.model = appsGrid.appsModel.windowList(delegateRoot.index)
                             }
                             onClosed: root.menuOpen = false
 
@@ -1678,7 +1745,7 @@ Item {
                                     required property var modelData
                                     text: modelData ? modelData.title : ""
                                     font.bold: modelData !== undefined && modelData.activated === true
-                                    onTriggered: dockModel.activateWindow(delegateRoot.index,
+                                    onTriggered: appsGrid.appsModel.activateWindow(delegateRoot.index,
                                                                           modelData.windowIndex)
                                 }
                                 onObjectAdded: (i, o) => contextMenu.insertItem(i, o)
@@ -1689,12 +1756,12 @@ Item {
                             IconMenuItem {
                                 text: qsTr("Open new instance")
                                 iconName: "list-add"
-                                onTriggered: dockModel.launch(delegateRoot.index)
+                                onTriggered: appsGrid.appsModel.launch(delegateRoot.index)
                             }
                             IconMenuItem {
                                 text: delegateRoot.pinned ? qsTr("Unpin") : qsTr("Pin to dock")
                                 iconName: delegateRoot.pinned ? "window-unpin" : "window-pin"
-                                onTriggered: dockModel.togglePinned(delegateRoot.index)
+                                onTriggered: appsGrid.appsModel.togglePinned(delegateRoot.index)
                             }
                             IconMenuItem {
                                 visible: delegateRoot.windowCount > 0
@@ -1702,7 +1769,7 @@ Item {
                                 text: delegateRoot.windowCount > 1 ? qsTr("Close all windows")
                                                                    : qsTr("Close window")
                                 iconName: "window-close"
-                                onTriggered: dockModel.closeAll(delegateRoot.index)
+                                onTriggered: appsGrid.appsModel.closeAll(delegateRoot.index)
                             }
                             // Move this app's windows between virtual desktops
                             // without following them there. Only with a window
@@ -1724,7 +1791,7 @@ Item {
                                     iconName: "go-home"
                                     // No-op when there is no current desktop
                                     // (KWin unreachable): sendToDesktop guards.
-                                    onTriggered: dockModel.sendToDesktop(
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(
                                                      delegateRoot.index,
                                                      virtualDesktops ? virtualDesktops.current : 0)
                                 }
@@ -1743,7 +1810,7 @@ Item {
                                     text: qsTr("Enviar a %1").arg(
                                               virtualDesktops ? virtualDesktops.nameOf(position) : "")
                                     iconName: "go-next"
-                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(delegateRoot.index, position)
                                 }
                                 IconMenuItem {
                                     readonly property int position: 2
@@ -1753,7 +1820,7 @@ Item {
                                     text: qsTr("Enviar a %1").arg(
                                               virtualDesktops ? virtualDesktops.nameOf(position) : "")
                                     iconName: "go-next"
-                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(delegateRoot.index, position)
                                 }
                                 IconMenuItem {
                                     readonly property int position: 3
@@ -1763,7 +1830,7 @@ Item {
                                     text: qsTr("Enviar a %1").arg(
                                               virtualDesktops ? virtualDesktops.nameOf(position) : "")
                                     iconName: "go-next"
-                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(delegateRoot.index, position)
                                 }
                                 IconMenuItem {
                                     readonly property int position: 4
@@ -1773,7 +1840,7 @@ Item {
                                     text: qsTr("Enviar a %1").arg(
                                               virtualDesktops ? virtualDesktops.nameOf(position) : "")
                                     iconName: "go-next"
-                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(delegateRoot.index, position)
                                 }
                                 IconMenuItem {
                                     readonly property int position: 5
@@ -1783,7 +1850,7 @@ Item {
                                     text: qsTr("Enviar a %1").arg(
                                               virtualDesktops ? virtualDesktops.nameOf(position) : "")
                                     iconName: "go-next"
-                                    onTriggered: dockModel.sendToDesktop(delegateRoot.index, position)
+                                    onTriggered: appsGrid.appsModel.sendToDesktop(delegateRoot.index, position)
                                 }
                             }
                             MenuSeparator {}
