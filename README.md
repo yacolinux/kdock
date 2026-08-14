@@ -549,7 +549,9 @@ La configuración vive en el directorio de datos XDG:
   clipboard-history.txt
 ```
 
-*Configuración → Backup* exporta e importa todo eso como un `.zip`.
+*Configuración → Presets* guarda todo eso como un preset con nombre (`presets/<nombre>.zip`),
+lo aplica de una —reemplaza los `.conf` y reinicia kdock con sus accesorios— y lo exporta o
+importa como un `.zip`.
 
 ## Base de rendimiento (RELEASE 0.1)
 

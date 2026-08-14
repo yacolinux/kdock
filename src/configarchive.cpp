@@ -11,6 +11,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 
+#include <algorithm>
+
 #include <private/qzipwriter_p.h>
 #include <private/qzipreader_p.h>
 
@@ -19,24 +21,28 @@ QString ConfigArchive::configDir()
     return QFileInfo(DockConfig::settingsFilePath()).absolutePath();
 }
 
-// The three families of settings files that live in the kdock data dir: the
-// docks themselves, the preview strips and the tile menu. The accessory
-// binaries keep their own files, and leaving them out of the backup meant a
-// restore silently dropped the tile layout the user had built.
+// The families of settings files that live in the kdock data dir: the docks
+// themselves plus one per accessory binary. The accessories keep their own
+// files, and leaving them out of the backup meant a restore silently dropped
+// the tile layout the user had built.
 static const QStringList &configGlobs()
 {
     static const QStringList globs{QStringLiteral("kdock*.conf"),
                                    QStringLiteral("previews*.conf"),
                                    QStringLiteral("tilemenu*.conf"),
-                                   QStringLiteral("controlmanager*.conf")};
+                                   QStringLiteral("controlmanager*.conf"),
+                                   QStringLiteral("weather*.conf")};
     return globs;
 }
 
 static bool isConfigEntry(const QString &name)
 {
-    // Plain file name, no path separators (anti zip-slip).
+    // Plain file name, no path separators (anti zip-slip). Every family of
+    // configGlobs() has to be listed here or the entry is exported and then
+    // silently dropped on import — which is exactly what happened to
+    // controlmanager.conf until 2026-08-13.
     static const QRegularExpression re(
-        QStringLiteral("^(kdock|previews|tilemenu)[\\w.#-]*\\.conf$"));
+        QStringLiteral("^(kdock|previews|tilemenu|controlmanager|weather)[\\w.#-]*\\.conf$"));
     return re.match(name).hasMatch();
 }
 
@@ -144,6 +150,142 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
         QFile f(dir.filePath(e.first));
         if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
             f.write(e.second);
+    }
+    return true;
+}
+
+bool ConfigArchive::isConfigArchive(const QString &zipPath)
+{
+    QZipReader zr(zipPath);
+    if (!zr.exists() || zr.status() != QZipReader::NoError)
+        return false;
+    for (const QZipReader::FileInfo &fi : zr.fileInfoList()) {
+        if (fi.isFile && fi.filePath == QLatin1String("kdock.conf"))
+            return true;
+    }
+    return false;
+}
+
+QString ConfigArchive::presetsDir()
+{
+    return configDir() + QStringLiteral("/presets");
+}
+
+QString ConfigArchive::sanitizePresetName(const QString &name)
+{
+    QString out = name.simplified();
+    // Everything that would make this a path or an awkward file name. The list
+    // is deliberately wider than POSIX needs: a preset name also ends up in a
+    // combo and in an error message.
+    static const QRegularExpression bad(QStringLiteral("[/\\\\:*?\"<>|]"));
+    out.replace(bad, QStringLiteral("_"));
+    while (out.startsWith(QLatin1Char('.')))
+        out.remove(0, 1);
+    return out.trimmed();
+}
+
+QString ConfigArchive::presetPath(const QString &name)
+{
+    return presetsDir() + QLatin1Char('/') + sanitizePresetName(name) + QStringLiteral(".zip");
+}
+
+QStringList ConfigArchive::presetNames()
+{
+    const QDir dir(presetsDir());
+    QStringList names;
+    for (const QString &file : dir.entryList({QStringLiteral("*.zip")}, QDir::Files))
+        names.append(file.chopped(4));
+    std::sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
+        return a.compare(b, Qt::CaseInsensitive) < 0;
+    });
+    return names;
+}
+
+bool ConfigArchive::savePreset(const QString &name, QString *error)
+{
+    const QString clean = sanitizePresetName(name);
+    if (clean.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("Empty preset name");
+        return false;
+    }
+    if (!QDir().mkpath(presetsDir())) {
+        if (error)
+            *error = QStringLiteral("Cannot create %1").arg(presetsDir());
+        return false;
+    }
+    const QString path = presetPath(clean);
+    // QZipWriter appends to an existing file, so overwriting a preset without
+    // removing it first leaves both copies inside the archive.
+    QFile::remove(path);
+    return exportTo(path, error);
+}
+
+bool ConfigArchive::deletePreset(const QString &name, QString *error)
+{
+    const QString path = presetPath(name);
+    if (!QFile::exists(path)) {
+        if (error)
+            *error = QStringLiteral("No such preset: %1").arg(name);
+        return false;
+    }
+    if (!QFile::remove(path)) {
+        if (error)
+            *error = QStringLiteral("Cannot delete %1").arg(path);
+        return false;
+    }
+    return true;
+}
+
+bool ConfigArchive::renamePreset(const QString &from, const QString &to, QString *error)
+{
+    const QString clean = sanitizePresetName(to);
+    if (clean.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("Empty preset name");
+        return false;
+    }
+    const QString src = presetPath(from);
+    const QString dst = presetPath(clean);
+    if (src == dst)
+        return true;
+    if (QFile::exists(dst) && !QFile::remove(dst)) {
+        if (error)
+            *error = QStringLiteral("Cannot replace %1").arg(dst);
+        return false;
+    }
+    if (!QFile::rename(src, dst)) {
+        if (error)
+            *error = QStringLiteral("Cannot rename %1").arg(src);
+        return false;
+    }
+    return true;
+}
+
+bool ConfigArchive::importPreset(const QString &zipPath, const QString &name, QString *error)
+{
+    if (!isConfigArchive(zipPath)) {
+        if (error)
+            *error = QStringLiteral("Not a valid kdock config archive (missing kdock.conf)");
+        return false;
+    }
+    const QString clean = sanitizePresetName(name);
+    if (clean.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("Empty preset name");
+        return false;
+    }
+    if (!QDir().mkpath(presetsDir())) {
+        if (error)
+            *error = QStringLiteral("Cannot create %1").arg(presetsDir());
+        return false;
+    }
+    const QString dst = presetPath(clean);
+    QFile::remove(dst);
+    if (!QFile::copy(zipPath, dst)) {
+        if (error)
+            *error = QStringLiteral("Cannot copy %1 to %2").arg(zipPath, dst);
+        return false;
     }
     return true;
 }

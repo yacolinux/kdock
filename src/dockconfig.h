@@ -332,6 +332,19 @@ public:
     static QString qtStyle();
     static void setQtStyle(const QString &name);
 
+    // Flush every live dock's settings to disk. QSettings batches writes and
+    // only lets go of them in its destructor, so a process that is about to
+    // hand over (saving a preset, applying one) has to push them out first: the
+    // file the next step reads or replaces would otherwise be the one from
+    // before the user's last edits.
+    static void syncAll();
+
+    // Presets tab: skip the "this restarts kdock" confirmation when applying a
+    // preset. Shared setting; note it travels *inside* the presets themselves,
+    // since it lives in kdock.conf like everything else shared.
+    static bool presetApplyNoPrompt();
+    static void setPresetApplyNoPrompt(bool on);
+
     // ---- Dark mode (app-wide part) ----------------------------------------
     // Breeze Dark's two colors, copied into the app on purpose: the dark scheme
     // must not shift under the dock when the user edits their KDE color scheme,

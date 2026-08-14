@@ -18,10 +18,23 @@
 
 #pragma once
 
+#include <QStringList>
+
 namespace kdock {
 
 // Relaunches this process with its own arguments after stopping every resident
 // accessory. Does not return before quitting the application.
-void restartAll();
+//
+// `extraArgs` is appended to the inherited command line — that is how the
+// Presets tab hands the preset to apply to the *next* process (--apply-preset
+// <zip>) instead of writing the .conf files under the feet of the ones this
+// process still has open. Any --apply-preset already in the inherited arguments
+// is dropped: it belongs to the launch that consumed it, and carrying it along
+// would re-apply that preset on every later "Reiniciar", silently throwing away
+// whatever the user changed since.
+void restartAll(const QStringList &extraArgs = {});
+
+// Name of that flag, so main.cpp and the caller cannot drift apart.
+inline const char *kApplyPresetFlag = "--apply-preset";
 
 } // namespace kdock

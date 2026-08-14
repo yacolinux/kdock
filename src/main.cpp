@@ -14,8 +14,10 @@
 
 #include <functional>
 
+#include "apprestart.h"
 #include "clockwidget.h"
 #include "clockwidget2.h"
+#include "configarchive.h"
 #include "clipboardhistory.h"
 #include "desktopentry.h"
 #include "desktopmaximize.h"
@@ -177,6 +179,23 @@ int main(int argc, char *argv[])
     app.setApplicationDisplayName(QStringLiteral("kdock"));
     app.setDesktopFileName(QStringLiteral("kdock"));
     app.setQuitOnLastWindowClosed(false);
+
+    // Apply a preset before the first config read of the process. The Presets
+    // tab relaunches us with this flag instead of copying the .conf files
+    // itself: the dock it is running in still has a QSettings open on every one
+    // of them, and QSettings flushes its own dirty keys on the way out — the
+    // freshly applied file would be partially overwritten by the config it just
+    // replaced. Here nothing has read anything yet.
+    {
+        const QStringList args = app.arguments();
+        const int at = args.indexOf(QLatin1String(kdock::kApplyPresetFlag));
+        if (at >= 0 && at + 1 < args.size()) {
+            QString err;
+            if (!ConfigArchive::importFrom(args.at(at + 1), &err))
+                qWarning("kdock: could not apply preset %s: %s",
+                         qPrintable(args.at(at + 1)), qPrintable(err));
+        }
+    }
 
     const QString style = DockConfig::qtStyle();
     if (!style.isEmpty())

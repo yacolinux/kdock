@@ -24,7 +24,7 @@ bool anyAccessoryRunning()
 }
 } // namespace
 
-void kdock::restartAll()
+void kdock::restartAll(const QStringList &extraArgs)
 {
     PreviewsLauncher::quitRunning();
     TileMenuLauncher::quitRunning();
@@ -46,6 +46,15 @@ void kdock::restartAll()
     QStringList args = QCoreApplication::arguments();
     if (!args.isEmpty())
         args.removeFirst();
+    // ... except a --apply-preset <zip> pair, which was consumed at startup by
+    // this very process (see the header).
+    const int applied = args.indexOf(QLatin1String(kApplyPresetFlag));
+    if (applied >= 0) {
+        args.removeAt(applied);
+        if (applied < args.size())
+            args.removeAt(applied);
+    }
+    args += extraArgs;
     QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
     QCoreApplication::quit();
 }

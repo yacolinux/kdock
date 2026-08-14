@@ -219,6 +219,28 @@ void DockConfig::setQtStyle(const QString &name)
         emit cfg->qtStyleChanged();
 }
 
+void DockConfig::syncAll()
+{
+    for (DockConfig *cfg : std::as_const(s_instances))
+        cfg->m_settings.sync();
+}
+
+bool DockConfig::presetApplyNoPrompt()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("presetApplyNoPrompt"), false).toBool();
+}
+
+void DockConfig::setPresetApplyNoPrompt(bool on)
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("presetApplyNoPrompt"), on);
+    // Applying a preset replaces this very file, so flush it now: the value the
+    // user just ticked has to be on disk before the restart, not in a QSettings
+    // that will be thrown away with the old config.
+    s.sync();
+}
+
 bool DockConfig::darkModeAllDocks()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

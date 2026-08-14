@@ -1,5 +1,6 @@
 #include "settingsdialog.h"
 
+#include "apprestart.h"
 #include "audiocontrol.h"
 #include "batterycontrol.h"
 #include "brightnesscontrol.h"
@@ -295,7 +296,7 @@ void SettingsDialog::buildTabs()
         addTab(createRelanzadoresTab(), tr("Relanzadores"));
     if (m_scriptRunners)
         addTab(createScriptRunnersTab(), tr("Script Runner"));
-    addTab(createBackupTab(), tr("Backup"));
+    addTab(createPresetsTab(), tr("Presets"));
     m_monitorsTabIndex = -1;
     if (m_manager) {
         addTab(createMonitorsTab(), tr("Docks"));
@@ -4484,32 +4485,122 @@ void SettingsDialog::reloadScriptRunnerEditor()
                                                         : QStringLiteral(" ") + iconName);
 }
 
-QWidget *SettingsDialog::createBackupTab()
+QWidget *SettingsDialog::createPresetsTab()
 {
     auto *tab = new QWidget;
     auto *layout = new QVBoxLayout(tab);
 
     auto *info = new QLabel(
-        tr("Export the complete kdock configuration (all docks, plus relanzadores "
-           "and script runners including their scripts) to a .zip file, or import "
-           "a previously exported one.\n\nImporting replaces the current "
-           "configuration (a backup is kept) and restarts kdock."),
+        tr("A preset is a complete kdock configuration: every dock, the "
+           "relanzadores and script runners, and the settings of the accessory "
+           "windows (previews, tile menu, control panel, weather).\n\n"
+           "\"Current\" is the configuration in use. Save it under a name to "
+           "turn it into a preset; choosing another one and pressing Apply "
+           "replaces the current configuration with it and restarts kdock."),
         tab);
     info->setWordWrap(true);
     layout->addWidget(info);
 
-    auto *buttons = new QHBoxLayout;
-    auto *exportBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-export")),
-                                      tr("Export…"), tab);
-    auto *importBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-import")),
-                                      tr("Import…"), tab);
-    buttons->addWidget(exportBtn);
-    buttons->addWidget(importBtn);
-    buttons->addStretch();
-    layout->addLayout(buttons);
+    auto *presetRow = new QHBoxLayout;
+    presetRow->addWidget(new QLabel(tr("Preset:"), tab));
+    m_presetCombo = new QComboBox(tab);
+    m_presetCombo->setMinimumWidth(220);
+    presetRow->addWidget(m_presetCombo, 1);
+    auto *saveBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-save")),
+                                    tr("Save…"), tab);
+    saveBtn->setToolTip(tr("Save the configuration in use as a new preset."));
+    presetRow->addWidget(saveBtn);
+    layout->addLayout(presetRow);
+
+    auto *manageRow = new QHBoxLayout;
+    m_presetOverwriteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-save-as")),
+                                           tr("Overwrite"), tab);
+    m_presetOverwriteBtn->setToolTip(
+        tr("Replace the selected preset with the configuration in use."));
+    m_presetRenameBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-rename")),
+                                        tr("Rename…"), tab);
+    m_presetDeleteBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("edit-delete")),
+                                        tr("Delete"), tab);
+    manageRow->addWidget(m_presetOverwriteBtn);
+    manageRow->addWidget(m_presetRenameBtn);
+    manageRow->addWidget(m_presetDeleteBtn);
+    manageRow->addStretch();
+    layout->addLayout(manageRow);
+
+    auto *applyRow = new QHBoxLayout;
+    m_presetApplyBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")),
+                                       tr("Apply"), tab);
+    m_presetApplyBtn->setToolTip(
+        tr("Replace the current configuration with the selected preset and restart kdock."));
+    m_presetNoPrompt = new QCheckBox(tr("Apply without warning"), tab);
+    m_presetNoPrompt->setChecked(DockConfig::presetApplyNoPrompt());
+    m_presetNoPrompt->setToolTip(
+        tr("Skip the confirmation window: Apply replaces the configuration and "
+           "restarts kdock right away."));
+    applyRow->addWidget(m_presetApplyBtn);
+    applyRow->addWidget(m_presetNoPrompt);
+    applyRow->addStretch();
+    layout->addLayout(applyRow);
+
+    connect(m_presetCombo, &QComboBox::currentIndexChanged, this,
+            [this]() { updatePresetButtons(); });
+    connect(m_presetNoPrompt, &QCheckBox::toggled, this,
+            [](bool on) { DockConfig::setPresetApplyNoPrompt(on); });
+    connect(saveBtn, &QPushButton::clicked, this, [this]() { savePresetInteractive(); });
+    connect(m_presetApplyBtn, &QPushButton::clicked, this,
+            [this]() { applySelectedPreset(); });
+
+    connect(m_presetOverwriteBtn, &QPushButton::clicked, this, [this]() {
+        const QString name = m_presetCombo->currentData().toString();
+        if (name.isEmpty())
+            return;
+        if (QMessageBox::question(
+                this, tr("Overwrite preset"),
+                tr("Replace the preset \"%1\" with the configuration in use?").arg(name),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+            return;
+        QString err;
+        if (!ConfigArchive::savePreset(name, &err))
+            QMessageBox::warning(this, tr("Save failed"), err);
+        else
+            reloadPresetList(name);
+    });
+
+    connect(m_presetRenameBtn, &QPushButton::clicked, this, [this]() {
+        const QString name = m_presetCombo->currentData().toString();
+        if (name.isEmpty())
+            return;
+        bool ok = false;
+        const QString to = QInputDialog::getText(this, tr("Rename preset"), tr("New name:"),
+                                                 QLineEdit::Normal, name, &ok);
+        if (!ok || ConfigArchive::sanitizePresetName(to).isEmpty())
+            return;
+        QString err;
+        if (!ConfigArchive::renamePreset(name, to, &err))
+            QMessageBox::warning(this, tr("Rename failed"), err);
+        else
+            reloadPresetList(ConfigArchive::sanitizePresetName(to));
+    });
+
+    connect(m_presetDeleteBtn, &QPushButton::clicked, this, [this]() {
+        const QString name = m_presetCombo->currentData().toString();
+        if (name.isEmpty())
+            return;
+        if (QMessageBox::question(this, tr("Delete preset"),
+                                  tr("Delete the preset \"%1\"?").arg(name),
+                                  QMessageBox::Yes | QMessageBox::No,
+                                  QMessageBox::No) != QMessageBox::Yes)
+            return;
+        QString err;
+        if (!ConfigArchive::deletePreset(name, &err))
+            QMessageBox::warning(this, tr("Delete failed"), err);
+        reloadPresetList();
+    });
+
+    reloadPresetList();
 
     // Favorites-only export/import (a small JSON list of .desktop ids), separate
-    // from the full config backup above.
+    // from the full config presets above.
     auto *favGroup = new QGroupBox(tr("Menu favorites"), tab);
     auto *favLayout = new QVBoxLayout(favGroup);
     auto *favInfo = new QLabel(
@@ -4531,6 +4622,27 @@ QWidget *SettingsDialog::createBackupTab()
     layout->addWidget(favGroup);
 
     layout->addStretch();
+
+    // Foot of the tab: the same whole-configuration .zip a preset is, but to and
+    // from anywhere on disk.
+    auto *footLine = new QFrame(tab);
+    footLine->setFrameShape(QFrame::HLine);
+    footLine->setFrameShadow(QFrame::Sunken);
+    layout->addWidget(footLine);
+
+    auto *footRow = new QHBoxLayout;
+    auto *exportBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-export")),
+                                      tr("Export…"), tab);
+    exportBtn->setToolTip(tr("Write the configuration in use to a .zip file."));
+    auto *importBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("document-import")),
+                                      tr("Import…"), tab);
+    importBtn->setToolTip(
+        tr("Read a .zip written by Export and add it to the preset list. Nothing "
+           "changes until you press Apply."));
+    footRow->addStretch();
+    footRow->addWidget(exportBtn);
+    footRow->addWidget(importBtn);
+    layout->addLayout(footRow);
 
     connect(favExportBtn, &QPushButton::clicked, this, [this]() {
         const QString dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
@@ -4587,29 +4699,154 @@ QWidget *SettingsDialog::createBackupTab()
             QMessageBox::warning(this, tr("Export failed"), err);
     });
 
+    // Importing lands the archive in the preset list instead of replacing the
+    // configuration on the spot: nothing the user has now is touched until they
+    // pick it and press Apply.
     connect(importBtn, &QPushButton::clicked, this, [this]() {
         const QString dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
         const QString path = QFileDialog::getOpenFileName(
             this, tr("Import configuration"), dir, tr("Zip archives (*.zip)"));
         if (path.isEmpty())
             return;
-        if (QMessageBox::warning(
-                this, tr("Import configuration"),
-                tr("This will replace your current kdock configuration and restart "
-                   "kdock. A backup of the current configuration is kept.\n\nContinue?"),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+        if (!ConfigArchive::isConfigArchive(path)) {
+            QMessageBox::warning(this, tr("Import failed"),
+                                 tr("Not a valid kdock configuration archive:\n%1").arg(path));
+            return;
+        }
+        bool ok = false;
+        const QString suggested = QFileInfo(path).completeBaseName();
+        const QString name = QInputDialog::getText(
+            this, tr("Import configuration"), tr("Save it as the preset:"),
+            QLineEdit::Normal, suggested, &ok);
+        if (!ok || ConfigArchive::sanitizePresetName(name).isEmpty())
+            return;
+        const QString clean = ConfigArchive::sanitizePresetName(name);
+        if (ConfigArchive::presetNames().contains(clean)
+            && QMessageBox::question(
+                   this, tr("Import configuration"),
+                   tr("The preset \"%1\" already exists. Replace it?").arg(clean),
+                   QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
             return;
         QString err;
-        if (!ConfigArchive::importFrom(path, &err)) {
+        if (!ConfigArchive::importPreset(path, clean, &err)) {
             QMessageBox::warning(this, tr("Import failed"), err);
             return;
         }
-        // Relaunch kdock so every dock/manager reloads the imported config.
-        QProcess::startDetached(QCoreApplication::applicationFilePath(), {});
-        QCoreApplication::quit();
+        reloadPresetList(clean);
+        QMessageBox::information(
+            this, tr("Import configuration"),
+            tr("Imported as the preset \"%1\". Press Apply to use it.").arg(clean));
     });
 
     return tab;
+}
+
+void SettingsDialog::reloadPresetList(const QString &select)
+{
+    if (!m_presetCombo)
+        return;
+    const QString keep = select.isNull() ? m_presetCombo->currentData().toString() : select;
+    QSignalBlocker blocker(m_presetCombo);
+    m_presetCombo->clear();
+    // First entry is the configuration in use: not a file, so it is the one
+    // state Apply has nothing to do with.
+    m_presetCombo->addItem(tr("Current"), QString());
+    for (const QString &name : ConfigArchive::presetNames())
+        m_presetCombo->addItem(name, name);
+    const int at = keep.isEmpty() ? 0 : m_presetCombo->findData(keep);
+    m_presetCombo->setCurrentIndex(at >= 0 ? at : 0);
+    blocker.unblock();
+    updatePresetButtons();
+}
+
+void SettingsDialog::updatePresetButtons()
+{
+    if (!m_presetCombo)
+        return;
+    const bool isPreset = !m_presetCombo->currentData().toString().isEmpty();
+    for (QPushButton *b : {m_presetOverwriteBtn, m_presetRenameBtn, m_presetDeleteBtn,
+                           m_presetApplyBtn}) {
+        if (b)
+            b->setEnabled(isPreset);
+    }
+}
+
+QString SettingsDialog::savePresetInteractive(const QString &suggested)
+{
+    bool ok = false;
+    const QString name = QInputDialog::getText(this, tr("Save preset"), tr("Preset name:"),
+                                               QLineEdit::Normal, suggested, &ok);
+    if (!ok)
+        return {};
+    const QString clean = ConfigArchive::sanitizePresetName(name);
+    if (clean.isEmpty()) {
+        QMessageBox::warning(this, tr("Save preset"), tr("The name cannot be empty."));
+        return {};
+    }
+    if (ConfigArchive::presetNames().contains(clean)
+        && QMessageBox::question(this, tr("Save preset"),
+                                 tr("The preset \"%1\" already exists. Replace it?").arg(clean),
+                                 QMessageBox::Yes | QMessageBox::No,
+                                 QMessageBox::No) != QMessageBox::Yes)
+        return {};
+
+    // exportTo() zips what is on disk, and QSettings batches: without this the
+    // preset misses whatever the user changed in this very dialog.
+    DockConfig::syncAll();
+    QString err;
+    if (!ConfigArchive::savePreset(clean, &err)) {
+        QMessageBox::warning(this, tr("Save failed"), err);
+        return {};
+    }
+    reloadPresetList(clean);
+    return clean;
+}
+
+void SettingsDialog::applySelectedPreset()
+{
+    const QString name = m_presetCombo ? m_presetCombo->currentData().toString() : QString();
+    if (name.isEmpty())
+        return;
+    const QString path = ConfigArchive::presetPath(name);
+    if (!QFile::exists(path)) {
+        QMessageBox::warning(this, tr("Apply preset"),
+                             tr("The preset \"%1\" is gone from disk.").arg(name));
+        reloadPresetList();
+        return;
+    }
+
+    if (!m_presetNoPrompt || !m_presetNoPrompt->isChecked()) {
+        QMessageBox box(this);
+        box.setIcon(QMessageBox::Warning);
+        box.setWindowTitle(tr("Apply preset"));
+        box.setText(tr("Applying \"%1\" replaces the configuration in use and "
+                       "restarts kdock and its accessory windows.\n\n"
+                       "The configuration being replaced is copied to a "
+                       "backup-<date> folder, but the quickest way back is to "
+                       "save it as a preset first.")
+                        .arg(name));
+        QPushButton *apply = box.addButton(tr("Apply"), QMessageBox::AcceptRole);
+        QPushButton *saveFirst = box.addButton(tr("Save first…"), QMessageBox::ActionRole);
+        box.addButton(QMessageBox::Cancel);
+        box.setDefaultButton(apply);
+        box.exec();
+        if (box.clickedButton() == saveFirst) {
+            // Any QMessageBox button closes it, so the name prompt runs after
+            // the fact: a cancelled save means the user is not ready to apply.
+            if (savePresetInteractive().isEmpty())
+                return;
+        } else if (box.clickedButton() != apply) {
+            return;
+        }
+    }
+
+    // Flush before handing over: this process dies while the next one is
+    // starting, and a QSettings that still has dirty keys writes them from its
+    // destructor — on top of the config the preset just installed.
+    DockConfig::syncAll();
+    // The next process applies it, before anything has read the config — see
+    // kdock::restartAll() and the --apply-preset block in main().
+    kdock::restartAll({QLatin1String(kdock::kApplyPresetFlag), path});
 }
 
 namespace {

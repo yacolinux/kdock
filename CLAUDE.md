@@ -1019,6 +1019,28 @@ Lo que esos dos no pueden probar, y cómo se probó:
 
 ## Trampas que muerden
 
+- **`QZipWriter` AGREGA al archivo que encuentra, no lo pisa** (2026-08-13). Guardar dos veces
+  el mismo preset (`ConfigArchive::savePreset()`) deja las dos copias de cada `.conf` adentro
+  del `.zip`, y el import restaura **la primera**, o sea la vieja: se lee como "sobrescribir el
+  preset no hace nada". Por eso `savePreset()` hace `QFile::remove()` antes de exportar. Lo
+  cubre `tests/unit/tst_configarchive.cpp`.
+- **Un archivo que se exporta y el import descarta no avisa de nada** (2026-08-13). Las dos
+  puntas de `ConfigArchive` son listas distintas —`configGlobs()` para escribir e
+  `isConfigEntry()` para leer— y `controlmanager.conf` estaba solo en la primera: viajaba en el
+  `.zip` y se perdía al restaurar, con el panel de control quedándose con la configuración
+  vieja. Si agregás una familia de `.conf`, tocá **las dos**.
+- **No apliques una configuración desde el proceso que la está usando** (2026-08-13). `QSettings`
+  batchea las escrituras y las suelta en su destructor, así que copiar los `.conf` y después
+  salir deja que los `DockConfig` vivos escriban sus claves sucias **encima** de lo que acabás de
+  instalar. La solapa Presets no los toca: `DockConfig::syncAll()` y después
+  `kdock::restartAll({"--apply-preset", <zip>})`, y el `importFrom()` lo hace el proceso
+  **nuevo** en `main()` antes de la primera lectura de config. Y `restartAll()` **borra** ese
+  par de la línea de comandos heredada, o cada *Dock → Reiniciar* posterior volvería a aplicar
+  el preset y se comería todo lo que el usuario cambió desde entonces.
+  Se prueba entero bajo Xvfb en diez segundos, sin GUI: un `.zip` armado con `python3 -m
+  zipfile` (o a mano con `zipfile`) que traiga un `kdock.conf` con una clave marcadora,
+  `./build/kdock --apply-preset <zip>` con `XDG_DATA_HOME` descartable, y `grep marker` sobre
+  el `.conf` después.
 - **`plasma-apply-colorscheme` no hace NADA si el nombre pedido ya es el que está puesto**
   (2026-08-12). Está en su fuente (`kcms/colors/plasma-apply-colorscheme.cpp`): compara contra
   el `ColorScheme` de kdeglobals, imprime *"ya está aplicado"* y vuelve con éxito. O sea que

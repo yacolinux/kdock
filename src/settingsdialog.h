@@ -153,7 +153,24 @@ private:
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
     QWidget *createScriptRunnersTab();
-    QWidget *createBackupTab();
+    // Presets: whole-configuration snapshots (the same .zip the Export button
+    // writes) kept in <configDir>/presets and applied with one click. Replaced
+    // the old Backup tab, whose export/import buttons live at the foot of this
+    // one. Not per-dock — a preset carries every dock's config.
+    QWidget *createPresetsTab();
+    // Refill the preset combo, keeping `select` current when it still exists
+    // (empty = the "Current" entry, which is not a file).
+    void reloadPresetList(const QString &select = QString());
+    // Ask for a preset name (pre-filled with `suggested`) and save the current
+    // configuration under it. Returns the name saved, empty if the user
+    // cancelled or the save failed — the Apply flow uses that to abort.
+    QString savePresetInteractive(const QString &suggested = QString());
+    // Apply the preset the combo has selected: the confirmation (unless the
+    // "apply without warning" box is ticked), then the restart of the whole
+    // kdock family with --apply-preset.
+    void applySelectedPreset();
+    // Enable/disable everything that needs a preset (not "Current") selected.
+    void updatePresetButtons();
     QWidget *createMonitorsTab();
     // Wallpapers per virtual desktop. Not per-dock: it drives the whole
     // session's containments, so the tab looks the same whichever dock is
@@ -269,6 +286,14 @@ private:
     QCheckBox *m_appSepTransparent = nullptr;
     QListWidget *m_relanzadoresList;
     QListWidget *m_relanzadorAppsList;
+    // Presets tab. The combo's userData is the preset name; an empty one is the
+    // "Current" entry.
+    QComboBox *m_presetCombo = nullptr;
+    QPushButton *m_presetOverwriteBtn = nullptr;
+    QPushButton *m_presetRenameBtn = nullptr;
+    QPushButton *m_presetDeleteBtn = nullptr;
+    QPushButton *m_presetApplyBtn = nullptr;
+    QCheckBox *m_presetNoPrompt = nullptr;
     QListWidget *m_scriptRunnersList = nullptr;
     QLineEdit *m_scriptRunnerTitle = nullptr;
     QPushButton *m_scriptRunnerIconButton = nullptr;
