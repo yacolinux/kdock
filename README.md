@@ -623,11 +623,12 @@ El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem p
   del 6 kdock no toca nada. Y al volver al Escritorio 1, si tenías un slideshow, vuelve con su
   configuración intacta pero **mostrando la imagen siguiente** — recargarlo lo hace avanzar, y
   un slideshow avanza solo de todas formas.
-- **ColorAuto reacciona a los cambios de fondo hechos desde kdock**, no a los de afuera: el
-  widget/atajo de *siguiente fondo*, los fondos por escritorio virtual y el cambio de
-  escritorio. Si el pase de diapositivas de KDE avanza solo, o cambiás el fondo desde
-  Preferencias del Sistema, el esquema se rehace en el próximo cambio que sí pase por kdock —
-  o en el acto con *Aplicar ahora*. Además deja **un** esquema temporal visible en la lista de
+- **ColorAuto se entera de cualquier cambio de fondo**, lo haya hecho kdock o no: vigila el
+  archivo de configuración de Plasma, así que también ve el pase de diapositivas de KDE
+  avanzando solo, un script hablando D-Bus con plasmashell o un cambio desde Preferencias del
+  Sistema. Lo que **no** hace es rehacer el esquema cuando ese archivo cambia sin que el fondo
+  haya cambiado (Plasma lo reescribe por muchos otros motivos): si el resultado sería idéntico
+  al que ya está puesto, no toca nada. Además deja **un** esquema temporal visible en la lista de
   Preferencias del Sistema: es el que está aplicado, y no se puede evitar porque
   `plasma-apply-colorscheme` solo sabe aplicar esquemas que existan como archivo.
 - **Traducciones**: el dock, su panel de configuración y los paneles de `kdock-previews` y

@@ -24,7 +24,9 @@
 #pragma once
 
 #include <QColor>
+#include <QDateTime>
 #include <QFileSystemWatcher>
+#include <QHash>
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -168,6 +170,16 @@ private:
     // the watch *silently* — without this the whole thing fires exactly once,
     // which is the very bug this watcher exists to fix.
     void armWallpaperWatch();
+    // Did Plasma's applet config *itself* change since the last look? The
+    // watcher also has the containing directory on it (that is what recovers
+    // the inode after the rename above), so it reports every other file written
+    // in ~/.config too — including `kdeglobals`, which is what
+    // plasma-apply-colorscheme rewrites two lines below applySystem(). Reacting
+    // to that is a feedback loop: apply -> kdeglobals -> directoryChanged ->
+    // refresh -> apply, one full color-scheme change every ~2 s for ever (the
+    // A/B ping-pong means the tool never no-ops). This is the gate that makes
+    // the directory watch a re-arm and nothing more.
+    bool appletsrcChanged();
     // Push the dock colors of one screen's palette onto every dock there.
     void applyToDocks(const QString &screen, const SchemeColors &scheme);
     // Drop the ColorAuto colours of every dock except the ones listed. The
@@ -181,6 +193,11 @@ private:
     QString systemScreenName() const;
     static QString schemeFilePath(const QString &id);
     static WallpaperColors::Options options();
+    // Every setting that changes what a given set of wallpapers turns into,
+    // flattened into one string. It travels with m_lastAppliedImages so that
+    // touching any of them invalidates the memo — without anyone having to
+    // remember to clear it from each setter.
+    static QString optionsKey();
 
     Theme *m_theme = nullptr;
     AppearanceControl *m_appearance = nullptr;
@@ -197,6 +214,18 @@ private:
     // kdock at all, which is the common case and what the four in-process
     // triggers could never see.
     QFileSystemWatcher m_wallpaperWatch;
+    // (mtime, size) of appletsrc the last time appletsrcChanged() looked.
+    QDateTime m_appletsrcTime;
+    qint64 m_appletsrcSize = -1;
+    // What the last automatic apply was built from: the images per connector
+    // plus every setting that changes the result. An automatic run that resolves
+    // the same pair has nothing new to say, so it stops before writing a .colors
+    // and spawning the Plasma tools. Belt to appletsrcChanged()'s braces: any
+    // *other* write to appletsrc (an applet moved, a panel resized) also reaches
+    // here, and re-applying an identical scheme is never right — it repaints
+    // every KDE app for nothing.
+    QHash<QString, QString> m_lastAppliedImages;
+    QString m_lastAppliedKey;
     // Last dark-mode state acted on, so a repeated ping is a no-op (the accent
     // color emits the same signal).
     bool m_lastDark = false;

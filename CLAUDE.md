@@ -1019,6 +1019,38 @@ Lo que esos dos no pueden probar, y cómo se probó:
 
 ## Trampas que muerden
 
+- **Vigilar un DIRECTORIO donde uno mismo escribe es un bucle garantizado** (2026-08-14,
+  reportado como *"flickeo en la solapa Widgets del diálogo"* + el sistema pesado). `AutoColorScheme`
+  vigilaba `plasma-org.kde.plasma.desktop-appletsrc` **y su directorio** —que es `~/.config`— y
+  refrescaba con cualquier evento; su propio `applySystem()` lanza `plasma-apply-colorscheme`,
+  que escribe `kdeglobals` ahí adentro. Resultado: un cambio de esquema de color **cada ~2 s,
+  indefinidamente** (el ping-pong `KdockColorAuto1/2` garantiza que ninguna vuelta sea no-op).
+  El watch del directorio hace falta —es lo que recupera el inodo tras el `rename` de KConfig—,
+  así que la cura es que el evento **re-arme y nada más**: el disparador es una marca
+  `(mtime, size)` del archivo propio (`appletsrcChanged()`), más una guarda de idempotencia en
+  `applyPalettes()` que no re-aplica el mismo resultado.
+  **Diagnóstico en diez segundos**, y sirve para cualquier sospecha de bucle de apariencia:
+  ```bash
+  for i in $(seq 10); do ls --time-style=+%H:%M:%S -l ~/.local/share/color-schemes/KdockColorAuto*.colors \
+      ~/.kde-opt/config/kdeglobals | awk '{print $6,$7}'; echo ---; sleep 2; done
+  ```
+  Si los mtimes avanzan solos, hay bucle. Y para leer el `appletsrc` sin sacar conclusiones de
+  más: **contá los containments, no los grupos**. `grep -c '^\[Containments\]\[[0-9]*\]$'` da
+  los de verdad (acá **6**: cuatro escritorios y dos paneles); `grep -c '^\['` da 76, y llamarle
+  a eso "75 containments" fue lo que mandó el primer diagnóstico a culpar a la cantidad de
+  applets. Dos de los cuatro escritorios son de monitores desconectados (`d.screen == -1`) y el
+  script de ColorAuto los saltea, así que su lectura toca **dos**.
+  **Y ojo con el síntoma**: lo que el usuario ve no es
+  "el color cambia" (los dos esquemas son casi iguales) sino **el diálogo de Configuración
+  repintándose**, porque `Theme` vigila `kdeglobals` y llama a `QApplication::setPalette()`. Se
+  lee como un bug de layout de la solapa que esté abierta.
+  Se reproduce y se verifica **sin tocar la sesión del usuario**: el watcher sale de
+  `QStandardPaths::GenericConfigLocation`, o sea que con un `XDG_CONFIG_HOME` descartable el
+  directorio vigilado es tuyo. `appletsrc` falso adentro, kdock del build bajo Xvfb (**sin**
+  `dbus-run-session`: la lectura del fondo necesita el plasmashell real, y solo lee) y el `PATH`
+  falso para que `plasma-apply-colorscheme` no le toque el escritorio a nadie. Cinco escrituras
+  del `kdeglobals` falso tienen que dar **cero** aplicaciones nuevas en `calls.log`, y un cambio
+  real del `appletsrc` con otra opción, exactamente una.
 - **`QZipWriter` AGREGA al archivo que encuentra, no lo pisa** (2026-08-13). Guardar dos veces
   el mismo preset (`ConfigArchive::savePreset()`) deja las dos copias de cada `.conf` adentro
   del `.zip`, y el import restaura **la primera**, o sea la vieja: se lee como "sobrescribir el

@@ -608,11 +608,12 @@ The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
   6 onward kdock leaves everything untouched. And when you return to Desktop 1, if you had a
   slideshow, it comes back with its configuration intact but **showing the next image** —
   reloading it advances it, and a slideshow advances on its own anyway.
-- **ColorAuto reacts to wallpaper changes made from kdock**, not to outside ones: the *next
-  wallpaper* widget/shortcut, the per-virtual-desktop wallpapers, and the desktop switch. If
-  KDE's own slideshow advances by itself, or you change the wallpaper from System Settings,
-  the scheme is rebuilt on the next change that does go through kdock — or right away with
-  *Apply now*. It also leaves **one** temporary scheme visible in the System Settings list:
+- **ColorAuto notices every wallpaper change**, whether kdock made it or not: it watches
+  Plasma's own config file, so KDE's slideshow advancing by itself, a script talking D-Bus to
+  plasmashell or a change from System Settings all get through. What it does **not** do is
+  rebuild the scheme when that file changes without the wallpaper having changed (Plasma
+  rewrites it for plenty of other reasons): if the result would be identical to what is
+  already up, it touches nothing. It also leaves **one** temporary scheme visible in the System Settings list:
   it's the one currently applied, and it can't be avoided because `plasma-apply-colorscheme`
   only knows how to apply schemes that exist as a file.
 - **Translations**: the dock, its settings panel, and the `kdock-previews` and

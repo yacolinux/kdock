@@ -211,16 +211,24 @@ AutoColorScheme::AutoColorScheme(Theme *theme, AppearanceControl *appearance,
     connect(&m_wallpaperWatch, &QFileSystemWatcher::fileChanged, this,
             [this](const QString &) {
                 armWallpaperWatch();
-                refresh();
+                if (appletsrcChanged())
+                    refresh();
             });
     connect(&m_wallpaperWatch, &QFileSystemWatcher::directoryChanged, this,
             [this](const QString &) {
                 // The file can be missing for an instant mid-rename; re-arming
-                // from the directory is what picks the new inode back up.
+                // from the directory is what picks the new inode back up. But a
+                // directory event says nothing about *which* file moved, and
+                // this directory is ~/.config: our own applySystem() lands a
+                // kdeglobals in it through plasma-apply-colorscheme, so
+                // refreshing on the event itself is a loop with no way out (see
+                // appletsrcChanged()).
                 armWallpaperWatch();
-                refresh();
+                if (appletsrcChanged())
+                    refresh();
             });
     armWallpaperWatch();
+    appletsrcChanged(); // seed the stamp; the first real change is the trigger
 
     // A previous run may have died with a generated scheme on the desktop. The
     // flag is persisted precisely so that this is recoverable: put the user's
@@ -244,6 +252,18 @@ void AutoColorScheme::armWallpaperWatch()
     const QString dir = QFileInfo(path).absolutePath();
     if (!m_wallpaperWatch.directories().contains(dir) && QFile::exists(dir))
         m_wallpaperWatch.addPath(dir);
+}
+
+bool AutoColorScheme::appletsrcChanged()
+{
+    const QFileInfo fi(appletsrcPath());
+    const QDateTime time = fi.lastModified();
+    const qint64 size = fi.exists() ? fi.size() : -1;
+    if (time == m_appletsrcTime && size == m_appletsrcSize)
+        return false;
+    m_appletsrcTime = time;
+    m_appletsrcSize = size;
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -450,6 +470,11 @@ void AutoColorScheme::restoreDefaults()
     removeGeneratedFiles();
     setApplied(false);
     setManual(false);
+    // The desktop no longer has our scheme on it, so "the same wallpapers are
+    // already applied" stops being true: forget it, or switching the feature
+    // back on would skip the apply and leave the user's default up.
+    m_lastAppliedImages.clear();
+    m_lastAppliedKey.clear();
 }
 
 void AutoColorScheme::clearDockColors(const QSet<QString> &except)
@@ -591,6 +616,25 @@ void AutoColorScheme::applyPalettes(const QHash<QString, QString> &imageByScreen
     if (imageByScreen.isEmpty())
         return;
 
+    // Same wallpapers, same settings: whatever is on the desktop right now is
+    // already the answer, so an automatic run has nothing to do. Applying anyway
+    // is not free and not harmless — it writes the other .colors, runs
+    // plasma-apply-colorscheme (which repaints every KDE app and rewrites
+    // kdeglobals) and bumps Theme's revision, i.e. every icon of every dock is
+    // re-resolved. A trigger that fires without the wallpaper having changed is
+    // the normal case, not the exception: appletsrc is rewritten whenever an
+    // applet moves, and before appletsrcChanged() existed our own kdeglobals
+    // write came back around as one. A manual run is exempt — "generate again"
+    // is exactly the request to re-do the same image (with the next variant).
+    if (!manualRun && imageByScreen == m_lastAppliedImages
+        && optionsKey() == m_lastAppliedKey) {
+        // Cheap bookkeeping still applies: the scheme up is the one this run
+        // would have produced, so the automatic path owns it again.
+        if (manual())
+            setManual(false);
+        return;
+    }
+
     // A new wallpaper starts the variant cycle over. Judged on the monitor that
     // drives the system scheme, because that is the one whose color the user is
     // looking at when they press the button again. Only an automatic run
@@ -652,6 +696,11 @@ void AutoColorScheme::applyPalettes(const QHash<QString, QString> &imageByScreen
         setManual(true);
     else if (manual())
         setManual(false);
+
+    // Recorded last, and after the variant bookkeeping above, so the key stores
+    // the state this apply actually ran with.
+    m_lastAppliedImages = imageByScreen;
+    m_lastAppliedKey = optionsKey();
 
     emit changed();
 }
@@ -804,6 +853,24 @@ WallpaperColors::Options AutoColorScheme::options()
     opt.selectionDark = selectionDark();
     opt.variant = variant();
     return opt;
+}
+
+QString AutoColorScheme::optionsKey()
+{
+    const WallpaperColors::Options opt = options();
+    return QStringLiteral("%1|%2|%3|%4|%5|%6|%7|%8|%9|%10|%11")
+        .arg(opt.lightness)
+        .arg(opt.selectionMode)
+        .arg(opt.selectionLight.name(), opt.selectionDark.name())
+        .arg(opt.variant)
+        .arg(systemScheme() ? 1 : 0)
+        .arg(colorDocks() ? 1 : 0)
+        .arg(systemMonitor())
+        .arg(iconsetEnabled(false) ? iconsetValue(false) : QString())
+        .arg(iconsetEnabled(true) ? iconsetValue(true) : QString())
+        // The saved default is what an unchecked iconset falls back to, so it
+        // belongs in the key too.
+        .arg(defaultIconTheme());
 }
 
 QString AutoColorScheme::schemeFilePath(const QString &id)
