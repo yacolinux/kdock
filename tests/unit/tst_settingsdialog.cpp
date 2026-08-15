@@ -28,6 +28,7 @@
 #include "settingsdialog.h"
 #include "theme.h"
 
+#include <QComboBox>
 #include <QListWidget>
 #include <QSettings>
 #include <QTabWidget>
@@ -36,9 +37,9 @@
 namespace {
 constexpr int kOtherDesktop = 2; // cualquiera que no sea el actual (0)
 
-QString seedDock(const QString &screen)
+QString seedDock(const QString &screen, int slot = 0)
 {
-    const QString id = DockConfig::makeDockId(screen, 0);
+    const QString id = DockConfig::makeDockId(screen, slot);
     DockConfig::addKnownDock(id);
     DockConfig::setDockEnabled(id, true);
     {
@@ -55,6 +56,34 @@ class TestSettingsDialog : public QObject
 
 private:
     DockManager::Shared m_shared;
+
+    // El combo de "Dock N" (el slot) de la barra de arriba, identificado por su
+    // forma: tiene exactamente kMaxDocksPerScreen entradas con data 0..N-1.
+    static QComboBox *slotSelectorOf(SettingsDialog *dlg)
+    {
+        for (QComboBox *c : dlg->findChildren<QComboBox *>()) {
+            if (c->count() != DockConfig::kMaxDocksPerScreen)
+                continue;
+            if (c->itemData(0).toInt() == 0 && c->itemData(1).toInt() == 1)
+                return c;
+        }
+        return nullptr;
+    }
+
+    // El combo de monitor de la barra de arriba: es el único que lista los
+    // monitores, así que se lo identifica por sus datos y no por posición.
+    // Buscarlo por índice agarraría cualquiera de los combos de las solapas.
+    static QComboBox *monitorSelectorOf(SettingsDialog *dlg)
+    {
+        for (QComboBox *c : dlg->findChildren<QComboBox *>()) {
+            QStringList data;
+            for (int i = 0; i < c->count(); ++i)
+                data << c->itemData(i).toString();
+            if (data.contains(QStringLiteral("VIRT-1")) && data.contains(QStringLiteral("VIRT-9")))
+                return c;
+        }
+        return nullptr;
+    }
 
     // La lista de anclados, buscada por la solapa que la contiene y no por
     // índice: findChildren recorre el árbol de padres, no el orden en que se
@@ -159,6 +188,51 @@ private slots:
         QVERIFY(pinned);
         cfg->setPinned({QStringLiteral("firefox.desktop")});
         QCOMPARE(pinned->count(), 1);
+    }
+
+    // Borrar el dock que el diálogo está editando. removeDock() hace delete de
+    // su DockConfig, y el diálogo apunta ahí: sin la defensa, la próxima vez que
+    // se lo toca lee un objeto liberado. La cura es que salte a otro dock.
+    void removingTheEditedDockMovesTheDialogOff()
+    {
+        // Dos docks en el MISMO monitor: así se ve además que el salto prefiere
+        // un vecino de pantalla en vez de teletransportar el diálogo a otra.
+        const QString first = seedDock(QStringLiteral("VIRT-1"), 0);
+        const QString second = seedDock(QStringLiteral("VIRT-1"), 1);
+
+        Theme theme;
+        DesktopEntryIndex apps;
+        m_shared.theme = &theme;
+        m_shared.apps = &apps;
+        DockManager manager(m_shared);
+
+        SettingsDialog dlg(manager.configFor(first), &apps, nullptr, nullptr, &manager, &theme);
+
+        QComboBox *monitor = monitorSelectorOf(&dlg);
+        QComboBox *slot = slotSelectorOf(&dlg);
+        QVERIFY2(monitor && slot, "no se encontraron los combos de la barra");
+        QCOMPARE(monitor->currentData().toString(), QStringLiteral("VIRT-1"));
+        QCOMPARE(slot->currentData().toInt(), 0);
+
+        manager.removeDock(first);
+        // La defensa es diferida a propósito (llega desde adentro del handler
+        // del botón que borró el dock), así que hay que dejar correr el loop.
+        QTest::qWait(50);
+
+        // La aserción va sobre lo OBSERVABLE —a qué dock quedó apuntando el
+        // diálogo— y no sobre "no se cayó": leer un DockConfig liberado no
+        // segfaultea de forma confiable, así que un test escrito de esa manera
+        // pasa igual sin el arreglo (comprobado: el control positivo recién
+        // falló cuando la aserción pasó a mirar los combos).
+        monitor = monitorSelectorOf(&dlg);
+        slot = slotSelectorOf(&dlg);
+        QVERIFY(monitor && slot);
+        QCOMPARE(monitor->currentData().toString(), QStringLiteral("VIRT-1"));
+        QCOMPARE(slot->currentData().toInt(), 1); // el vecino, no el borrado
+
+        // Y sigue respondiendo: el config del que quedó se toca sin nada podrido.
+        manager.configFor(second)->setPinned({QStringLiteral("firefox.desktop")});
+        QCOMPARE(manager.configFor(second)->pinned().size(), 1);
     }
 
     // Varios saltos seguidos: cada uno deja atrás su propia camada de solapas,

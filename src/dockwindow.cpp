@@ -535,6 +535,26 @@ void DockWindow::setPrimary(bool primary)
     rootContext()->setContextProperty(QStringLiteral("dockIsPrimary"), primary);
 }
 
+DockWindow::~DockWindow()
+{
+    // The dialog has no parent, so without this it outlives the dock that owns
+    // it: it stays on screen editing a dock that is gone, it leaks (one more per
+    // round trip if the dock is one of the per-virtual-desktop copies, which are
+    // destroyed and rebuilt on every switch), and worse, removeDock() deletes
+    // the DockConfig it still points at.
+    //
+    // hide() + deleteLater() and not delete: we are routinely destroyed from
+    // inside a handler of the dialog itself (its Docks tab is one of the two
+    // places that remove a dock), so the object cannot go away under its own
+    // stack frame. The hide() is what stops the user from touching it in the
+    // meantime.
+    if (m_dialog) {
+        m_dialog->hide();
+        m_dialog->deleteLater();
+        m_dialog = nullptr;
+    }
+}
+
 void DockWindow::openSettings()
 {
     if (!m_dialog)

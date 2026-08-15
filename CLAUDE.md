@@ -1036,6 +1036,37 @@ Lo que esos dos no pueden probar, y cómo se probó:
 
 ## Trampas que muerden
 
+- **Un `QDialog` sin parent no lo borra nadie, y el diálogo de kdock colgaba de un `QQuickView`**
+  (2026-08-15, encontrado revisando el crash de arriba). `DockWindow::openSettings()` hace
+  `new SettingsDialog(...)` **sin parent** —no podría tenerlo: un `QQuickView` es un `QWindow`, no
+  un `QWidget`— y `DockWindow` no tenía destructor. O sea que el diálogo **sobrevivía al dock que
+  lo abrió**: `DockManager::teardownInstance()` hace `delete inst.window` y el diálogo se quedaba
+  en pantalla, editando un dock que ya no existe. Con los docks por escritorio virtual eso es una
+  fuga **por cada ida y vuelta** (se destruyen y se rehacen en cada cambio), y cuando el dock
+  vuelve, `openSettings()` construye **otro**.
+  Y la mitad peligrosa: **`DockManager::removeDock()` hace `delete cfg` del `DockConfig`**, que es
+  justo lo que el diálogo guarda en `m_config`. Borrar un dock desde la solapa *Docks* —o desde el
+  clic derecho de cualquier dock— dejaba al diálogo con un puntero muerto, y el crash llegaba en
+  la **siguiente** interacción, no ahí (ni `reloadDocksList()` ni `updateMonitorsTabButtons()`
+  tocan `m_config`, así que el handler que lo borra termina limpio).
+  Se arregla por las dos puntas:
+  - `~DockWindow()` baja el diálogo, con **`hide()` + `deleteLater()`, nunca `delete`**: el dock
+    se destruye rutinariamente desde adentro de un handler del propio diálogo (su solapa *Docks*
+    es uno de los dos lugares que borran un dock), así que el objeto no puede desaparecer bajo su
+    propio marco de pila. El `hide()` es lo que impide tocarlo en el intervalo.
+  - `removeDock()` ahora emite `dockListChanged()` (antes solo lo hacía el move/copy) y
+    `SettingsDialog` se defiende: si su `m_dockId` ya no está en `configuredDocks()`, salta a otro
+    dock —**prefiriendo uno del mismo monitor**, que es donde el usuario estaba— o cierra si no
+    queda ninguno. Esa conexión va **diferida** (`QTimer::singleShot(0, …)`) y con `this` de
+    contexto: `this` acá **sí** corresponde, porque es del diálogo entero y no de una solapa, y el
+    diferido es porque la señal llega desde adentro del handler del botón que borró el dock —
+    saltar de dock rehace las solapas y borraría ese botón mientras su lambda todavía corre.
+  **La lección del test, que costó una corrida**: la primera versión afirmaba "no se cayó" y
+  **pasaba igual con el arreglo desactivado**, porque leer un `DockConfig` liberado no segfaultea
+  de forma confiable. Una aserción sobre un bug de memoria tiene que mirar algo **observable** —
+  acá, a qué dock quedan apuntando los combos de la barra— o el control positivo no falla y el
+  test no prueba nada.
+
 - **Una conexión de una solapa del diálogo NO puede tener a `this` de contexto** (2026-08-15,
   reportado como *"quise anclar una app en el 2do monitor y se cerró kdock"* — SIGSEGV con
   coredump). `SettingsDialog::buildTabs()` **borra todas las solapas** (`delete w`) y las rehace,

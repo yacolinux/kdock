@@ -228,6 +228,21 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
     updateEnabledCheck();
     reloadDockHeader();
 
+    // The dock being edited can be removed from under us: by this dialog's own
+    // Docks tab, or by the right-click menu of any dock. removeDock() deletes
+    // its DockConfig, so m_config would dangle from then on.
+    //
+    // `this` is the right context here, unlike everything inside a create*Tab():
+    // this connection belongs to the whole dialog, not to a tab that buildTabs()
+    // will delete. Deferred, because it usually arrives from inside the handler
+    // of the very button that removed the dock, and switching docks rebuilds the
+    // tabs — deleting that button while its own lambda is still running.
+    if (m_manager) {
+        connect(m_manager, &DockManager::dockListChanged, this, [this] {
+            QTimer::singleShot(0, this, [this] { ensureEditedDockExists(); });
+        });
+    }
+
     // Keep the dialog within the screen so the bottom buttons are always visible
     // (tabs scroll internally for overflow).
     // The width no longer follows the tab bar: since the tabs moved to a column
@@ -431,6 +446,33 @@ void SettingsDialog::selectDock(const QString &dockId)
     buildTabs();
     updateEnabledCheck();
     reloadDockHeader();
+}
+
+void SettingsDialog::ensureEditedDockExists()
+{
+    if (!m_manager || m_dockId.isEmpty())
+        return;
+    const QStringList docks = m_manager->configuredDocks();
+    if (docks.contains(m_dockId))
+        return;
+    // The dock we were editing is gone and its DockConfig with it, so m_config
+    // is already dangling: nothing below may read it. selectDock() only
+    // overwrites the pointer, and close() touches no config at all.
+    if (docks.isEmpty()) {
+        close();
+        return;
+    }
+    // Another dock on the same monitor first: that is the one the user was most
+    // likely working with, and it leaves the monitor selector where it was
+    // instead of teleporting the dialog to some other screen.
+    const QString screen = DockConfig::screenOfDockId(m_dockId);
+    for (const QString &id : docks) {
+        if (DockConfig::screenOfDockId(id) == screen) {
+            selectDock(id);
+            return;
+        }
+    }
+    selectDock(docks.first());
 }
 
 void SettingsDialog::updateEnabledCheck()

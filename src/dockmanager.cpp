@@ -585,6 +585,11 @@ void DockManager::removeDock(const QString &dockId)
     if (DockConfig *cfg = m_configs.take(dockId))
         delete cfg;
     sync();
+    // The dock list just lost an entry, same as it gains one on move/copy. A
+    // settings dialog that was editing *this* dock is now holding a deleted
+    // DockConfig, and this is how it finds out (SettingsDialog watches for its
+    // own dockId disappearing).
+    emit dockListChanged();
 }
 
 DockConfig *DockManager::configFor(const QString &dockId)

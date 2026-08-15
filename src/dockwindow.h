@@ -70,6 +70,10 @@ public:
                VirtualDesktops *desktops = nullptr,
                WeatherControl *weather = nullptr,
                AutoColorScheme *autoColors = nullptr);
+    // Takes the settings dialog down with the dock. The dialog is a top-level
+    // QDialog with no parent (a QQuickView is a QWindow, so it cannot be one),
+    // which means nothing else would ever delete it.
+    ~DockWindow() override;
 
     // Called from QML when the autohide animation finishes: shrinks the
     // input region to a thin strip on the screen edge so clicks pass

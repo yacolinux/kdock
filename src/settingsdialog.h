@@ -209,6 +209,9 @@ private:
     QList<QColor> tabPalette(int count) const;
     // Switch the dialog to edit another dock's config.
     void selectDock(const QString &dockId);
+    // Jumps off a dock that no longer exists (removeDock() deletes its
+    // DockConfig, which m_config points at), or closes if none is left.
+    void ensureEditedDockExists();
     // Recompute the current dockId from the monitor + slot combos and select it.
     void selectFromCombos();
     void updateEnabledCheck();
