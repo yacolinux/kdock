@@ -596,6 +596,49 @@ que saber para tocar código:
 - El combo guarda **etiquetas** de monitor, no los nombres de objeto de PowerDevil (volátiles);
   el primer ítem es "(automático)" con id vacío, y `internal` clava la rueda al backlight.
 
+### Ciclo de vida del diálogo de Configuración (`SettingsDialog`, 2026-08-15)
+
+Un `SettingsDialog` **no está atado a un dock**: edita cualquiera, y el selector Monitor/Dock/
+Escritorio de su barra superior salta de uno a otro. Eso hace que dos objetos con vidas muy
+distintas se crucen adentro del mismo diálogo, y las dos puntas de ese cruce ya causaron un
+SIGSEGV cada una. Las reglas salieron de ahí.
+
+- **`buildTabs()` destruye TODAS las solapas** (`delete w` sobre cada página del `QTabWidget`) y
+  las reconstruye. Lo llama `selectDock()`, o sea cada cambio de dock: los combos de la barra,
+  `showMonitorsTab()` (menú *Dock → Nombre*), y crear/mover/copiar un dock.
+- **El `DockConfig` que edita es el del dock vivo**, y sobrevive a cualquier cantidad de
+  reconstrucciones. De ahí la regla dura: **toda conexión hecha dentro de un `create*Tab()` lleva
+  `tab` de contexto, nunca `this`**. Con `this` la conexión sobrevive a la solapa que la registró
+  y su lambda queda apuntando a botones liberados. Es lo que crasheaba al anclar una app: la
+  solapa Diseño escuchaba `pinnedChanged` para grisar los botones de separadores, así que
+  cualquier clic de anclar/desanclar en el dock entraba a un lambda huérfano.
+  - Si el connect usaba un puntero a método miembro, se envuelve en lambda para que el receptor
+    pueda ser el tab: `connect(m_config, sig, tab, [this]{ reloadPinnedList(); })`.
+  - **Y entonces un `disconnect(…, this, &slot)` de reentrada deja de matchear**, sin fallar ni
+    avisar. `savePinnedList()`/`saveFavoritesList()` se protegen de su propia escritura con las
+    banderas `m_writingPinned`/`m_writingFavorites`, no con disconnect.
+  - Un connect **dentro de `buildTabs()`** es el caso simétrico: acumula una conexión más por
+    cada cambio de dock. El de `dockListChanged` vive dentro de `createMonitorsTab()`.
+- **La única conexión que sí lleva `this`** es la que pertenece al diálogo entero y no a una
+  solapa: la de supervivencia del ctor (abajo).
+- **El diálogo no tiene parent y lo destruye `~DockWindow()`.** No podría tenerlo — un
+  `QQuickView` es un `QWindow`, no un `QWidget` — así que sin destructor no lo borraba nadie:
+  quedaba en pantalla editando un dock destruido, y era una fuga por cada ida y vuelta de los
+  docks por escritorio virtual. Va con **`hide()` + `deleteLater()`, nunca `delete`**: el dock se
+  destruye rutinariamente desde adentro de un handler del propio diálogo (su solapa *Docks* borra
+  docks), así que el objeto no puede desaparecer bajo su propio marco de pila.
+- **El dock editado puede desaparecer, y `removeDock()` hace `delete` de su `DockConfig`.**
+  `SettingsDialog::ensureEditedDockExists()` se engancha a `DockManager::dockListChanged` (que
+  `removeDock()` emite desde 2026-08-15; antes solo lo hacía el move/copy) y, si su `m_dockId` ya
+  no está en `configuredDocks()`, salta a otro dock —**prefiriendo uno del mismo monitor**— o
+  cierra si no queda ninguno. Va **diferida** (`QTimer::singleShot(0, …)`): la señal llega desde
+  adentro del handler del botón que borró el dock, y saltar de dock rehace las solapas, o sea que
+  borraría ese botón mientras su lambda todavía corre.
+- Lo cubre `tests/unit/tst_settingsdialog.cpp` (tier `unit`, headless: `sandbox.h` ya construye
+  una `QApplication`). Las aserciones miran **estado observable** —a qué dock apuntan los combos
+  de la barra, qué hay en las listas— y no "no se cayó": leer memoria liberada no segfaultea de
+  forma confiable, y una versión escrita así pasaba igual con el arreglo desactivado.
+
 ### Solapas coloreadas de Configuración (`src/coloredtabbar.cpp` + `SettingsDialog::tabPalette()`)
 - El diálogo tiene ~10 solapas y todas se veían iguales. `ColoredTabBar` (subclase de `QTabBar`) pinta un fondo distinto por solapa; `ColoredTabWidget` existe solo porque `QTabWidget::setTabBar()` es protegido.
 - `paintEvent()` rellena `tabRect(i)` con `mix(palette().window(), tint, f)` — `f` = 0.80 seleccionada / 0.45 hover / 0.20 resto — y después dibuja **solo** `CE_TabBarTabLabel`: pintar `CE_TabBarTabShape` taparía el relleno. El color del texto sale por luminancia del relleno ya mezclado, así que anda en esquema claro y oscuro sin tocar nada.
@@ -666,7 +709,7 @@ tres diálogos vive.
 - `SettingsDialog` takes a `DockManager*`: a monitor selector + a **Dock (1..3)** slot selector + "Show dock here" checkbox at the top; changing either combo recomputes the dockId (`selectFromCombos` → `selectDock`) and calls `buildTabs()` to rebind every tab to that dock's config. The legacy per-dock "Screen (Automatic)" combo is hidden when a manager is present. It also takes a `Theme*` (for the Icon-theme combo). **Each tab is wrapped in a `QScrollArea`** (in `buildTabs()`) so the tall General/Widgets tabs scroll internally, and the dialog's initial height is clamped to the screen (`resize(500, min(560, avail-80))`) so the bottom Close/Quit buttons are always visible on small screens.
 - **Alias de dock (`DockConfig::alias`)**: nombre amigable opcional por dock, persistido como `alias=` en el `.conf` del dock. Vacío = el nombre por defecto `"<screen> — Dock <n>"`. `SettingsDialog::dockLabel()` (static, lee el alias con un `QSettings` a mano para no crear `DockConfig`s) es la fuente única de nombres: desde el 2026-08-06 el alias se **suma** al nombre automático (`"<screen> — Dock <n>: <alias>"`) en vez de reemplazarlo — renombrar borraba el monitor de la fila, que es justo lo que distingue un dock de otro; como el monitor sale del `dockId`, los docks ya renombrados lo recuperan solos, sin migración: lo usan la lista de **Docks configurados** y la nota de la bandeja del sistema. Se edita con **doble clic en la fila** de la lista (vacío quita la clave). El alias **no** se expone a QML — el dock no dibuja su propio nombre, solo el diálogo y la nota del systray. `copySettingsTo()` (ver abajo) **omite** `alias` a propósito: un dock copiado a otro monitor empieza sin nombre y el original conserva el suyo.
 - **Vista previa / copia entre monitores** (`previewDockOnScreen`): la copia NO es un `QFile::copy` del `.conf` — eso arrastraba el `screenName` del origen y, peor, un dock recién habilitado puede no haber volcado todas sus keys a disco (el archivo apenas tiene las que se escribieron explícitamente), así que el preview salía con defaults (bug 2026-08-04: "solo muestra un panel estándar en el borde de abajo"). Ahora `DockConfig::copySettingsTo(dst)` copia las **settings en memoria** (origen → destino) vía `QSettings::allKeys()`, rebinda `screenName` al monitor destino, omite `alias`, y devuelve false si no se pudo escribir (el preview entonces avisa error en vez de fallar en silencio). **El slot destino siempre está libre** (lo garantiza `firstFreeSlotWithPreviews`: ni live ni known ni preview pendiente), así que **cualquier archivo preexistente en ese slot es un remanente de un dock borrado/deshabilitado y se SOBRESCRIBE** — reutilizarlo era el bug 2026-08-04b ("solo funciona eDP-1→DP-5, el resto muestra el dock por default"): los slots libres de DP-7 y eDP-1 tenían stubs viejos (`kdock-DP-7.conf` 41 bytes, `kdock-eDP-1-2.conf` 27 bytes) que se mostraban en vez del panel fuente. El remanente se borra al cancelar el preview (siempre se marca como creado).
-- **Borrar de la lista (solapa Docks)**: ahora borra de verdad. `DockManager::removeDock()` hace `destroyInstance` (el `DockWindow` apunta al `DockConfig` cacheado), descarta previews cuya fuente es ese dock, lo quita de `knownDocks`/`enabledDocks`, **borra el archivo `.conf`** y suelta el config cacheado. Re-habilitar el mismo monitor+slot arranca de cero, no "resucita" la config del dock borrado. La confirmación avisa que el archivo se elimina.
+- **Borrar de la lista (solapa Docks)**: ahora borra de verdad. `DockManager::removeDock()` hace `destroyInstance` (el `DockWindow` apunta al `DockConfig` cacheado), descarta previews cuya fuente es ese dock, lo quita de `knownDocks`/`enabledDocks`, **borra el archivo `.conf`** y suelta el config cacheado. Re-habilitar el mismo monitor+slot arranca de cero, no "resucita" la config del dock borrado. La confirmación avisa que el archivo se elimina. **Emite `dockListChanged()` al terminar** (2026-08-15): ese `delete` del config cacheado es lo que dejaba a un `SettingsDialog` abierto con un puntero muerto, y la señal es cómo se entera — ver *Ciclo de vida del diálogo de Configuración*.
 - **Identificar qué dock se está editando (2026-08-06)**: la barra de arriba del diálogo tiene una **segunda fila** — un combo *Escritorio:* y el *Nombre:* del dock (el `dockLabel()`, o sea el alias) en negrita. El combo lista **una entrada por conjunto de escritorios distinto entre los docks de ese monitor** (siempre incluye *Todos (dock base)* y el conjunto del dock actual), y elegir una **salta al primer dock de ese grupo** — no reasigna nada: las asignaciones se editan en la solapa *Docks*. Va por `activated` y no por `currentIndexChanged`, porque `reloadDockHeader()` reconstruye el combo en cada cambio de dock y eso volvería a cambiar de dock. Tres detalles: `selectDock()` ahora **sincroniza también los combos de monitor y slot** (antes solo los leía), agregando una entrada *(desconectado)* si el monitor del dock no está conectado; `showMonitorsTab(dockId)` **empezó a llamar a `selectDock(dockId)`**, así que el diálogo entero (no solo la fila resaltada) queda sobre el dock que el usuario señaló; y `reloadDocksList()` re-corre `reloadDockHeader()`, porque el alias y los escritorios se editan ahí y los dos se ven en la barra.
 - **Filtros de "desconectado" en la solapa Docks (2026-08-06)**: un casillero bajo cada título — *Ocultar los docks de monitores desconectados* y *Ocultar monitores desconectados* — los dos **marcados por defecto**, persistidos en la sección `[ui]` del `kdock.conf` compartido (`SettingsDialog::hideOfflinePref()`; no van en `DockConfig` porque son del diálogo, no de un dock). Dos excepciones que hay que mantener si se toca el filtro: la lista de docks **nunca esconde el dock que se está editando** (ni el seleccionado en la solapa), y la de monitores **nunca esconde el monitor propio del dock**, cuya fila es el casillero "mostrar el dock acá".
 - **Crear dock vacío** (`DockManager::createEmptyDock`, menú *Dock* y menú de sección del clic derecho): busca el primer slot libre del **mismo monitor** (`firstFreeSlotWithPreviews`, o sea contando también los previews pendientes), **borra el `.conf` que haya quedado en ese slot** —"vacío" es los defaults, no la config del dock que se borró antes— y llama a `setDockEnabled(id, true)`, que es lo que le siembra un borde libre y lo pone en pantalla. **Y lo ata al escritorio virtual actual, pero solo si hace falta** (2026-08-06): un dock nuevo es un dock *base*, y en un monitor cuyo escritorio actual ya tiene docks propios eso significa **invisible** (`wantedDocks`: ganan los del escritorio), o sea que el comando parece haber fallado; si en cambio el monitor no tiene ningún dock atado a este escritorio, el base ya se ve y atarlo **escondería** los docks base del monitor, así que se deja base. `DockWindow::createEmptyDock()` después abre el diálogo con `showMonitorsTab(nuevo)`: el dock nace sin nombre y en un borde cualquiera, así que lo primero que hay que hacer es nombrarlo/moverlo.
