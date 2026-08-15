@@ -289,6 +289,13 @@ private:
     QListWidget *m_pinnedList;
     QListWidget *m_favoritesList = nullptr;
     QListWidget *m_layoutList;
+    // Guards against rebuilding a list widget from our own write to config.
+    // These used to be a disconnect()/connect() pair around the setter, which
+    // stopped working once the connections moved off `this` onto the tab widget
+    // (buildTabs() deletes the tab, so binding them to `this` outlived it): a
+    // disconnect() naming `this` as the receiver no longer matches them.
+    bool m_writingPinned = false;
+    bool m_writingFavorites = false;
     QListWidget *m_appSepList = nullptr;
     // Which apps-block separator (1, 2 or 0 for none) the second Layout list
     // has selected. Every edit rebuilds that list, and the row a separator sits

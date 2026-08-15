@@ -48,8 +48,15 @@ Todo lo que arranca un binario pasa por `lib/sandbox.sh`, que da un `XDG_DATA_HO
 
 `tst_dockgeometry` (el rectángulo del dock), `tst_dockconfig` (migraciones, orden de
 secciones, grosor), `tst_dockmanager` (mover/copiar dock, bandeja), `tst_desktopentry` (los
-`app_id` deformados de Chromium/Edge), `tst_translations` (el merge del catálogo) y
+`app_id` deformados de Chromium/Edge), `tst_translations` (el merge del catálogo),
+`tst_settingsdialog` (**ninguna conexión de una solapa sobrevive al cambio de dock**) y
 `tst_qmlload` (**el QML del qrc compila con el Qt con el que se linkeó**).
+
+`tst_settingsdialog` congela un crash real: `buildTabs()` borra las solapas y las rehace en
+cada cambio de dock, pero el `DockConfig` es el del dock vivo y sobrevive, así que una
+conexión con `this` de contexto quedaba llamando `setEnabled()` sobre botones liberados —
+anclar una app desde el dock cerraba kdock (ver *Trampas que muerden* en `CLAUDE.md`). Es un
+test de widgets y corre igual headless, porque `sandbox.h` ya construye una `QApplication`.
 
 El último es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira
 los archivos del árbol, no lo que quedó *dentro* del binario, y el smoke necesita Xvfb y

@@ -335,15 +335,6 @@ void SettingsDialog::buildTabs()
     }
     applyTabColors();
 
-    // A dock moved via the context menu (Dock → Mover Sig. Monitor) changes the
-    // enabled/known dock sets out from under the dialog; refresh the Docks tab
-    // so its lists match reality instead of going stale.
-    if (m_manager) {
-        connect(m_manager, &DockManager::dockListChanged, this, [this] {
-            reloadDocksList();
-            reloadMonitorsForSelectedDock();
-        });
-    }
 }
 
 void SettingsDialog::applyTabColors()
@@ -554,7 +545,9 @@ QWidget *SettingsDialog::createGeneralTab()
                                 "solapa Diseño, en su lugar."));
     connect(showAppIcons, &QCheckBox::toggled, m_config, &DockConfig::setShowAppIcons);
     // The Layout tab marks the apps row as hidden, so it has to follow.
-    connect(m_config, &DockConfig::showAppIconsChanged, this, [this] {
+    // Bound to `tab`: buildTabs() deletes it on every dock switch, and a
+    // connection left on `this` would pile up one more copy per switch.
+    connect(m_config, &DockConfig::showAppIconsChanged, tab, [this] {
         if (m_layoutList)
             reloadLayoutList();
     });
@@ -591,11 +584,12 @@ QWidget *SettingsDialog::createGeneralTab()
         }
         m_alignmentNote->setVisible(disabled);
     };
-    connect(m_config, &DockConfig::panelModeChanged, this,
+    // Bound to `tab`, so the connections die when buildTabs() deletes it.
+    connect(m_config, &DockConfig::panelModeChanged, tab,
             [updateAlignmentEnabled]() { updateAlignmentEnabled(); });
-    connect(m_config, &DockConfig::widgetOrderChanged, this,
+    connect(m_config, &DockConfig::widgetOrderChanged, tab,
             [updateAlignmentEnabled]() { updateAlignmentEnabled(); });
-    connect(m_config, &DockConfig::dockLengthChanged, this,
+    connect(m_config, &DockConfig::dockLengthChanged, tab,
             [updateAlignmentEnabled]() { updateAlignmentEnabled(); });
     updateAlignmentEnabled();
 
@@ -1901,7 +1895,14 @@ QWidget *SettingsDialog::createWidgetsTab()
         }
     });
 
-    connect(m_config, &DockConfig::pinnedChanged, this, &SettingsDialog::reloadPinnedList);
+    // Bound to `tab`, so the connection dies when buildTabs() deletes it. The
+    // lambda (rather than the slot pointer) is what lets the receiver be the tab
+    // while the work still runs on the dialog; m_writingPinned is what keeps our
+    // own setPinned() from rebuilding the list under the user's hands.
+    connect(m_config, &DockConfig::pinnedChanged, tab, [this] {
+        if (!m_writingPinned)
+            reloadPinnedList();
+    });
     reloadPinnedList();
 
     // One panel per selectable-apps widget. Rebuilt in place, because the set of
@@ -2434,7 +2435,11 @@ QWidget *SettingsDialog::createMenuTab()
         saveFavoritesList();
     });
 
-    connect(m_config, &DockConfig::menuFavoritesChanged, this, &SettingsDialog::reloadFavoritesList);
+    // Bound to `tab`, same as the pinned list above.
+    connect(m_config, &DockConfig::menuFavoritesChanged, tab, [this] {
+        if (!m_writingFavorites)
+            reloadFavoritesList();
+    });
     reloadFavoritesList();
 
     return tab;
@@ -4043,14 +4048,19 @@ QWidget *SettingsDialog::createLayoutTab()
         }
     });
 
-    connect(m_config, &DockConfig::widgetOrderChanged, this, [this, updateRemove] {
+    // Bound to `tab`, so the connections die when buildTabs() deletes it. The
+    // config outlives every tab (it is the live dock's), and updateRemove holds
+    // raw pointers to this tab's buttons: on `this` the connection would survive
+    // the rebuild that switching docks does and call setEnabled() on freed
+    // widgets. That is a hard crash, and it was one (SIGSEGV, 2026-08-15).
+    connect(m_config, &DockConfig::widgetOrderChanged, tab, [this, updateRemove] {
         reloadLayoutList();
         updateRemove();
         // A separator may have come or gone with the new order, and its width
         // row lives right below this list.
         rebuildGapsGroup();
     });
-    connect(m_config, &DockConfig::widgetNamesChanged, this, [this] { reloadLayoutList(); });
+    connect(m_config, &DockConfig::widgetNamesChanged, tab, [this] { reloadLayoutList(); });
     reloadLayoutList();
     updateRemove();
 
@@ -4179,7 +4189,11 @@ QWidget *SettingsDialog::createLayoutTab()
                         &DockConfig::separator1TransparentChanged,
                         &DockConfig::separator2TransparentChanged,
                         &DockConfig::pinnedChanged}) {
-        connect(m_config, signal, this, [this, updateAppSepButtons] {
+        // Bound to `tab` for the same reason as above: updateAppSepButtons holds
+        // raw pointers to this tab's buttons, and pinnedChanged is emitted by
+        // every pin/unpin from the dock itself, i.e. long after a dock switch
+        // rebuilt the tabs. This is the exact pair that crashed.
+        connect(m_config, signal, tab, [this, updateAppSepButtons] {
             reloadAppSeparatorList();
             updateAppSepButtons();
         });
@@ -4488,8 +4502,10 @@ QWidget *SettingsDialog::createRelanzadoresTab()
         m_relanzadorAppsList->setCurrentRow(row + 1);
     });
 
-    connect(m_relanzadores, &RelanzadoresManager::itemsChanged,
-            this, &SettingsDialog::reloadRelanzadoresList);
+    // Bound to `tab`, so the connection dies when buildTabs() deletes it: the
+    // manager is shared by every dock and outlives all of them.
+    connect(m_relanzadores, &RelanzadoresManager::itemsChanged, tab,
+            [this] { reloadRelanzadoresList(); });
 
     // Per-dock visibility: the checkbox on each row toggles whether the
     // relanzador shows on the currently-edited dock (m_config). The primary
@@ -4543,9 +4559,9 @@ void SettingsDialog::savePinnedList()
         pinned.append(m_pinnedList->item(i)->data(Qt::UserRole).toString());
 
     // Avoid rebuilding the list widget from our own change
-    disconnect(m_config, &DockConfig::pinnedChanged, this, &SettingsDialog::reloadPinnedList);
+    m_writingPinned = true;
     m_config->setPinned(pinned);
-    connect(m_config, &DockConfig::pinnedChanged, this, &SettingsDialog::reloadPinnedList);
+    m_writingPinned = false;
 }
 
 void SettingsDialog::addPinnedApp()
@@ -4591,9 +4607,9 @@ void SettingsDialog::saveFavoritesList()
         favs.append(m_favoritesList->item(i)->data(Qt::UserRole).toString());
 
     // Avoid rebuilding the list widget from our own change.
-    disconnect(m_config, &DockConfig::menuFavoritesChanged, this, &SettingsDialog::reloadFavoritesList);
+    m_writingFavorites = true;
     m_config->setMenuFavorites(favs);
-    connect(m_config, &DockConfig::menuFavoritesChanged, this, &SettingsDialog::reloadFavoritesList);
+    m_writingFavorites = false;
 }
 
 void SettingsDialog::reloadRelanzadoresList()
@@ -4762,8 +4778,9 @@ QWidget *SettingsDialog::createScriptRunnersTab()
         m_scriptRunnerPath->setText(path);
     });
 
-    connect(m_scriptRunners, &ScriptRunnersManager::itemsChanged,
-            this, &SettingsDialog::reloadScriptRunnersList);
+    // Bound to `tab`, same as the Relanzadores tab above.
+    connect(m_scriptRunners, &ScriptRunnersManager::itemsChanged, tab,
+            [this] { reloadScriptRunnersList(); });
 
     // Per-dock visibility: same scheme as relanzadores (primary → hidden list,
     // others → shown list).
@@ -5993,6 +6010,19 @@ QWidget *SettingsDialog::createMonitorsTab()
         m_manager->applyPreviews(m_selectedTabDockId);
         reloadDocksList(); // the committed copies show up as new dock rows
     });
+
+    // A dock moved via the context menu (Dock → Mover Sig. Monitor) changes the
+    // enabled/known dock sets out from under the dialog; refresh this tab so its
+    // lists match reality instead of going stale.
+    // Bound to `tab` and registered here rather than in buildTabs(): the manager
+    // outlives every rebuild, so on `this` each dock switch left one more live
+    // copy of this connection behind.
+    if (m_manager) {
+        connect(m_manager, &DockManager::dockListChanged, tab, [this] {
+            reloadDocksList();
+            reloadMonitorsForSelectedDock();
+        });
+    }
 
     reloadDocksList();
     return tab;

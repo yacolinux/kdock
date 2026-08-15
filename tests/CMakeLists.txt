@@ -49,6 +49,7 @@ kdock_add_unit_test(tst_wallpapercolors)
 kdock_add_unit_test(tst_autocolorscheme)
 kdock_add_unit_test(tst_configarchive)
 kdock_add_unit_test(tst_appswidget)
+kdock_add_unit_test(tst_settingsdialog)
 
 # The fake tools have to exist before any test runs, so they are generated at
 # build time by a target every unit test depends on.
@@ -59,7 +60,7 @@ add_custom_command(
 add_custom_target(kdock_fakebin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp)
 foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations tst_brightness
           tst_qmlload tst_weather tst_wallpapercolors tst_autocolorscheme tst_configarchive
-          tst_appswidget)
+          tst_appswidget tst_settingsdialog)
     add_dependencies(${t} kdock_fakebin)
 endforeach()
 

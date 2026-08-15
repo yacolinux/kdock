@@ -1036,6 +1036,39 @@ Lo que esos dos no pueden probar, y cómo se probó:
 
 ## Trampas que muerden
 
+- **Una conexión de una solapa del diálogo NO puede tener a `this` de contexto** (2026-08-15,
+  reportado como *"quise anclar una app en el 2do monitor y se cerró kdock"* — SIGSEGV con
+  coredump). `SettingsDialog::buildTabs()` **borra todas las solapas** (`delete w`) y las rehace,
+  y lo llama `selectDock()`, o sea cada vez que se cambia de dock: el selector Monitor/Dock/
+  Escritorio de la barra de arriba, y también `showMonitorsTab()` (menú *Dock → Nombre*, *Mover/
+  Copiar Sig. Monitor*, crear un dock). Pero el `DockConfig` es el del **dock vivo** y sobrevive a
+  todo eso, así que un `connect(m_config, …, this, lambda)` **sobrevive a la solapa que lo
+  registró** — y esos lambdas capturan punteros crudos a los botones que `buildTabs()` acaba de
+  liberar. La próxima señal entra al lambda huérfano y hace `setEnabled()` sobre memoria liberada.
+  El caso real: `createLayoutTab()` escuchaba `pinnedChanged` para grisar los botones de
+  separadores del bloque de apps, o sea que **cualquier clic de anclar/desanclar en el dock**
+  —`DockModel::togglePinned()` → `setPinned()`— mataba el proceso. Se ve como "el dock se cierra
+  solo al anclar", y **reiniciar lo arregla** (el diálogo nuevo no tiene huérfanos), lo que manda
+  el diagnóstico a cualquier lado menos al diálogo, que ni siquiera hace falta que esté abierto.
+  La cura es una palabra: **el contexto va `tab`**, el `QWidget` raíz de la solapa, que es lo que
+  `buildTabs()` borra. El propio código ya lo hacía en seis lugares con el comentario *"Bound to
+  `tab`, so the connection dies when buildTabs() deletes it"*; faltaba en once.
+  Dos corolarios:
+  - **Si el connect usaba un puntero a método miembro** (`connect(m_config, sig, this,
+    &SettingsDialog::reloadPinnedList)`), el receptor tiene que seguir siendo un `QObject`
+    compatible: se envuelve en `connect(sender, sig, tab, [this]{ reloadPinnedList(); })`.
+  - **Y ojo con el `disconnect()` de reentrada.** `savePinnedList()`/`saveFavoritesList()` se
+    protegían de su propia escritura con un `disconnect(m_config, sig, this, &slot)` alrededor del
+    setter: con el receptor mudado al tab, ese `disconnect` **ya no matchea nada** y deja de
+    proteger, sin fallar ni avisar. Van con una bandera (`m_writingPinned`/`m_writingFavorites`),
+    que además es correcta cuando hay varias solapas vivas.
+  - Un connect **dentro** de `buildTabs()` es la otra cara: se acumulaba una conexión más por cada
+    cambio de dock. El de `dockListChanged` se mudó adentro de `createMonitorsTab()`.
+  Lo congela `tests/unit/tst_settingsdialog.cpp`, que arma el diálogo con dos monitores
+  inventados, salta de dock y toca el config del primero. **El control positivo es obligatorio
+  acá**: volver *un* connect a `this`, recompilar y confirmar que el test pasa de `Passed` a
+  `SEGFAULT` — sin eso no se sabe si el test prueba el bug o mira para otro lado.
+
 - **Vigilar un DIRECTORIO donde uno mismo escribe es un bucle garantizado** (2026-08-14,
   reportado como *"flickeo en la solapa Widgets del diálogo"* + el sistema pesado). `AutoColorScheme`
   vigilaba `plasma-org.kde.plasma.desktop-appletsrc` **y su directorio** —que es `~/.config`— y
