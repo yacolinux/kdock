@@ -407,6 +407,143 @@ private slots:
         QCOMPARE(dockBlock.rowCount(), 3); // dos apps + el separador
         QCOMPARE(widget.rowCount(), 2);
     }
+
+    void ungroupGivesEachWindowItsOwnIcon()
+    {
+        // El caso de la feature: el navegador (o konsole) está en la lista del
+        // widget y tiene dos ventanas. Con "ver solo anclados" —que es el
+        // default— la segunda ventana es justo la que se descartaba.
+        const QString id = freshDockId("ungroup");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetApps(token, {QStringLiteral("mine.desktop")});
+        QVERIFY(cfg.widgetOnlyPinned(token));
+        QVERIFY(!cfg.widgetUngroupWindows(token)); // apagado por defecto
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, token);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        // Agrupado: un solo ícono con las dos ventanas.
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(widget.index(0).data(DockModel::WindowCountRole).toInt(), 2);
+
+        // Y desagregando, dos íconos de una ventana cada uno, con el nombre de
+        // la app en los dos (el título de la ventana va en el tooltip).
+        cfg.setWidgetUngroupWindows(token, true);
+        QCOMPARE(widget.rowCount(), 2);
+        QCOMPARE(widget.index(0).data(DockModel::WindowCountRole).toInt(), 1);
+        QCOMPARE(widget.index(1).data(DockModel::WindowCountRole).toInt(), 1);
+        QCOMPARE(widget.index(1).data(DockModel::NameRole).toString(),
+                 widget.index(0).data(DockModel::NameRole).toString());
+    }
+
+    void ungroupIsPerWidgetAndDoesNotLeak()
+    {
+        // La bandera es de la instancia: el bloque de apps del dock y el otro
+        // widget siguen agrupando. Es lo que la hace distinta de la casilla
+        // "Agrupar ventanas" del dock.
+        const QString id = freshDockId("ungroupown");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        cfg.setPinned({QStringLiteral("mine.desktop")});
+        const QString a = cfg.insertAppsWidget(0);
+        const QString b = cfg.insertAppsWidget(1);
+        cfg.setWidgetApps(a, {QStringLiteral("mine.desktop")});
+        cfg.setWidgetApps(b, {QStringLiteral("mine.desktop")});
+        cfg.setWidgetUngroupWindows(a, true);
+
+        DockModel dockBlock(&cfg, &apps, &monitor, nullptr, QString());
+        DockModel ungrouped(&cfg, &apps, &monitor, nullptr, a);
+        DockModel grouped(&cfg, &apps, &monitor, nullptr, b);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        QCOMPARE(ungrouped.rowCount(), 2);
+        QCOMPARE(grouped.rowCount(), 1);
+        QCOMPARE(dockBlock.rowCount(), 1);
+        QVERIFY(!cfg.widgetUngroupWindows(b));
+    }
+
+    void ungroupDoesNotLetInWindowsTheWidgetWasFiltering()
+    {
+        // La exención es para las apps de SU lista: una ventana ajena sigue
+        // afuera con "ver solo anclados", y sigue afuera con los filtros.
+        const QString id = freshDockId("ungroupfilter");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = cfg.insertAppsWidget(0);
+        const QString mine = cfg.insertAppsWidget(1);
+        cfg.setWidgetApps(fixed, {QStringLiteral("ajena.desktop")});
+        cfg.setWidgetApps(mine, {QStringLiteral("mine.desktop")});
+        cfg.setWidgetUngroupWindows(mine, true);
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, mine);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("ajena.desktop"));
+        openWindow(&monitor, QStringLiteral("suelta"));
+        QCOMPARE(widget.rowCount(), 2); // las dos suyas y nada más
+
+        // Y como bloque de sobrantes: recoge lo demás, pero la que ya dibuja el
+        // otro widget sigue afuera — desagregar no abre esa puerta.
+        cfg.setWidgetOnlyPinned(mine, false);
+        cfg.setWidgetExcludeOthers(mine, true);
+        QCOMPARE(widget.rowCount(), 3); // + "suelta"
+    }
+
+    void theDockWideFlagAlreadyUngroups()
+    {
+        // Un widget solo puede desagregar de más: con la casilla del dock
+        // apagada ya no hay nada que agrupar, y prender la del widget no cambia
+        // nada (es lo que la UI dice grisándola).
+        const QString id = freshDockId("ungroupdock");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        cfg.setGroupWindows(false);
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetApps(token, {QStringLiteral("mine.desktop")});
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, token);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        QCOMPARE(widget.rowCount(), 2);
+        cfg.setWidgetUngroupWindows(token, true);
+        QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void everyIconOfAnUngroupedAppReadsAsPinned()
+    {
+        // Sin esto, el clic derecho de la ventana extra ofrece "Anclar" sobre
+        // una app que YA está en la lista: anclarla dejaba una segunda fila
+        // anclada detrás de una sola entrada, que sobrevive a su ventana como
+        // lanzador huérfano y relanza en cada clic.
+        const QString id = freshDockId("ungrouppin");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetApps(token, {QStringLiteral("mine.desktop")});
+        cfg.setWidgetUngroupWindows(token, true);
+
+        DockModel widget(&cfg, &apps, &monitor, nullptr, token);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        QCOMPARE(widget.rowCount(), 2);
+        QVERIFY(widget.index(0).data(DockModel::PinnedRole).toBool());
+        QVERIFY(widget.index(1).data(DockModel::PinnedRole).toBool());
+
+        // Desanclar desde la ventana extra saca la app de la lista, y como las
+        // dos filas tienen ventana ninguna desaparece.
+        widget.togglePinned(1);
+        QCOMPARE(cfg.widgetApps(token), QStringList());
+        QCOMPARE(widget.rowCount(), 2);
+        QVERIFY(!widget.index(0).data(DockModel::PinnedRole).toBool());
+        QVERIFY(!widget.index(1).data(DockModel::PinnedRole).toBool());
+    }
 };
 
 KDOCK_TEST_MAIN(TestAppsWidget)

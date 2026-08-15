@@ -659,6 +659,7 @@ Off: the separator expands like a dynamic one and pushes the sections apart. On:
 Office = 办公
 on battery = 使用电池
 On: the widget draws exactly the apps below. Off: it also draws every open window, like "Show applications". = On: the widget draws exactly the apps below. Off: it also draws every open window, like "Show applications".
+One icon per window instead of one per application: a browser with two windows, or two Konsole instances, draw two icons in this widget. The extra icons come after the pinned ones and carry the same name; the window title is in the tooltip. Windows of the apps below are drawn even with "Show pinned only" on. = One icon per window instead of one per application: a browser with two windows, or two Konsole instances, draw two icons in this widget. The extra icons come after the pinned ones and carry the same name; the window title is in the tooltip. Windows of the apps below are drawn even with "Show pinned only" on.
 Opacidad: = 不透明度：
 Opcional: fijar un punto de acceso concreto = 可选：固定到某个具体的接入点
 Opcional: MAC clonada (o random / stable) = 可选：克隆的 MAC (或 random / stable)
@@ -882,6 +883,7 @@ Tamaño mínimo de tarjeta: = 卡片最小尺寸：
 Temperatura: = Temperatura:
 Texto: = Texto:
 Textos en negrita = Textos en negrita
+The dock already ungroups every window: turn on "Group windows of the same application" above for this to mean anything. = The dock already ungroups every window: turn on "Group windows of the same application" above for this to mean anything.
 The name cannot be empty. = The name cannot be empty.
 The preset "%1" already exists. Replace it? = The preset "%1" already exists. Replace it?
 The preset "%1" is gone from disk. = The preset "%1" is gone from disk.
@@ -914,6 +916,7 @@ Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El a
 Un panel anclado a un borde de la pantalla con solapas: audio, brillo de cada monitor, perfil de energía, calendario, reproducción, red, fondo de escritorio y sistema. Es un binario aparte, kdock-controlmanager, con su propia configuración: el botón de abajo abre su panel. = Un panel anclado a un borde de la pantalla con solapas: audio, brillo de cada monitor, perfil de energía, calendario, reproducción, red, fondo de escritorio y sistema. Es un binario aparte, kdock-controlmanager, con su propia configuración: el botón de abajo abre su panel.
 Una cadena corta propia, por ejemplo «Máquina de Pruebas». Dejalo vacío para que muestre el reloj. = Una cadena corta propia, por ejemplo «Máquina de Pruebas». Dejalo vacío para que muestre el reloj.
 Una captura por ventana (al pasar a primer plano) = 每个窗口截一次图 (在它进入前台时)
+Ungroup windows = Ungroup windows
 Unidades y actualización = Unidades y actualización
 Up = 上移
 Usar esta = Usar esta

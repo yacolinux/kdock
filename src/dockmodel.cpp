@@ -24,6 +24,11 @@ QString DockModel::Item::iconName() const
     return fallbackAppId.toLower();
 }
 
+QString DockModel::Item::appKey() const
+{
+    return entry.isValid() ? entry.id.toLower() : fallbackAppId.toLower();
+}
+
 DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
                      VirtualDesktops *desktops, const QString &widgetToken, QObject *parent)
     : QAbstractListModel(parent)
@@ -92,6 +97,11 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
             if (m_config->widgetExcludeMonitor(m_widgetToken))
                 rebuild();
         });
+        connect(m_config, &DockConfig::widgetUngroupWindowsChanged, this,
+                [this](const QString &token) {
+                    if (token == m_widgetToken)
+                        rebuild();
+                });
     }
     connect(m_config, &DockConfig::groupWindowsChanged, this, [this] { rebuild(); });
     // App names come from the translation layer (see Item::displayName), so a
@@ -130,7 +140,9 @@ QVariant DockModel::data(const QModelIndex &index, int role) const
     case IconNameRole:
         return item.iconName();
     case PinnedRole:
-        return item.pinned;
+        // Ungrouped, the extra window icons of a launcher have no flag of their
+        // own but belong to the same list entry (see pinnedByApp).
+        return item.pinned || pinnedByApp(item);
     case WindowCountRole:
         return item.windows.size();
     case ActiveRole:
@@ -194,10 +206,42 @@ int DockModel::rowOfWindow(AbstractWindow *window) const
     return -1;
 }
 
+bool DockModel::groupsWindows() const
+{
+    if (!m_config->groupWindows())
+        return false;
+    return m_widgetToken.isEmpty() || !m_config->widgetUngroupWindows(m_widgetToken);
+}
+
+bool DockModel::listsApp(const QString &key) const
+{
+    for (const QString &id : pinnedIds())
+        if (id.compare(key, Qt::CaseInsensitive) == 0)
+            return true;
+    return false;
+}
+
+bool DockModel::pinnedByApp(const Item &item) const
+{
+    if (item.pinned || item.isSeparator || groupsWindows())
+        return false;
+    return listsApp(item.appKey());
+}
+
+int DockModel::rowOfPinnedApp(const QString &appKey) const
+{
+    for (int i = 0; i < m_items.size(); ++i) {
+        const Item &item = m_items.at(i);
+        if (item.pinned && !item.isSeparator && item.appKey() == appKey)
+            return i;
+    }
+    return -1;
+}
+
 QString DockModel::keyForWindow(AbstractWindow *w) const
 {
     const QString appKey = keyForAppId(w->appId, nullptr);
-    if (m_config->groupWindows())
+    if (groupsWindows())
         return appKey;
     // Ungrouped: the first window reuses the app/launcher row, so a pinned
     // launcher collapses into the first window's icon instead of duplicating.
@@ -231,13 +275,20 @@ bool DockModel::acceptsStrayWindows() const
 
 bool DockModel::acceptsStrayWindow(const QString &appId) const
 {
-    if (!acceptsStrayWindows())
-        return false;
     if (m_widgetToken.isEmpty())
-        return true;
+        return acceptsStrayWindows();
     // keyForAppId(), not keyForWindow(): ungrouped mode keys extra windows by
     // pointer, and what the other widgets list are applications.
     const QString key = keyForAppId(appId, nullptr);
+    // Ungrouped, the second window of an app this widget lists is asked about
+    // here (the first one took the launcher row, every later one is keyed by
+    // pointer and has no row yet). It is not a stray: it is the whole point of
+    // the flag, so it comes in ahead of "only pinned" and of the two exclusion
+    // filters — which never hide a widget's own launchers either.
+    if (!groupsWindows() && listsApp(key))
+        return true;
+    if (!acceptsStrayWindows())
+        return false;
     // The monitor-wide filter reads its own cached set and never touches the
     // dock-local one below, so turning either on leaves the other's behaviour
     // exactly as it was.
@@ -395,7 +446,7 @@ void DockModel::windowChanged(AbstractWindow *window)
         const QString appKey = keyForAppId(window->appId, nullptr);
         const QString &curKey = m_items.at(row).key;
         bool regroup = false;
-        if (m_config->groupWindows()) {
+        if (groupsWindows()) {
             regroup = (curKey != appKey);
         } else if (curKey != appKey) {
             // Ungrouped: a window belongs on the app/launcher row only when it is
@@ -480,37 +531,51 @@ void DockModel::togglePinned(int row)
 {
     if (row < 0 || row >= m_items.size() || m_items.at(row).isSeparator)
         return;
-    Item &item = m_items[row];
     QStringList pinned = pinnedIds();
 
-    if (item.pinned) {
+    if (m_items.at(row).pinned || pinnedByApp(m_items.at(row))) {
+        const Item &item = m_items.at(row);
         pinned.removeAll(item.entry.isValid() ? item.entry.id : item.fallbackAppId);
-        item.pinned = false;
-        if (item.windows.isEmpty()) {
-            beginRemoveRows({}, row, row);
-            m_items.removeAt(row);
-            endRemoveRows();
-        } else {
-            emit dataChanged(index(row), index(row));
+        // Ungrouped, one launcher entry can back several rows (its extra windows
+        // are icons of their own), and all of them read as pinned. The flag
+        // itself lives on the row that came from the list, which is the one that
+        // would outlive its windows as an orphan launcher — so that is the row
+        // to clear, clicked or not.
+        const int owner = item.pinned ? row : rowOfPinnedApp(item.appKey());
+        if (owner >= 0) {
+            m_items[owner].pinned = false;
+            if (m_items.at(owner).windows.isEmpty()) {
+                beginRemoveRows({}, owner, owner);
+                m_items.removeAt(owner);
+                endRemoveRows();
+            }
         }
+        // Every row of that app just changed how it reads, not only the one
+        // clicked.
+        if (!m_items.isEmpty())
+            emit dataChanged(index(0), index(m_items.size() - 1), {PinnedRole});
     } else {
+        Item &item = m_items[row];
         if (!item.entry.isValid())
             return; // nothing to launch later; not pinnable
-        if (!pinned.contains(item.entry.id))
-            pinned.append(item.entry.id);
-        item.pinned = true;
         // Re-key the row to the application. Ungrouped mode keys a window row
         // by the window itself ("win:<pointer>"), a key no launcher can ever
         // match: leaving it would turn this row into an orphan launcher the
         // moment its window closes (the row survives because it is pinned).
         // Clicking it would then find no windows and start a new instance every
         // time, and each new window would add yet another icon, because
-        // keyForWindow() cannot find the launcher either. Skipped if some other
-        // row already owns the app key, to avoid two rows with one key.
+        // keyForWindow() cannot find the launcher either. And when another row
+        // already owns the app key, that row is the launcher: giving this one
+        // the flag would leave two pinned rows behind a single list entry, so
+        // the pin goes there instead.
         const QString appKey = item.entry.id.toLower();
-        if (rowOfKey(appKey) < 0)
+        const int owner = rowOfKey(appKey);
+        if (owner < 0)
             item.key = appKey;
-        emit dataChanged(index(row), index(row));
+        if (!pinned.contains(item.entry.id))
+            pinned.append(item.entry.id);
+        m_items[owner < 0 ? row : owner].pinned = true;
+        emit dataChanged(index(0), index(m_items.size() - 1), {PinnedRole});
     }
 
     savePinnedIds(pinned);

@@ -35,9 +35,10 @@ public:
     // DockConfig::pinned() and the two static separators are drawn.
     // `widgetToken` = "appsel<n>": the model of one selectable-apps widget. Its
     // launchers are that widget's own list (DockConfig::widgetApps), it draws no
-    // static separators (those belong to the apps block), and with the widget's
+    // static separators (those belong to the apps block), with the widget's
     // "only pinned" flag on it ignores every window that is not one of its
-    // launchers. Everything else — grouping, activation, the context menu — is
+    // launchers, and with its "ungroup windows" flag on it gives every window an
+    // icon of its own even while the dock groups (see groupsWindows()). Everything else — grouping, activation, the context menu — is
     // the same code, which is the point: the widget *is* the apps block.
     DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor *monitor,
               VirtualDesktops *desktops = nullptr, const QString &widgetToken = {},
@@ -79,6 +80,10 @@ private:
 
         QString displayName() const;
         QString iconName() const;
+        // The application this row belongs to, in the lowercase form the keys
+        // use. Same value as `key` for a launcher row; for a window row of an
+        // ungrouped model, `key` is the window instead ("win:<pointer>").
+        QString appKey() const;
     };
 
     void rebuild();
@@ -97,6 +102,22 @@ private:
     // everything the others do not already draw. Only asked for windows with no
     // row yet: the widget's own launchers are never filtered out.
     bool acceptsStrayWindow(const QString &appId) const;
+    // Whether this model puts every window of an app under one icon. The dock's
+    // groupWindows, narrowed by the widget's own "ungroup windows" flag: a
+    // widget may split what the dock groups, never the other way round (with
+    // the dock-wide flag off there is nothing left to ungroup).
+    bool groupsWindows() const;
+    // Whether `key` (a lowercased app key) is one of this model's launchers.
+    // Ungrouped, the extra windows of those apps are icons of this widget by
+    // definition, so they skip the "only pinned" and the two exclusion filters.
+    bool listsApp(const QString &key) const;
+    // Whether this row reads as pinned without carrying the flag: ungrouped, the
+    // extra window icons of a launcher belong to the same list entry, so their
+    // right-click has to offer "Unpin" instead of a "Pin" that does nothing.
+    bool pinnedByApp(const Item &item) const;
+    // The row that carries the pinned flag for `appKey` (the launcher row), or
+    // -1. Ungrouped, several rows share one app key and only that one has it.
+    int rowOfPinnedApp(const QString &appKey) const;
     // Recompute m_monitorPinned. Cheap no-op unless this widget filters
     // monitor-wide: the sweep walks every dock of the screen, so it runs once
     // per change instead of once per window (acceptsStrayWindow is asked for

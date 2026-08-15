@@ -659,6 +659,7 @@ Off: the separator expands like a dynamic one and pushes the sections apart. On:
 Office = Oficina
 on battery = a batería
 On: the widget draws exactly the apps below. Off: it also draws every open window, like "Show applications". = Prendido: el widget dibuja exactamente las apps de abajo. Apagado: dibuja además todas las ventanas abiertas, como «Mostrar aplicaciones».
+One icon per window instead of one per application: a browser with two windows, or two Konsole instances, draw two icons in this widget. The extra icons come after the pinned ones and carry the same name; the window title is in the tooltip. Windows of the apps below are drawn even with "Show pinned only" on. = Un ícono por ventana en vez de uno por aplicación: un navegador con dos ventanas, o dos konsole, dibujan dos íconos en este widget. Los íconos de más van después de los anclados y llevan el mismo nombre; el título de la ventana está en el globito. Las ventanas de las apps de acá abajo se dibujan aunque «Ver solo anclados» esté prendido.
 Opacidad: = Opacidad:
 Opcional: fijar un punto de acceso concreto = Opcional: fijar un punto de acceso concreto
 Opcional: MAC clonada (o random / stable) = Opcional: MAC clonada (o random / stable)
@@ -882,6 +883,7 @@ Tamaño mínimo de tarjeta: = Tamaño mínimo de tarjeta:
 Temperatura: = Temperatura:
 Texto: = Texto:
 Textos en negrita = Textos en negrita
+The dock already ungroups every window: turn on "Group windows of the same application" above for this to mean anything. = El dock ya desagrega todas las ventanas: prendé «Agrupar ventanas de la misma aplicación», más arriba, para que esto signifique algo.
 The name cannot be empty. = El nombre no puede estar vacío.
 The preset "%1" already exists. Replace it? = El preset «%1» ya existe. ¿Reemplazarlo?
 The preset "%1" is gone from disk. = El preset «%1» ya no está en el disco.
@@ -914,6 +916,7 @@ Un número por escritorio virtual de KWin; el clic cambia a ese escritorio. El a
 Un panel anclado a un borde de la pantalla con solapas: audio, brillo de cada monitor, perfil de energía, calendario, reproducción, red, fondo de escritorio y sistema. Es un binario aparte, kdock-controlmanager, con su propia configuración: el botón de abajo abre su panel. = Un panel anclado a un borde de la pantalla con solapas: audio, brillo de cada monitor, perfil de energía, calendario, reproducción, red, fondo de escritorio y sistema. Es un binario aparte, kdock-controlmanager, con su propia configuración: el botón de abajo abre su panel.
 Una cadena corta propia, por ejemplo «Máquina de Pruebas». Dejalo vacío para que muestre el reloj. = Una cadena corta propia, por ejemplo «Máquina de Pruebas». Dejalo vacío para que muestre el reloj.
 Una captura por ventana (al pasar a primer plano) = Una captura por ventana (al pasar a primer plano)
+Ungroup windows = Desagregar ventanas
 Unidades y actualización = Unidades y actualización
 Up = Subir
 Usar esta = Usar esta

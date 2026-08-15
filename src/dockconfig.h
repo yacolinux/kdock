@@ -910,6 +910,12 @@ public:
     // enabled dock), so the sweep opens no files. The dock's own `pinned` is
     // not in here, same as appsPinnedElsewhere().
     QStringList appsPinnedOnMonitor(const QString &token) const;
+    // "Ungroup windows of the same application": one icon per window instead of
+    // one per app, for this widget only. It can only ungroup further — with the
+    // dock-wide groupWindows off everything is ungrouped already — so the model
+    // reads the two together (DockModel::groupsWindows()).
+    Q_INVOKABLE bool widgetUngroupWindows(const QString &token) const;
+    Q_INVOKABLE void setWidgetUngroupWindows(const QString &token, bool on);
     // Forget an instance's group. Called when its section is removed, so a
     // later widget that reuses the number does not inherit its launchers.
     void clearAppsWidget(const QString &token);
@@ -922,6 +928,7 @@ signals:
     void widgetOnlyPinnedChanged(const QString &token);
     void widgetExcludeOthersChanged(const QString &token);
     void widgetExcludeMonitorChanged(const QString &token);
+    void widgetUngroupWindowsChanged(const QString &token);
     // Some appsel list on this monitor changed — possibly on *another* dock.
     // Carries no token because the change is not this config's: it is relayed
     // here (see notifyMonitorAppsChanged) so a model only ever connects to its

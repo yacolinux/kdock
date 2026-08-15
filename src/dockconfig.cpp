@@ -1223,6 +1223,23 @@ QStringList DockConfig::appsPinnedOnMonitor(const QString &token) const
     return ids;
 }
 
+bool DockConfig::widgetUngroupWindows(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return false;
+    // Off by default: one icon per app is what every other block does, and a
+    // widget that suddenly splits a browser in three would read as a bug.
+    return m_settings.value(token + QStringLiteral("/ungroupWindows"), false).toBool();
+}
+
+void DockConfig::setWidgetUngroupWindows(const QString &token, bool on)
+{
+    if (!isAppsWidgetToken(token) || widgetUngroupWindows(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/ungroupWindows"), on);
+    emit widgetUngroupWindowsChanged(token);
+}
+
 void DockConfig::notifyMonitorAppsChanged() const
 {
     const QString screen = screenOfDockId(m_dockId);

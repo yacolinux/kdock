@@ -1978,11 +1978,44 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     connect(excludeMonitor, &QCheckBox::toggled, this,
             [this, token](bool on) { m_config->setWidgetExcludeMonitor(token, on); });
 
+    // Independent of the three above: it does not change *which* windows the
+    // widget takes, only whether they share an icon. Its only condition is the
+    // dock-wide "Group windows" (a widget can ungroup further, never regroup),
+    // which is why it is disabled — and says so — while that one is off.
+    auto *ungroup = new QCheckBox(tr("Ungroup windows"), box);
+    ungroup->setChecked(m_config->widgetUngroupWindows(token));
+    const auto syncUngroup = [this, ungroup] {
+        const bool grouping = m_config->groupWindows();
+        ungroup->setEnabled(grouping);
+        ungroup->setToolTip(
+            grouping ? tr("One icon per window instead of one per application: a browser with "
+                          "two windows, or two Konsole instances, draw two icons in this widget. "
+                          "The extra icons come after the pinned ones and carry the same name; "
+                          "the window title is in the tooltip. Windows of the apps below are "
+                          "drawn even with \"Show pinned only\" on.")
+                     : tr("The dock already ungroups every window: turn on \"Group windows of "
+                          "the same application\" above for this to mean anything."));
+    };
+    syncUngroup();
+    connect(m_config, &DockConfig::groupWindowsChanged, ungroup,
+            [syncUngroup] { syncUngroup(); });
+    connect(ungroup, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setWidgetUngroupWindows(token, on); });
+
     flags->addWidget(excludeOthers);
     flags->addWidget(excludeMonitor);
     flags->addWidget(onlyPinned);
     flags->addStretch();
     layout->addLayout(flags);
+
+    // On a row of its own, and not only because it is not a filter: the three
+    // above already measure ~700 px and a QHBoxLayout of checkboxes cannot
+    // shrink below its labels, so a fourth one pushed the panel past the
+    // dialog's width (measured 862 against 785) and brought a scrollbar with it.
+    auto *ungroupRow = new QHBoxLayout;
+    ungroupRow->addWidget(ungroup);
+    ungroupRow->addStretch();
+    layout->addLayout(ungroupRow);
 
     // The filters are what the other checkbox lets through, so they say nothing
     // while the widget is a fixed list of icons. And the monitor-wide one is a
