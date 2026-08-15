@@ -1931,6 +1931,14 @@ Item {
                             ModeMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
+                            // Only for the icons of a selectable-apps widget:
+                            // the settings are that instance's, and this is the
+                            // only right-click it has (a block has no section
+                            // menu). The dock's own apps block hides the row.
+                            AppsWidgetMenu {
+                                token: appsGrid.sectionToken
+                                rowVisible: appsGrid.sectionToken !== ""
+                            }
                             Menu {
                                 id: dockMenu
                                 title: qsTr("Dock")

@@ -33,6 +33,15 @@ IconMenuItem {
     iconSource: _menuIcon !== ""
                 ? "image://icon/" + _menuIcon + "@" + (theme ? theme.revision : 0) : ""
 
+    // A submenu that only applies to some of the rows it could hang off cannot
+    // hide itself: on a Menu, `visible` is the popup's, and this row is built
+    // from the parent menu's delegate. So it travels as an opt-in property on
+    // the submenu (default: shown, which is every other submenu of the dock).
+    readonly property bool _rowVisible: !control._ready || !control.subMenu
+        || control.subMenu.rowVisible === undefined ? true : control.subMenu.rowVisible
+    visible: _rowVisible
+    height: visible ? implicitHeight : 0
+
     // MenuItem draws its submenu arrow on the right, over the content item.
     // IconMenuItem's Row does not know about it (the stock IconLabel does), so
     // without this the widest label runs underneath the arrow.

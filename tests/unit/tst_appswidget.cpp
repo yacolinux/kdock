@@ -408,6 +408,112 @@ private slots:
         QCOMPARE(widget.rowCount(), 2);
     }
 
+    void unpinningFromAWidgetReachesTheMonitorFilter()
+    {
+        // Reportado 2026-08-15: se desancla una app en un appsel y el widget de
+        // sobrantes del monitor no la levanta. Los tests que ya había llaman a
+        // setWidgetApps() directo; el usuario desancla por el clic derecho, o sea
+        // por togglePinned() -> savePinnedIds(), que levanta m_updatingPinned
+        // mientras las señales viajan. Esa es la diferencia, así que el caso va
+        // por ahí. Topología y banderas copiadas de la config real: dos docks del
+        // mismo monitor, los dos SIN agrupar ventanas.
+        const QString screen = freshDockId("unpinmon");
+        DockConfig a(screen);
+        DockConfig b(DockConfig::makeDockId(screen, 1));
+        a.setGroupWindows(false);
+        b.setGroupWindows(false);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+
+        const QString fixed = a.insertAppsWidget(0);      // lista fija
+        const QString catchAllSame = a.insertAppsWidget(1); // sobrantes, mismo dock
+        const QString catchAllOther = b.insertAppsWidget(0); // sobrantes, otro dock
+        a.setWidgetApps(fixed, {QStringLiteral("mine.desktop")});
+        for (auto *cfg : {&a, &b}) {
+            const QString t = cfg == &a ? catchAllSame : catchAllOther;
+            cfg->setWidgetOnlyPinned(t, false);
+            cfg->setWidgetExcludeMonitor(t, true);
+        }
+
+        DockModel fixedModel(&a, &apps, &monitor, nullptr, fixed);
+        DockModel sameDock(&a, &apps, &monitor, nullptr, catchAllSame);
+        DockModel otherDock(&b, &apps, &monitor, nullptr, catchAllOther);
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+        openWindow(&monitor, QStringLiteral("mine.desktop"));
+
+        // De entrada: la dibuja el widget de la lista y ninguno de los dos
+        // widgets de sobrantes (es lo que hace el filtro del monitor).
+        QVERIFY(fixedModel.rowCount() > 0);
+        QCOMPARE(sameDock.rowCount(), 0);
+        QCOMPARE(otherDock.rowCount(), 0);
+
+        // El desanclado del usuario: clic derecho sobre el ícono -> Desanclar.
+        fixedModel.togglePinned(0);
+        QCOMPARE(a.widgetApps(fixed), QStringList());
+
+        // Y ahora las ventanas tienen que aparecer en los dos sobrantes.
+        QVERIFY2(sameDock.rowCount() > 0, "el sobrantes del MISMO dock no la levantó");
+        QVERIFY2(otherDock.rowCount() > 0, "el sobrantes del OTRO dock no la levantó");
+        // Y el widget del que la sacamos deja de dibujarla: tiene "ver solo
+        // anclados", así que una app que ya no lista no es suya. Sin esto sus
+        // filas quedan como estaban —savePinnedIds() suprime su propio rebuild—
+        // y desde afuera se ve igual que si el desanclado no hubiera pasado.
+        QCOMPARE(fixedModel.rowCount(), 0);
+    }
+
+    void theManualReloadPicksUpWhatNoSignalAnnounced()
+    {
+        // La recarga manual del menú y del botón. Se prueba contra el caso que
+        // ninguna señal cubre: la lista del otro dock cambiada A ESPALDAS de su
+        // DockConfig (un QSettings crudo sobre su archivo), que es lo que deja
+        // al widget mostrando lo de antes. reloadAppsWidget() hace syncAll() —o
+        // sea que la relectura de disco es parte de lo que se afirma acá— y
+        // reconstruye.
+        const QString screen = freshDockId("reload");
+        DockConfig a(screen);
+        DockConfig b(DockConfig::makeDockId(screen, 1));
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString fixed = a.insertAppsWidget(0);
+        const QString catchAll = b.insertAppsWidget(0);
+        a.setWidgetApps(fixed, {QStringLiteral("compartida")});
+        b.setWidgetOnlyPinned(catchAll, false);
+        b.setWidgetExcludeMonitor(catchAll, true);
+
+        DockModel widget(&b, &apps, &monitor, nullptr, catchAll);
+        openWindow(&monitor, QStringLiteral("compartida"));
+        QCOMPARE(widget.rowCount(), 0); // la dibuja el otro dock
+
+        // El cambio que nadie anuncia: se vacía la lista del otro dock en disco.
+        {
+            QSettings raw(DockConfig::instanceSettingsFilePath(a.dockId()), QSettings::IniFormat);
+            raw.setValue(fixed + QStringLiteral("/apps"), QStringList());
+            raw.sync();
+        }
+        QCOMPARE(widget.rowCount(), 0); // sigue igual: no hubo señal
+
+        b.reloadAppsWidget(catchAll);
+        QCOMPARE(widget.rowCount(), 1);
+        QCOMPARE(widget.index(0).data(DockModel::NameRole).toString(),
+                 QStringLiteral("compartida"));
+    }
+
+    void theMonitorFilterUnsetsTheDockLocalOneFromTheSetter()
+    {
+        // La regla vivía en el diálogo; ahora el mismo par de casillas está en
+        // el menú del clic derecho, así que la política es del setter o se
+        // separan las dos copias.
+        const QString id = freshDockId("supersetrule");
+        DockConfig cfg(id);
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetExcludeOthers(token, true);
+        QVERIFY(cfg.widgetExcludeOthers(token));
+
+        cfg.setWidgetExcludeMonitor(token, true);
+        QVERIFY(cfg.widgetExcludeMonitor(token));
+        QVERIFY2(!cfg.widgetExcludeOthers(token), "el superconjunto tiene que apagar al local");
+    }
+
     void ungroupGivesEachWindowItsOwnIcon()
     {
         // El caso de la feature: el navegador (o konsole) está en la lista del
@@ -528,6 +634,11 @@ private slots:
         const QString token = cfg.insertAppsWidget(0);
         cfg.setWidgetApps(token, {QStringLiteral("mine.desktop")});
         cfg.setWidgetUngroupWindows(token, true);
+        // Sin "ver solo anclados": lo que se mira acá es cómo se leen las filas
+        // y a dónde va el desanclado, no el filtro — con la casilla prendida el
+        // widget deja de dibujar una app que ya no lista, y no queda fila que
+        // mirar (eso lo cubre unpinningFromAWidgetReachesTheMonitorFilter).
+        cfg.setWidgetOnlyPinned(token, false);
 
         DockModel widget(&cfg, &apps, &monitor, nullptr, token);
         openWindow(&monitor, QStringLiteral("mine.desktop"));

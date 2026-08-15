@@ -1194,6 +1194,12 @@ void DockConfig::setWidgetExcludeMonitor(const QString &token, bool on)
     if (!isAppsWidgetToken(token) || widgetExcludeMonitor(token) == on)
         return;
     m_settings.setValue(token + QStringLiteral("/excludeMonitor"), on);
+    // This filter is the superset of the dock-local one, so the two never run at
+    // once. The rule lives here and not in the dialog because the dock's own
+    // right-click menu offers the same two checkboxes: policy in one of the two
+    // UIs only is policy that drifts.
+    if (on)
+        setWidgetExcludeOthers(token, false);
     emit widgetExcludeMonitorChanged(token);
 }
 
@@ -1238,6 +1244,20 @@ void DockConfig::setWidgetUngroupWindows(const QString &token, bool on)
         return;
     m_settings.setValue(token + QStringLiteral("/ungroupWindows"), on);
     emit widgetUngroupWindowsChanged(token);
+}
+
+void DockConfig::reloadAppsWidget(const QString &token)
+{
+    if (!isAppsWidgetToken(token))
+        return;
+    // sync() on every live dock: flushes what is pending and re-reads the file,
+    // so a list edited behind this process's back counts too.
+    syncAll();
+    // The widget's own model rebuilds on this one (it matches by token); the
+    // relay covers the models of the other docks of the monitor, whose sweep
+    // includes this dock's lists.
+    emit widgetAppsChanged(token);
+    notifyMonitorAppsChanged();
 }
 
 void DockConfig::notifyMonitorAppsChanged() const

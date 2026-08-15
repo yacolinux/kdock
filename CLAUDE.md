@@ -920,6 +920,12 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 
   El segundo **conserva** lo ya traducido y te dice cuántas entradas siguen iguales a
   capabase (o sea, cuánto falta traducir). Las dos herramientas son idempotentes.
+- **La misma cadena en C++ y en QML son DOS entradas del catálogo**, en dos secciones
+  (`Configuracion` la del `tr()`, `UIdock` la del `qsTr()`), así que traducir la del diálogo
+  **no** traduce la idéntica del menú. Pasa apenas se lleva una opción del diálogo al clic
+  derecho: el menú sale en inglés con el resto de la UI en español y parece que no se regeneró
+  el catálogo (2026-08-15, las casillas de *Apps Seleccionables*). Después de
+  `sync-translations.py`, buscá la clave **dos veces** en `spanish.md`.
 - **`defaultWidgetLabel()` no lleva `tr()`** a propósito: esa tabla *es* capabase, y las
   traducciones se indexan por token en la sección `Widgets`. Si le ponés `tr()`, el nombre del
   widget queda traducido dos veces por dos caminos distintos.

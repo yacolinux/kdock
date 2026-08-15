@@ -2018,21 +2018,34 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     layout->addLayout(ungroupRow);
 
     // The filters are what the other checkbox lets through, so they say nothing
-    // while the widget is a fixed list of icons. And the monitor-wide one is a
-    // superset of the dock-local one: with it on, the other is off and stays
-    // that way (unchecked here *and* written to the config, so the two filters
-    // never run at once).
+    // while the widget is a fixed list of icons. The monitor-wide one being the
+    // superset of the dock-local one is settled in setWidgetExcludeMonitor(),
+    // which unsets the other: the same pair of checkboxes lives in the dock's
+    // right-click menu, and a rule written in one of the two UIs drifts.
     const auto syncFlags = [excludeOthers, excludeMonitor, onlyPinned] {
         const bool live = !onlyPinned->isChecked();
         excludeMonitor->setEnabled(live);
         excludeOthers->setEnabled(live && !excludeMonitor->isChecked());
     };
     connect(onlyPinned, &QCheckBox::toggled, box, [syncFlags](bool) { syncFlags(); });
-    connect(excludeMonitor, &QCheckBox::toggled, box, [excludeOthers, syncFlags](bool on) {
-        if (on)
-            excludeOthers->setChecked(false); // its own toggled() persists the false
-        syncFlags();
-    });
+    connect(excludeMonitor, &QCheckBox::toggled, box, [syncFlags](bool) { syncFlags(); });
+
+    // Config -> checkbox, the direction this panel used to do without: these
+    // four flags are now editable from the widget's own right-click menu too, so
+    // an open dialog would show state that is no longer true (and the setter
+    // above unsets excludeOthers by itself). setChecked() on an unchanged value
+    // emits nothing, so this cannot bounce.
+    const auto follow = [this, token, box](void (DockConfig::*sig)(const QString &),
+                                           QCheckBox *cb, bool (DockConfig::*get)(const QString &) const) {
+        connect(m_config, sig, box, [this, token, cb, get](const QString &changed) {
+            if (changed == token)
+                cb->setChecked((m_config->*get)(token));
+        });
+    };
+    follow(&DockConfig::widgetOnlyPinnedChanged, onlyPinned, &DockConfig::widgetOnlyPinned);
+    follow(&DockConfig::widgetExcludeOthersChanged, excludeOthers, &DockConfig::widgetExcludeOthers);
+    follow(&DockConfig::widgetExcludeMonitorChanged, excludeMonitor, &DockConfig::widgetExcludeMonitor);
+    follow(&DockConfig::widgetUngroupWindowsChanged, ungroup, &DockConfig::widgetUngroupWindows);
     syncFlags();
 
     auto *list = new QListWidget(box);
@@ -2069,8 +2082,18 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
                                    tr("Remove"), box);
     auto *up = new QPushButton(QIcon::fromTheme(QStringLiteral("go-up")), tr("Up"), box);
     auto *down = new QPushButton(QIcon::fromTheme(QStringLiteral("go-down")), tr("Down"), box);
+    // Same action as "Recargar este widget" in the widget's own right-click
+    // menu: re-read the monitor's lists and rebuild this one.
+    auto *reloadBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                      tr("Reload"), box);
+    reloadBtn->setToolTip(tr("Re-reads the pinned lists of every Selectable apps widget of this "
+                          "monitor and redraws this one. For when a change made elsewhere did "
+                          "not reach it: the reload is manual so nothing has to poll."));
+    connect(reloadBtn, &QPushButton::clicked, this,
+            [this, token] { m_config->reloadAppsWidget(token); });
     buttons->addWidget(add);
     buttons->addWidget(remove);
+    buttons->addWidget(reloadBtn);
     buttons->addStretch();
     buttons->addWidget(up);
     buttons->addWidget(down);

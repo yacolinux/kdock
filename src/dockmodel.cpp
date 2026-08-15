@@ -579,6 +579,16 @@ void DockModel::togglePinned(int row)
     }
 
     savePinnedIds(pinned);
+    // savePinnedIds() suppresses this model's own rebuild (it has just edited
+    // its rows in place), which for the dock's apps block is exactly right: an
+    // unpinned app that is still running keeps its icon. A widget can *filter*
+    // by that list, though — with "only pinned" on, the row it just dropped
+    // must go, and with a monitor filter its neighbours' lists changed too. So
+    // the widget re-reads itself, or it keeps drawing an app it no longer lists
+    // until some unrelated change rebuilds it, which from the outside looks
+    // exactly like the unpin did nothing (reported 2026-08-15).
+    if (!m_widgetToken.isEmpty())
+        rebuild();
 }
 
 QVariantList DockModel::windowList(int row) const

@@ -916,6 +916,10 @@ public:
     // reads the two together (DockModel::groupsWindows()).
     Q_INVOKABLE bool widgetUngroupWindows(const QString &token) const;
     Q_INVOKABLE void setWidgetUngroupWindows(const QString &token, bool on);
+    // Re-read the monitor's appsel lists and make this widget rebuild. Manual on
+    // purpose: everything here already re-runs on the changes kdock sees go by,
+    // and the alternative to a button for the ones it misses is a timer.
+    Q_INVOKABLE void reloadAppsWidget(const QString &token);
     // Forget an instance's group. Called when its section is removed, so a
     // later widget that reuses the number does not inherit its launchers.
     void clearAppsWidget(const QString &token);
