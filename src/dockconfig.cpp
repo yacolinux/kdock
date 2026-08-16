@@ -204,6 +204,43 @@ void DockConfig::setShowTooltips(bool on)
         emit cfg->showTooltipsChanged();
 }
 
+int DockConfig::hideAnimationMs()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("hideAnimationMs"), kHideAnimationDefault).toInt(),
+                  kHideAnimationMax);
+}
+
+void DockConfig::setHideAnimationMs(int ms)
+{
+    const int v = qBound(0, ms, kHideAnimationMax);
+    if (hideAnimationMs() == v)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("hideAnimationMs"), v);
+    // Shared setting read through a per-instance property: ping every live dock
+    // so the slide Behaviors pick up the new duration without a restart.
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->hideTimingChanged();
+}
+
+int DockConfig::hideDelayMs()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("hideDelayMs"), 0).toInt(), kHideDelayMax);
+}
+
+void DockConfig::setHideDelayMs(int ms)
+{
+    const int v = qBound(0, ms, kHideDelayMax);
+    if (hideDelayMs() == v)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("hideDelayMs"), v);
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->hideTimingChanged();
+}
+
 QString DockConfig::qtStyle()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);
@@ -2057,6 +2094,7 @@ void DockConfig::setCompact(bool compact)
     m_settings.setValue(QStringLiteral("compact"), compact);
     emit compactChanged();
     emit effectiveMarginChanged();
+    emit edgeInsetChanged();
     emit dockThicknessChanged(); // padding and the icon<->label gap both shrink
 }
 
@@ -2442,6 +2480,7 @@ void DockConfig::setScreenMargin(int margin)
     m_settings.setValue(QStringLiteral("screenMargin"), margin);
     emit screenMarginChanged();
     emit effectiveMarginChanged();
+    emit edgeInsetChanged();
 }
 
 void DockConfig::setAutohide(bool autohide)
@@ -2463,6 +2502,9 @@ void DockConfig::setHideMode(int mode)
     // Kept in sync so a config downgraded to an older kdock still auto-hides.
     m_settings.setValue(QStringLiteral("autohide"), autohide());
     emit hideModeChanged();
+    // Switching in or out of a hiding mode moves the screen margin between the
+    // surface anchor and the dock's own inset, which changes the surface size.
+    emit edgeInsetChanged();
     if (wasAutohide != autohide())
         emit autohideChanged();
 }

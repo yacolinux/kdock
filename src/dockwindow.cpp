@@ -217,6 +217,9 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     connect(m_config, &DockConfig::edgeChanged, this, &DockWindow::updateWindowsOverlap);
     connect(m_config, &DockConfig::alignmentChanged, this, &DockWindow::updateWindowsOverlap);
     connect(m_config, &DockConfig::screenMarginChanged, this, &DockWindow::updateWindowsOverlap);
+    // The mode decides both whether the dodge runs at all and how the margin is
+    // split between the anchor and the inset, i.e. where dockRect() lands.
+    connect(m_config, &DockConfig::hideModeChanged, this, &DockWindow::updateWindowsOverlap);
 
     setResizeMode(QQuickView::SizeViewToRootObject); // content drives surface size
     setSource(QUrl(QStringLiteral("qrc:/qml/Dock.qml")));
@@ -250,8 +253,13 @@ QRect DockWindow::dockRect() const
     QScreen *s = screen();
     if (!s)
         return {};
+    // The *surface* rect, so it has to use the margin the surface is really
+    // anchored with: in a hiding mode that is 0, and the size already carries
+    // the screen margin as the transparent inset band (DockConfig::edgeInset()).
+    // The band counts as dock for the dodge test — it is part of the input
+    // region, so a window that reaches it is a window the dock sits on top of.
     return kdock::dockRectFor(s->geometry(), m_config->edge(), m_config->alignment(),
-                              m_config->effectiveMargin(), QSize(width(), height()));
+                              m_config->anchorEdgeMargin(), QSize(width(), height()));
 }
 
 void DockWindow::watchWindow(AbstractWindow *window)
@@ -376,14 +384,24 @@ void DockWindow::applyLayerProperties()
     uint anchor = AnchorBottom;
     QMargins margins;
     const int m = m_config->effectiveMargin();
-    // While hidden the surface hugs the screen edge instead of standing off by
-    // the margin: the reveal strip is a few pixels at the *surface's* edge
-    // (applyHiddenMask()), so with a margin those pixels sit inside the screen
-    // and the dock would only come back once the pointer moved *away* from the
-    // edge by exactly the margin — the erratic reveal reported 2026-08-10. Only
-    // the dock's own edge; the alignment margins below stay put, or the dock
-    // would slide along the edge every time it hides.
-    const int edgeM = m_hidden ? 0 : m;
+    // In a hiding mode the surface hugs the screen edge for good and pays the
+    // margin as extra thickness instead (DockConfig::edgeInset(), drawn as a
+    // transparent band by Dock.qml): the reveal strip is a few pixels at the
+    // *surface's* edge (applyHiddenMask()), so with an anchor margin those
+    // pixels sit inside the screen and the dock only comes back once the
+    // pointer moves away from the edge by exactly the margin — the erratic
+    // reveal reported 2026-08-10.
+    //
+    // This used to be `m_hidden ? 0 : m`, i.e. the surface was re-anchored on
+    // every hide and every reveal, and that is the bump reported 2026-08-15:
+    // the reveal restores the margin at the *start* of the slide, so the dock
+    // jumps `m` px mid-animation — and a pointer resting on the last pixels of
+    // the screen (where the strip is, and where the pointer lands when it is
+    // thrown at the edge) ends up outside the surface it just revealed, loses
+    // the hover, and the dock hides, un-anchors, is hovered again… forever.
+    // Only the dock's own edge; the alignment margins below keep the real
+    // margin, or the dock would slide along the edge every time it hides.
+    const int edgeM = m_config->anchorEdgeMargin();
     const bool horizontal = m_config->edge() == DockConfig::Bottom
                             || m_config->edge() == DockConfig::Top;
     switch (m_config->edge()) {
@@ -452,12 +470,10 @@ void DockWindow::setHidden(bool hidden)
     if (m_hidden == hidden)
         return;
     m_hidden = hidden;
+    // Only the input region changes here. The surface stays exactly where it
+    // is: see the edgeM comment in applyLayerProperties() for why re-anchoring
+    // on this transition is the one thing this must not do.
     applyHiddenMask();
-    // Re-anchor: hiding drops the edge margin so the reveal strip reaches the
-    // real screen edge, showing puts it back. The change reaches the compositor
-    // live through the dynamic-property filter in layershell.cpp, the same path
-    // screenMarginChanged() already uses.
-    applyLayerProperties();
 }
 
 void DockWindow::setGapRects(const QVariantList &rects)

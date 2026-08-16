@@ -815,6 +815,48 @@ QWidget *SettingsDialog::createGeneralTab()
     });
     form->addRow(tr("Hide mode:"), m_hideMode);
 
+    // How the dock slides in and out. Shared, not per dock (like the tooltip
+    // switch below): it is a feel setting, and setting it once per dock on a
+    // machine with a dozen of them is not a setting, it is a chore.
+    {
+        auto *anim = new QSpinBox(tab);
+        anim->setRange(0, DockConfig::kHideAnimationMax);
+        anim->setSingleStep(25);
+        anim->setSuffix(tr(" ms"));
+        anim->setSpecialValueText(tr("Instant"));
+        anim->setValue(DockConfig::hideAnimationMs());
+        anim->setToolTip(tr("How long the dock takes to slide out of sight and back. "
+                            "0: no animation. Applies to every dock."));
+        connect(anim, &QSpinBox::valueChanged, this,
+                [](int v) { DockConfig::setHideAnimationMs(v); });
+        form->addRow(tr("Hide animation:"), anim);
+
+        auto *delay = new QSpinBox(tab);
+        delay->setRange(0, DockConfig::kHideDelayMax);
+        delay->setSingleStep(50);
+        delay->setSuffix(tr(" ms"));
+        delay->setSpecialValueText(tr("No delay"));
+        delay->setValue(DockConfig::hideDelayMs());
+        delay->setToolTip(tr("How long the dock waits, after the pointer leaves it, before "
+                             "it starts hiding. Keeps it from disappearing when the pointer "
+                             "slips off it for a moment. Applies to every dock."));
+        connect(delay, &QSpinBox::valueChanged, this,
+                [](int v) { DockConfig::setHideDelayMs(v); });
+        form->addRow(tr("Hide delay:"), delay);
+
+        // Both are meaningless while the dock never hides, but they stay
+        // readable: the value is what the other docks use too.
+        const auto syncHideTiming = [this, anim, delay] {
+            const bool hides = m_config->hideMode() == DockConfig::AutoHide
+                               || m_config->hideMode() == DockConfig::DodgeWindows;
+            anim->setEnabled(hides);
+            delay->setEnabled(hides);
+        };
+        // Bound to `tab`, so the connection dies when buildTabs() deletes it.
+        connect(m_config, &DockConfig::hideModeChanged, tab, syncHideTiming);
+        syncHideTiming();
+    }
+
     m_opacity = new QSlider(Qt::Horizontal, tab);
     m_opacity->setRange(0, 100);
     m_opacity->setValue(int(m_config->opacity() * 100));

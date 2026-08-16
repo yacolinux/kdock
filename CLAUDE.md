@@ -1326,13 +1326,35 @@ Lo que esos dos no pueden probar, y cómo se probó:
   superficie del borde, así que los 3 px de la máscara de `applyHiddenMask()` caen adentro de la
   pantalla: el mouse en el borde no descubre nada y el dock aparece al *retirar* el puntero
   exactamente esos píxeles — se lee como un descubrimiento errático, no como un problema de
-  geometría, y en Compacto no pasa (margen 0). Arreglado poniendo el margen del borde propio en 0
-  mientras `m_hidden`; los laterales de alineación **no**, o el dock se corre a lo largo del
-  borde al esconderse. Lo mismo mordía al arrancar: los `setHidden(true)` de las `Behavior` del
-  slider solo corren al terminar una animación, y el primer valor escondido lo toma el binding
-  **sin animar**, así que un dock que arranca oculto nunca se reportaba como oculto. Nada de esto
-  se prueba bajo Xvfb (no hay layer-shell); lo que sí se comprueba ahí en diez segundos es que el
-  `setHidden(true)` inicial ocurre, con un `qInfo()` temporal.
+  geometría, y en Compacto no pasa (margen 0). Lo mismo mordía al arrancar: los
+  `setHidden(true)` de las `Behavior` del slider solo corren al terminar una animación, y el
+  primer valor escondido lo toma el binding **sin animar**, así que un dock que arranca oculto
+  nunca se reportaba como oculto.
+- **Y la cura de eso, si mueve la superficie, es peor que la enfermedad** (2026-08-15, reportado
+  como *"la animación de autohide hace un bumping"*). El primer arreglo fue anclar la superficie
+  con margen 0 **mientras** `m_hidden` y devolverle el margen al mostrarse. Dos bugs de una:
+  - `onRevealedChanged` llama a `setHidden(false)` al **principio** del deslizamiento, así que el
+    margen vuelve a mitad de la animación y el dock **salta** esos píxeles. El comentario que
+    decía "el margen solo se mueve cuando el contenido ya está afuera" solo valía para el camino
+    de ocultar.
+  - Peor: el puntero tirado contra el borde queda en la última fila de la pantalla, que es donde
+    está la franja. Al revelarse, la superficie se corre `margen` px hacia adentro y **lo deja
+    afuera** → se pierde el hover → se esconde → el margen vuelve a 0 → el puntero está otra vez
+    sobre la franja → se revela. **Rebote infinito**, y solo en los docks no compactos (con
+    margen 0 no pasa, que es la comprobación de dos segundos: poné *Compacto* o el margen en 0 y
+    fijate si el rebote se va).
+  La regla general: **la geometría de una superficie de layer-shell no puede depender de un
+  estado que cambia con la interacción**. El arreglo es que el margen no sea del ancla sino de la
+  propia superficie — `DockConfig::edgeInset()` la hace `margen` px más gruesa y `Dock.qml` dibuja
+  el dock corrido esos píxeles (banda transparente contra el borde) —, así el ancla es fijo y
+  `setHidden()` solo toca la máscara. Ver *Modos de ocultamiento* en `AGENTS.md`.
+- **Y esto sí se prueba bajo Xvfb, de punta a punta**, aunque no haya layer-shell: la ventana
+  toma su tamaño del objeto raíz, así que `xwininfo` mide la banda (68 px en modo siempre visible,
+  68 + margen en auto-ocultar), una captura dice de qué lado quedó, y la máscara de 3 px es una
+  región de XShape que XTEST respeta — o sea que `xdotool mousemove <x> <alto-2>` **descubre el
+  dock de verdad**. Contar píxeles del `panelColor` en la captura es la aserción (0 = escondido).
+  El control positivo de la demora son dos corridas, `hideDelayMs=1500` contra `=0`, mirando la
+  captura medio segundo después de sacar el puntero: sin el control, el caso pasa por casualidad.
 - **El modo *dodge* solo se prueba en la sesión Wayland real** (2026-08-09): bajo Xvfb no hay
   protocolo de ventanas, así que `windowsOverlap` queda en false y el dock sale siempre visible
   — la corrida limpia no prueba nada de la feature. La receta que funcionó: copiar el binario a

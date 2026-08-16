@@ -7,6 +7,7 @@
 #include "sandbox.h"
 
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTest>
 
 class TestDockConfig : public QObject
@@ -30,6 +31,85 @@ private slots:
         // La zona exclusiva es la única pregunta que hace DockWindow: solo el
         // modo 0 reserva espacio.
         QVERIFY(cfg.reservesSpace());
+    }
+
+    // El bug del 2026-08-15 ("bumping"): el margen de borde se pagaba como
+    // margen del ancla y se ponía en 0 al esconderse, así que la superficie se
+    // re-anclaba en cada mostrar/ocultar — salto a mitad de la animación, y con
+    // el puntero apoyado en el borde, rebote infinito. Ahora en los modos que
+    // ocultan el margen lo paga el propio dock (edgeInset) y el ancla queda
+    // clavada en 0: el reparto no depende de si está escondido, que es todo el
+    // arreglo. Lo que este caso congela es que el ancla + el inset sigan
+    // sumando el margen que el usuario pidió.
+    void edgeMarginMovesToTheInsetOnlyInHidingModes()
+    {
+        DockConfig cfg(freshDockId("edge-inset"));
+        cfg.setScreenMargin(4);
+
+        cfg.setHideMode(DockConfig::AlwaysVisible);
+        QCOMPARE(cfg.edgeInset(), 0);
+        QCOMPARE(cfg.anchorEdgeMargin(), 4);
+
+        cfg.setHideMode(DockConfig::WindowsBelow);
+        QCOMPARE(cfg.edgeInset(), 0);
+        QCOMPARE(cfg.anchorEdgeMargin(), 4);
+
+        for (int mode : {int(DockConfig::AutoHide), int(DockConfig::DodgeWindows)}) {
+            cfg.setHideMode(mode);
+            QCOMPARE(cfg.edgeInset(), 4);
+            // Lo que arregla el rebote: la superficie se ancla pegada al borde,
+            // así que la franja de 3 px de applyHiddenMask() llega al borde de
+            // la pantalla y ya no hace falta moverla para descubrir el dock.
+            QCOMPARE(cfg.anchorEdgeMargin(), 0);
+            QCOMPARE(cfg.edgeInset() + cfg.anchorEdgeMargin(), cfg.effectiveMargin());
+        }
+
+        // Compacto no tiene margen que repartir: no hay banda, y el dock queda
+        // pegado al borde como siempre estuvo.
+        cfg.setCompact(true);
+        QCOMPARE(cfg.effectiveMargin(), 0);
+        QCOMPARE(cfg.edgeInset(), 0);
+        QCOMPARE(cfg.anchorEdgeMargin(), 0);
+    }
+
+    // El grosor es la zona exclusiva (DockWindow::thickness()), y la banda no
+    // va adentro: solo la paga la superficie, y solo en modos que no reservan.
+    void edgeInsetStaysOutOfTheThickness()
+    {
+        DockConfig cfg(freshDockId("edge-inset-thick"));
+        cfg.setScreenMargin(8);
+        cfg.setHideMode(DockConfig::AlwaysVisible);
+        const int base = cfg.dockThickness();
+        cfg.setHideMode(DockConfig::AutoHide);
+        QCOMPARE(cfg.dockThickness(), base);
+    }
+
+    // Las dos son compartidas (kdock.conf), como showTooltips: se configuran
+    // una vez y valen para todos los docks.
+    void hideTimingsAreSharedAndClamped()
+    {
+        DockConfig cfg(freshDockId("hide-timing"));
+        QCOMPARE(DockConfig::hideAnimationMs(), DockConfig::kHideAnimationDefault);
+        QCOMPARE(DockConfig::hideDelayMs(), 0);
+
+        QSignalSpy spy(&cfg, &DockConfig::hideTimingChanged);
+        DockConfig::setHideAnimationMs(60);
+        QCOMPARE(DockConfig::hideAnimationMs(), 60);
+        QCOMPARE(cfg.hideAnimationMsProp(), 60);
+        QCOMPARE(spy.count(), 1); // el QML de cada dock relee por la señal
+
+        DockConfig::setHideDelayMs(400);
+        QCOMPARE(DockConfig::hideDelayMs(), 400);
+        QCOMPARE(spy.count(), 2);
+
+        // Fuera de rango se recorta en vez de dejar una animación eterna.
+        DockConfig::setHideAnimationMs(99999);
+        QCOMPARE(DockConfig::hideAnimationMs(), DockConfig::kHideAnimationMax);
+        DockConfig::setHideDelayMs(-5);
+        QCOMPARE(DockConfig::hideDelayMs(), 0);
+
+        DockConfig::setHideAnimationMs(DockConfig::kHideAnimationDefault);
+        DockConfig::setHideDelayMs(0);
     }
 
     void hideModeMigratesFromTheOldAutohideBool()

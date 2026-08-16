@@ -57,6 +57,9 @@ class DockConfig : public QObject
     Q_PROPERTY(QStringList scriptRunnersHidden READ scriptRunnersHidden WRITE setScriptRunnersHidden NOTIFY scriptRunnersHiddenChanged)
     Q_PROPERTY(QStringList scriptRunnersShown READ scriptRunnersShown WRITE setScriptRunnersShown NOTIFY scriptRunnersShownChanged)
     Q_PROPERTY(int effectiveMargin READ effectiveMargin NOTIFY effectiveMarginChanged)
+    Q_PROPERTY(int edgeInset READ edgeInset NOTIFY edgeInsetChanged)
+    Q_PROPERTY(int hideAnimationMs READ hideAnimationMsProp NOTIFY hideTimingChanged)
+    Q_PROPERTY(int hideDelayMs READ hideDelayMsProp NOTIFY hideTimingChanged)
     Q_PROPERTY(bool showBrightness READ showBrightness WRITE setShowBrightness NOTIFY showBrightnessChanged)
     Q_PROPERTY(bool showBattery READ showBattery WRITE setShowBattery NOTIFY showBatteryChanged)
     Q_PROPERTY(bool showAutohideToggle READ showAutohideToggle WRITE setShowAutohideToggle NOTIFY showAutohideToggleChanged)
@@ -342,6 +345,21 @@ public:
     // ToolTip shows on any element of any dock. Shared setting, not per dock.
     static bool showTooltips();
     static void setShowTooltips(bool on);
+
+    // Auto-hide timing (General tab), both shared like the tooltips above: the
+    // slide is a feel setting, and having to set it once per dock on a machine
+    // with a dozen of them is not one. kHideAnimationDefault ms is the duration
+    // the slide always had; 0 makes it instant. The delay is how long the dock
+    // waits after losing the pointer before it starts hiding (0 = immediately,
+    // the behavior before this setting existed) — it absorbs the pointer
+    // slipping off the dock for a frame.
+    static constexpr int kHideAnimationDefault = 200;
+    static constexpr int kHideAnimationMax = 1000;
+    static constexpr int kHideDelayMax = 3000;
+    static int hideAnimationMs();
+    static void setHideAnimationMs(int ms);
+    static int hideDelayMs();
+    static void setHideDelayMs(int ms);
 
     // Qt widget style for the whole app, persisted in the shared config.
     // Empty (default) = let Qt decide (Breeze on KDE, Fusion elsewhere).
@@ -707,6 +725,11 @@ public:
     // but QML reads it as a per-instance property so the ToolTip bindings
     // (`config.showTooltips`) re-evaluate when the dialog flips the checkbox.
     bool showTooltipsProp() const { return showTooltips(); }
+    // Same trick as showTooltipsProp(): the value is shared, but QML reads it
+    // per instance so the Behavior durations re-evaluate when the dialog moves
+    // the spinbox.
+    int hideAnimationMsProp() const { return hideAnimationMs(); }
+    int hideDelayMsProp() const { return hideDelayMs(); }
     QString qtStyleProp() const { return qtStyle(); }
     QStringList menuFavorites() const { return m_menuFavorites; }
     int separator1() const { return m_separator1; }
@@ -718,6 +741,21 @@ public:
     int dockLength() const { return m_dockLength; }   // 0 = auto, 1-100 = % of edge
     // Compact means truly flush: no gap to the screen edge
     int effectiveMargin() const { return m_compact ? 0 : m_screenMargin; }
+    // How the screen-edge margin is paid for. In a hiding mode the layer
+    // surface is anchored **flush to the screen edge** and made this many
+    // pixels thicker instead, with the dock drawn inset by the same amount: the
+    // gap looks identical, but the surface never has to be re-anchored between
+    // hidden and revealed. It used to be (see the 2026-08-10 fix and the
+    // 2026-08-15 bug it caused): the reveal strip needs to reach the real edge,
+    // so hiding dropped the margin and showing put it back — mid-animation, and
+    // out from under a pointer resting on the last pixels of the screen, which
+    // lost the hover and started an endless reveal/hide bounce.
+    // Zero outside the hiding modes, where nothing ever moves anyway.
+    bool surfaceHugsEdge() const { return m_hideMode == AutoHide || m_hideMode == DodgeWindows; }
+    int edgeInset() const { return surfaceHugsEdge() ? effectiveMargin() : 0; }
+    // The margin the layer surface is actually anchored with: what is left of
+    // the screen margin once the inset above has taken its share.
+    int anchorEdgeMargin() const { return effectiveMargin() - edgeInset(); }
 
     void setEdge(int edge);
     void setIconSize(int size);
@@ -984,6 +1022,13 @@ signals:
     void scriptRunnersHiddenChanged();
     void scriptRunnersShownChanged();
     void effectiveMarginChanged();
+    // Emitted by everything edgeInset() is made of: the margin itself and the
+    // hide mode that decides whether the surface pays it as an anchor margin or
+    // as extra thickness.
+    void edgeInsetChanged();
+    // One signal for both timings: they are set from the same place and QML
+    // re-reads them together.
+    void hideTimingChanged();
     void showClockChanged();
     void clockFormat24hChanged();
     void clockShowDateChanged();

@@ -661,13 +661,26 @@ Item {
 
     property int dragCount: 0
 
+    // ---- Surface vs. dock -------------------------------------------------
+    // In a hiding mode the layer surface is anchored flush to the screen edge
+    // and is this much thicker than the dock; the dock is drawn inset by the
+    // same amount (see slider.revealedOffset), so the screen-edge margin looks
+    // exactly as before. What it buys: the surface geometry no longer depends
+    // on whether the dock is hidden, so revealing does not re-anchor it out
+    // from under the pointer (bug 2026-08-15 — see DockConfig::edgeInset()).
+    // The band is transparent but *is* part of the input region, which is what
+    // keeps the hover alive while the pointer rests on the last pixels of the
+    // screen. Zero outside the hiding modes.
+    readonly property int edgeInset: config.edgeInset
+    readonly property int surfaceThickness: thickness + edgeInset
+
     width: horizontal
            ? (config.dockLength > 0 ? Math.max(fixedLength, thickness)
               : config.panelMode ? Math.max(Window.width, thickness)
                                  : Math.max(sectionLayout.implicitWidth + 2 * pad, thickness))
-           : thickness
+           : surfaceThickness
     height: horizontal
-            ? thickness
+            ? surfaceThickness
             : (config.dockLength > 0 ? Math.max(fixedLength, thickness)
                : config.panelMode ? Math.max(Window.height, thickness)
                                   : Math.max(sectionLayout.implicitHeight + 2 * pad, thickness))
@@ -679,7 +692,34 @@ Item {
     // modes never hide — "windows go below" just drops the exclusive zone.
     readonly property bool hideWanted: config.hideMode === 1
                                        || (config.hideMode === 2 && dockWindow.windowsOverlap)
-    readonly property bool revealed: !hideWanted || dockHover.hovered || menuOpen || dragging
+    // What the state *should* be right now, and what it actually is. They are
+    // two properties because hiding can be delayed (config.hideDelayMs): the
+    // dock comes back the instant it is wanted, and only goes away once the
+    // pointer has stayed off it for that long. Revealing is never delayed.
+    readonly property bool revealWanted: !hideWanted || dockHover.hovered || menuOpen || dragging
+    // Starts out as a binding so the first frame is right (a dock configured to
+    // auto-hide comes up hidden); the handler below breaks it on the first
+    // change, which is the point — from there the value is driven, not derived.
+    property bool revealed: revealWanted
+
+    onRevealWantedChanged: {
+        if (revealWanted) {
+            hideDelayTimer.stop()
+            revealed = true
+        } else if (config.hideDelayMs > 0) {
+            hideDelayTimer.restart()
+        } else {
+            revealed = false
+        }
+    }
+
+    Timer {
+        id: hideDelayTimer
+        interval: config.hideDelayMs
+        // Re-reads the wish instead of assuming it: the pointer can come back
+        // and leave again inside one interval.
+        onTriggered: root.revealed = root.revealWanted
+    }
 
     onRevealedChanged: if (revealed) dockWindow.setHidden(false)
 
@@ -895,30 +935,41 @@ Item {
 
     Item {
         id: slider
-        width: root.width
-        height: root.height
+        // The dock itself, which is only as thick as the dock: the extra
+        // root.edgeInset of surface is the transparent band against the screen
+        // edge, and nothing is drawn in it.
+        width: root.horizontal ? root.width : root.thickness
+        height: root.horizontal ? root.thickness : root.height
 
-        readonly property int hideDistance: root.thickness + config.effectiveMargin
+        // Where the dock sits when revealed: pushed away from the screen edge
+        // by the inset, so the band ends up between the dock and the edge. On
+        // the bottom/right edges the band is already past the content, so the
+        // offset is 0.
+        readonly property int revealedOffset: root.edgeInset
+        // Hiding it takes the whole surface: content plus band.
+        readonly property int hideDistance: root.surfaceThickness
 
         x: {
-            if (root.revealed || root.horizontal) return 0
+            if (root.horizontal) return 0
+            if (root.revealed) return config.edge === 2 ? revealedOffset : 0
             return config.edge === 2 ? -hideDistance : hideDistance
         }
         y: {
-            if (root.revealed || !root.horizontal) return 0
+            if (!root.horizontal) return 0
+            if (root.revealed) return config.edge === 1 ? revealedOffset : 0
             return config.edge === 1 ? -hideDistance : hideDistance
         }
 
         Behavior on x {
             NumberAnimation {
-                duration: 200
+                duration: config.hideAnimationMs
                 easing.type: Easing.InOutQuad
                 onRunningChanged: if (!running && !root.revealed) dockWindow.setHidden(true)
             }
         }
         Behavior on y {
             NumberAnimation {
-                duration: 200
+                duration: config.hideAnimationMs
                 easing.type: Easing.InOutQuad
                 onRunningChanged: if (!running && !root.revealed) dockWindow.setHidden(true)
             }
