@@ -22,6 +22,8 @@
 #include <QVariantList>
 #include <QVector>
 
+#include <functional>
+
 class AudioControl : public QObject
 {
     Q_OBJECT
@@ -79,13 +81,33 @@ signals:
     void maxVolumeChanged();
 
 private:
+    // How long a single pactl query may take before it is killed. This used to
+    // be a waitForFinished() on the GUI thread, which is what made a busy audio
+    // server freeze the whole dock (see runAsync).
+    static constexpr int kQueryTimeoutMs = 800;
+
     void scheduleRefresh();
     void startSubscriber();
     void launchSubscriber();
-    QString runSync(const QStringList &args) const;
+    // Runs pactl without ever blocking the caller: onDone gets the stdout, or an
+    // empty string if the process failed to start, crashed or hit the watchdog.
+    void runAsync(const QStringList &args, std::function<void(QString)> onDone);
+    void finishRefresh();
     QVector<Device> parseDevices(DeviceType type, const QString &text) const;
     QString setVolumeVerb(DeviceType type) const;
     QString setMuteVerb(DeviceType type) const;
+
+    // The five queries of one refresh land in any order, so they are collected
+    // here and applied together — the defaults first, because parseDevices()
+    // reads them to mark the default device.
+    struct RefreshBatch {
+        int pending = 0;
+        QString defaultSink;
+        QString defaultSource;
+        QString sinks;
+        QString sources;
+        QString sinkInputs;
+    };
 
     QString m_pactl;
     bool m_available = false;
@@ -99,4 +121,10 @@ private:
     QTimer m_refreshDebounce;
     QElapsedTimer m_subscriberUptime;
     int m_subscriberBackoffMs = 1000;
+    RefreshBatch m_batch;
+    // One batch at a time, and at most one more remembered: while the audio
+    // graph is being rebuilt the subscriber fires far faster than pactl answers,
+    // and a batch per event would pile up processes without end.
+    bool m_refreshInFlight = false;
+    bool m_refreshQueued = false;
 };

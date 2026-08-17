@@ -885,6 +885,27 @@ este archivo y leé la entrada correspondiente (o toda la sección).
 - **`enabledScreens=` vacío no es lista vacía**: QSettings lo devuelve como `[""]`, así que
   `migrateFirstRun()` cree que ya hay docks habilitados y **no crea ninguno**. Para una
   config de prueba, omití la clave por completo en vez de dejarla vacía.
+- **Nunca esperes a un proceso hijo desde el hilo de la GUI, por más rápido que "siempre"
+  conteste.** `AudioControl::refresh()` eran cinco `pactl` con `waitForFinished(800)` cada uno:
+  cuatro segundos de dock congelado por refresco, invisibles mientras el servidor de audio
+  contestaba en 15 ms. Mordió el 2026-08-16 al enchufar un monitor cuyo sink HDMI entra al
+  grafo — ahí `pactl` se pone lento **y** `pactl subscribe` larga una avalancha, así que el
+  debounce compraba otro bloqueo apenas terminaba el anterior y el dock parecía colgado hasta
+  que el grafo se calmaba. El patrón correcto está en `runAsync()`: `QProcess` en el heap,
+  callback en `finished`, y un `QTimer` de watchdog que lo **mata** en vez de esperarlo.
+  Dos corolarios que valen para cualquier backend que hable por CLI:
+  - **Fusioná los refrescos** (uno en vuelo, uno recordado). Si no, una tormenta de eventos
+    lanza N×5 procesos.
+  - **Medí el bucle de eventos, no la llamada.** Un `QElapsedTimer` alrededor de `refresh()`
+    puede dar 0 ms y el dock estar igual de trabado en otro punto del ciclo; la aserción que
+    sirve es un `QTimer` que cuenta latidos (con el bug: 1 de 40).
+- **Editar `tests/lib/fakebin.sh` NO regenera las herramientas falsas** si el `.stamp` ya
+  existe: el `add_custom_command` necesita `DEPENDS` sobre el script (ya está puesto, no lo
+  saques). Sin eso los tests corren contra los fakes de la compilación anterior — y eso es
+  peor que un test que falla, porque **pasa**: costó un control positivo entero el 2026-08-16,
+  con un `pactl` lento nuevo que nunca se escribió, así que el test midió un pactl instantáneo
+  y dio verde contra el mismísimo bug que venía a cazar. Si tocás un fake, confirmalo en el
+  archivo generado (`grep <lo-nuevo> build/tests/fakebin/<tool>`) antes de creerle a una corrida.
 - **Una sonda sin `XDG_DATA_HOME` aislado le deja al usuario un escritorio SIN DOCKS, y no se
   repara sola.** La receta de sondas de `DockManager`/`SettingsDialog` siembra
   `enabledScreens=NOEXISTE-0` y monitores inventados (`VIRT-1`); si la corrida no aisló el home,

@@ -50,17 +50,25 @@ kdock_add_unit_test(tst_autocolorscheme)
 kdock_add_unit_test(tst_configarchive)
 kdock_add_unit_test(tst_appswidget)
 kdock_add_unit_test(tst_settingsdialog)
+kdock_add_unit_test(tst_audiocontrol)
 
 # The fake tools have to exist before any test runs, so they are generated at
 # build time by a target every unit test depends on.
+#
+# DEPENDS on the script itself, and it is not optional: without it the stamp
+# already exists, editing fakebin.sh regenerates nothing, and the tests keep
+# running against the previous fakes. That cost a full positive control
+# (2026-08-16): a new slow-pactl fake was never written, so the test measured an
+# instant pactl and passed against the very bug it was written to catch.
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp
     COMMAND ${KDOCK_TESTS_DIR}/lib/fakebin.sh ${CMAKE_CURRENT_BINARY_DIR}/fakebin
+    DEPENDS ${KDOCK_TESTS_DIR}/lib/fakebin.sh
     COMMENT "Generating the fake system tools used by the tests")
 add_custom_target(kdock_fakebin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp)
 foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations tst_brightness
           tst_qmlload tst_weather tst_wallpapercolors tst_autocolorscheme tst_configarchive
-          tst_appswidget tst_settingsdialog)
+          tst_appswidget tst_settingsdialog tst_audiocontrol)
     add_dependencies(${t} kdock_fakebin)
 endforeach()
 

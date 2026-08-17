@@ -34,40 +34,118 @@ AudioControl::AudioControl(QObject *parent)
     startSubscriber();
 }
 
-QString AudioControl::runSync(const QStringList &args) const
+// This used to be a synchronous runSync() with waitForFinished(800), called
+// five times in a row by refresh(). That is up to four seconds with the GUI
+// thread stopped dead, and it bit for real (2026-08-16): plugging in a monitor
+// whose HDMI sink joins the graph makes pactl slow *and* makes `pactl
+// subscribe` flood events, so every 150 ms debounce bought another four-second
+// freeze and the dock looked hung until the graph settled. Measured with a
+// deliberately slow fake pactl: 4007 ms blocked, 2 of 60 timer ticks delivered.
+// Nothing here may wait on a child process any more.
+void AudioControl::runAsync(const QStringList &args, std::function<void(QString)> onDone)
 {
-    if (m_pactl.isEmpty())
-        return {};
-    QProcess p;
+    if (m_pactl.isEmpty()) {
+        onDone(QString());
+        return;
+    }
+
+    auto *p = new QProcess(this);
     // Force the C locale so the field labels we parse ("Name:", "Mute:", ...)
     // are the untranslated English ones regardless of the user's language.
     auto env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
     env.insert(QStringLiteral("LANG"), QStringLiteral("C"));
-    p.setProcessEnvironment(env);
-    p.start(m_pactl, args);
-    if (!p.waitForFinished(800)) {
-        p.kill();
-        p.waitForFinished(100);
-        return {};
-    }
-    return QString::fromUtf8(p.readAllStandardOutput());
+    p->setProcessEnvironment(env);
+
+    // A wedged pactl now costs one killed child instead of a frozen dock. The
+    // flag is what keeps the callback to exactly one call: a watchdog kill
+    // raises errorOccurred(Crashed) *and* finished, and a failure to start
+    // raises only errorOccurred.
+    auto delivered = std::make_shared<bool>(false);
+    const auto deliver = [p, onDone, delivered](const QString &out) {
+        if (*delivered)
+            return;
+        *delivered = true;
+        onDone(out);
+        p->deleteLater();
+    };
+
+    auto *watchdog = new QTimer(p);
+    watchdog->setSingleShot(true);
+    watchdog->setInterval(kQueryTimeoutMs);
+    connect(watchdog, &QTimer::timeout, p, [p] { p->kill(); });
+
+    connect(p, &QProcess::finished, this, [p, deliver](int, QProcess::ExitStatus status) {
+        deliver(status == QProcess::NormalExit ? QString::fromUtf8(p->readAllStandardOutput())
+                                               : QString());
+    });
+    connect(p, &QProcess::errorOccurred, this, [deliver](QProcess::ProcessError) {
+        deliver(QString());
+    });
+
+    kdock::tieToParent(*p);
+    watchdog->start();
+    p->start(m_pactl, args);
 }
 
 void AudioControl::refresh()
 {
     if (m_pactl.isEmpty())
         return;
+    // Coalesce instead of stacking: one batch in flight, one remembered. Without
+    // this the event storm of a graph rebuild would start five processes per
+    // event for as long as it lasted.
+    if (m_refreshInFlight) {
+        m_refreshQueued = true;
+        return;
+    }
+    m_refreshInFlight = true;
+    m_batch = RefreshBatch{};
+    m_batch.pending = 5;
 
-    m_defaultSink = runSync({QStringLiteral("get-default-sink")}).trimmed();
-    m_defaultSource = runSync({QStringLiteral("get-default-source")}).trimmed();
+    runAsync({QStringLiteral("get-default-sink")}, [this](const QString &out) {
+        m_batch.defaultSink = out.trimmed();
+        finishRefresh();
+    });
+    runAsync({QStringLiteral("get-default-source")}, [this](const QString &out) {
+        m_batch.defaultSource = out.trimmed();
+        finishRefresh();
+    });
+    runAsync({QStringLiteral("list"), QStringLiteral("sinks")}, [this](const QString &out) {
+        m_batch.sinks = out;
+        finishRefresh();
+    });
+    runAsync({QStringLiteral("list"), QStringLiteral("sources")}, [this](const QString &out) {
+        m_batch.sources = out;
+        finishRefresh();
+    });
+    runAsync({QStringLiteral("list"), QStringLiteral("sink-inputs")}, [this](const QString &out) {
+        m_batch.sinkInputs = out;
+        finishRefresh();
+    });
+}
 
-    m_outputs = parseDevices(Output, runSync({QStringLiteral("list"), QStringLiteral("sinks")}));
-    m_inputs = parseDevices(Input, runSync({QStringLiteral("list"), QStringLiteral("sources")}));
-    m_apps = parseDevices(Application, runSync({QStringLiteral("list"), QStringLiteral("sink-inputs")}));
+void AudioControl::finishRefresh()
+{
+    if (--m_batch.pending > 0)
+        return;
+
+    // Defaults first: parseDevices() compares against them to flag the default
+    // device, which is the one ordering constraint the old serial code had.
+    m_defaultSink = m_batch.defaultSink;
+    m_defaultSource = m_batch.defaultSource;
+    m_outputs = parseDevices(Output, m_batch.sinks);
+    m_inputs = parseDevices(Input, m_batch.sources);
+    m_apps = parseDevices(Application, m_batch.sinkInputs);
 
     m_available = true;
+    m_refreshInFlight = false;
     emit changed();
+
+    if (m_refreshQueued) {
+        m_refreshQueued = false;
+        scheduleRefresh(); // through the debounce, so a storm still coalesces
+    }
 }
 
 QVector<AudioControl::Device> AudioControl::parseDevices(DeviceType type, const QString &text) const

@@ -34,12 +34,21 @@ done
 # subscribe` is a long-lived child the dock respawns with backoff when it dies.
 # Emitting nothing and blocking is the honest stand-in for "a server with no
 # sinks"; exiting instead would exercise the respawn loop on every test.
+#
+# KDOCK_FAKE_PACTL_DELAY=<seconds> makes every query sleep first, which is how
+# tst_audiocontrol reproduces a busy audio server. Unset (the default) it stays
+# instant, so no other test pays for it.
 cat > "$dir/pactl" <<EOF
 #!/bin/sh
 echo "pactl <- \$*" >> "$dir/calls.log"
 case "\$1" in
     subscribe) exec sleep 86400 ;;
-    *) exit 0 ;;
+    *)
+        if [ -n "\${KDOCK_FAKE_PACTL_DELAY:-}" ]; then
+            sleep "\$KDOCK_FAKE_PACTL_DELAY"
+        fi
+        exit 0
+        ;;
 esac
 EOF
 chmod +x "$dir/pactl"
