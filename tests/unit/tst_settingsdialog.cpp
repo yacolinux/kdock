@@ -311,8 +311,13 @@ private slots:
         // Visual check on demand: KDOCK_DUMP_DIALOG=<dir> saves the dialog at
         // the three search states so the layout can be eyeballed (the offscreen
         // platform renders QWidget::grab() fine, no X server needed).
-        if (const char *dumpDir = qgetenv("KDOCK_DUMP_DIALOG").constData()) {
-            const QString dir = QString::fromLocal8Bit(dumpDir);
+        //
+        // The value is read into a QString of our own on purpose. qgetenv()
+        // returns a temporary QByteArray that dies at the end of the condition,
+        // so its constData() dangled inside the body — and it is never nullptr
+        // even when the variable is unset (it points at the static empty
+        // string), so the branch used to run on every single test run.
+        if (const QString dir = qEnvironmentVariable("KDOCK_DUMP_DIALOG"); !dir.isEmpty()) {
             dlg.grab().save(dir + QStringLiteral("/dlg_initial.png"));
             search->setText(QStringLiteral("opacity"));
             QTest::qWait(200);
