@@ -2,6 +2,12 @@
 
 ## Project Overview
 
+> **Nota de contexto**: `CLAUDE.md` (instrucciones de Claude Code) superó el límite de tamaño
+> y su sección **"Trampas que muerden"** (el cuerpo de ~76 entradas) se movió a
+> **`CLAUDE-TRAMPS.md`** (2026-08-16). En `CLAUDE.md` quedó el índice de títulos con la
+> referencia al archivo; las menciones a "la trampa en `CLAUDE.md`" de este documento apuntan
+> a ese archivo.
+
 kdock is a **standalone dock for Wayland desktops** (KDE Plasma 6, sway, hyprland, etc.) written **100% in Qt 6** with **zero KDE Frameworks / Plasma library dependencies**. All Wayland protocols are implemented directly from their XML definitions using `qtwaylandscanner`.
 
 - Single binary, no external plugins.
@@ -27,7 +33,7 @@ src/
   iconprovider.{h,cpp}    — QQuickImageProvider exposing XDG themed icons as image://icon/<name>
   iconcolorprovider.{h,cpp} — Dominant-color extractor for icons (QML "iconColors"); tints the running-app background
   dockwindow.{h,cpp}      — QQuickView layer-shell surface; maps DockConfig to layer-shell props
-  settingsdialog.{h,cpp}  — Qt Widgets configuration dialog
+  settingsdialog.{h,cpp}  — Qt Widgets configuration dialog (incl. el buscador de opciones sobre la columna de solapas, 2026-08-16)
   volumecontrol.{h,cpp}   — PipeWire volume via wpctl/pactl (no libpulse linkage); tiny default-sink indicator for the dock widget
   audiocontrol.{h,cpp}    — Full mixer backend for Settings → Audio (outputs/inputs/per-app streams via pactl); separate from VolumeControl
   batterycontrol.{h,cpp}  — Battery level/state via UPower + power profiles via power-profiles-daemon (system bus)
@@ -671,6 +677,40 @@ SIGSEGV cada una. Las reglas salieron de ahí.
   una `QApplication`). Las aserciones miran **estado observable** —a qué dock apuntan los combos
   de la barra, qué hay en las listas— y no "no se cayó": leer memoria liberada no segfaultea de
   forma confiable, y una versión escrita así pasaba igual con el arreglo desactivado.
+
+### Buscador de opciones del diálogo (`SettingsDialog::applySearchFilter()`, 2026-08-16)
+- Un campo de búsqueda **arriba de la columna de solapas** (el tab widget está en West). Con
+  `kSearchMinChars = 4` o más escritos filtra la barra: quedan solo las solapas cuyo **texto de
+  opciones** contiene la query (case-insensitive). Debajo del umbral —y al limpiar el campo con el
+  botón ✕ de `setClearButtonEnabled`— no filtra nada. La query se guarda en `m_searchQuery` y
+  `buildTabs()` re-aplica el filtro al final, porque los tabs se reconstruyen en cada cambio de
+  dock/idioma y nacen todos visibles.
+- **Qué busca**: las etiquetas de opciones de cada solapa — `QLabel::text()` (incluye los labels
+  de los `QFormLayout`), textos de `QAbstractButton` (checkbox/radio/botón), `QGroupBox::title()`,
+  ítems de `QComboBox`, y el título de la propia solapa. **No** tooltips ni textos internos de
+  listas/tablas. `collectTabStrings()` recorre `scroll->widget()` con `findChildren<QWidget*>` y
+  clasifica cada widget por su rol textual; el mismo pase alimenta el filtro y el resaltado.
+- **Estado "sin resultados" explícito** (pedido así): si ninguna solapa coincide, la barra queda
+  **vacía** (`setTabVisible(i, false)` en todas), la selección se limpia (`setCurrentIndex(-1)`) y
+  aparece un aviso `No matches for "%1"` bajo el campo. No se revierte silenciosamente a "mostrar
+  todo".
+- **Clic en una solapa con coincidencias**: `highlightMatchesInTab()` (conectado a
+  `currentChanged`) hace `ensureWidgetVisible` hasta el primer control que matchea y le pone un
+  fondo temporal de `theme.highlight` por 1,8 s (`QTimer::singleShot` con el widget como contexto:
+  si un rebuild borra el control antes, el restore no corre).
+- **Ubicación, no es un corner widget**: los corner widgets de `QTabWidget` no los dimensiona el
+  estilo para las formas West/East (medido: el campo quedó con alto 0), así que el campo vive en
+  una fila propia encima del tab widget, alineado a la izquierda con `ColoredTabBar::columnWidth()`
+  (que por eso pasó de `private` a `public`). El ancho se refresca en cada `buildTabs()` porque
+  sigue al idioma.
+- **`clearSearch()`** lo llaman los `show*Tab()` (clic derecho del widget de volumen/brillo/redes,
+  `Dock → Nombre`, etc.): son gestos "llevame a esta solapa" y no deben caer en una solapa que el
+  filtro ocultó. De paso `showMonitorsTab` hace `selectDock` → `buildTabs`, que re-aplica solo.
+- Lo cubre `tests/unit/tst_settingsdialog.cpp` → `searchFiltersTheTabs()`: umbral de 4, filtrado
+  real (`isTabVisible`), estado sin resultados (barra vacía + aviso visible), limpiar restaura, y
+  la geometría del campo (arriba de la columna, alineado). Con `KDOCK_DUMP_DIALOG=<dir>` el test
+  guarda `dlg_initial/filtered/noresult.png` para inspección visual (el tier unit corre offscreen,
+  donde `QWidget::grab()` renderiza igual).
 
 ### Solapas coloreadas de Configuración (`src/coloredtabbar.cpp` + `SettingsDialog::tabPalette()`)
 - El diálogo tiene ~10 solapas y todas se veían iguales. `ColoredTabBar` (subclase de `QTabBar`) pinta un fondo distinto por solapa; `ColoredTabWidget` existe solo porque `QTabWidget::setTabBar()` es protegido.

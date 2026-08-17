@@ -55,7 +55,7 @@ secciones, grosor), `tst_dockmanager` (mover/copiar dock, bandeja), `tst_desktop
 `tst_settingsdialog` congela un crash real: `buildTabs()` borra las solapas y las rehace en
 cada cambio de dock, pero el `DockConfig` es el del dock vivo y sobrevive, así que una
 conexión con `this` de contexto quedaba llamando `setEnabled()` sobre botones liberados —
-anclar una app desde el dock cerraba kdock (ver *Trampas que muerden* en `CLAUDE.md`). Es un
+anclar una app desde el dock cerraba kdock (ver *Trampas que muerden* en `CLAUDE-TRAMPS.md`). Es un
 test de widgets y corre igual headless, porque `sandbox.h` ya construye una `QApplication`.
 
 El último es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira

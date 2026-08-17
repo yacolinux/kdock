@@ -28,6 +28,10 @@ public:
     // used for the fill depends on the tab's state and is applied on paint.
     void setTabColor(int index, const QColor &color);
     void clearTabColors();
+    // Width the column needs: the widest label plus padding. Uniform across
+    // tabs so the column has a straight right edge. Public so the settings
+    // dialog can size the search field that sits above the column.
+    int columnWidth() const;
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -36,9 +40,6 @@ protected:
 private:
     // True for the West/East shapes, i.e. the tabs stack in a column.
     bool isVertical() const;
-    // Width the column needs: the widest label plus padding. Uniform across
-    // tabs so the column has a straight right edge.
-    int columnWidth() const;
 
     QList<QColor> m_colors;
 };

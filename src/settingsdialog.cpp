@@ -30,18 +30,19 @@
 #include "systray.h"
 #include "translations.h"
 
+#include <QAbstractButton>
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QColorDialog>
-#include <QDesktopServices>
-#include <QDir>
 #include <QComboBox>
-#include <QGroupBox>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFormLayout>
 #include <QFont>
+#include <QGroupBox>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -73,6 +74,7 @@
 #include <QUrl>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QVector>
 
 #include <algorithm>
 #include <utility>
@@ -207,7 +209,48 @@ SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, Syst
     }
 
     m_tabWidget = new ColoredTabWidget(this);
+    m_tabWidget->setObjectName(QStringLiteral("settingsTabs"));
+
+    // Search box above the tab column. QTabWidget's own corner widgets are not
+    // sized by the style for the West/East tab shapes (measured: the corner got
+    // a zero height), so instead the field lives in a row above the tab widget,
+    // pinned to the left at the column's width — visually "at the top of the
+    // tab list". With kSearchMinChars or more it filters the tabs down to the
+    // ones that contain the text; see applySearchFilter().
+    auto *searchRow = new QWidget(this);
+    auto *searchRowLayout = new QHBoxLayout(searchRow);
+    searchRowLayout->setContentsMargins(0, 0, 0, 2);
+    searchRowLayout->setSpacing(0);
+    auto *searchBox = new QWidget(searchRow);
+    auto *searchLayout = new QVBoxLayout(searchBox);
+    searchLayout->setContentsMargins(0, 0, 0, 0);
+    searchLayout->setSpacing(2);
+    m_searchEdit = new QLineEdit(searchBox);
+    m_searchEdit->setObjectName(QStringLiteral("settingsSearch"));
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->setPlaceholderText(tr("Search options…"));
+    m_searchEdit->setToolTip(tr("Escribí al menos %1 caracteres para filtrar "
+                                "las solapas por sus opciones.").arg(kSearchMinChars));
+    searchLayout->addWidget(m_searchEdit);
+    m_searchNoResults = new QLabel(searchBox);
+    m_searchNoResults->setObjectName(QStringLiteral("settingsSearchNoResults"));
+    m_searchNoResults->setWordWrap(true);
+    m_searchNoResults->setStyleSheet(QStringLiteral("color: gray; font-style: italic;"));
+    m_searchNoResults->setVisible(false);
+    searchLayout->addWidget(m_searchNoResults);
+    searchRowLayout->addWidget(searchBox);
+    searchRowLayout->addStretch();
+    mainLayout->addWidget(searchRow);
+
     mainLayout->addWidget(m_tabWidget);
+
+    m_searchDebounce = new QTimer(this);
+    m_searchDebounce->setSingleShot(true);
+    m_searchDebounce->setInterval(150);
+    connect(m_searchEdit, &QLineEdit::textChanged, this, [this] { m_searchDebounce->start(); });
+    connect(m_searchDebounce, &QTimer::timeout, this, &SettingsDialog::applySearchFilter);
+    connect(m_tabWidget, &QTabWidget::currentChanged, this,
+            &SettingsDialog::highlightMatchesInTab);
 
     auto *box = new QDialogButtonBox(QDialogButtonBox::Close, this);
     // Qt labels its standard buttons from *its own* catalogs, i.e. in the system
@@ -349,7 +392,15 @@ void SettingsDialog::buildTabs()
         m_translationsTabIndex = m_tabWidget->count() - 1;
     }
     applyTabColors();
-
+    // The tabs were just rebuilt (dock switch, language change); re-apply the
+    // active search so the filter does not silently reset. The search box lives
+    // outside m_tabWidget, so it survives buildTabs().
+    applySearchFilter();
+    // The search box sits above the tab column; pin it to exactly the column's
+    // width so the field does not look like a stub next to the labels. Column
+    // width follows the language, hence it is refreshed on every rebuild.
+    if (m_searchEdit && m_searchEdit->parentWidget())
+        m_searchEdit->parentWidget()->setFixedWidth(m_tabWidget->coloredTabBar()->columnWidth());
 }
 
 void SettingsDialog::applyTabColors()
@@ -360,6 +411,123 @@ void SettingsDialog::applyTabColors()
     bar->clearTabColors();
     for (int i = 0; i < n; ++i)
         bar->setTabColor(i, colors.at(i));
+}
+
+void SettingsDialog::clearSearch()
+{
+    if (!m_searchEdit)
+        return;
+    m_searchEdit->clear();
+    applySearchFilter();
+}
+
+void SettingsDialog::applySearchFilter()
+{
+    m_searchQuery = m_searchEdit->text().trimmed();
+    const int n = m_tabWidget->count();
+
+    // Below the threshold nothing filters: every tab shows, no "no results"
+    // state. Clearing the field (the clear button) lands here too.
+    if (m_searchQuery.length() < kSearchMinChars) {
+        for (int i = 0; i < n; ++i)
+            m_tabWidget->setTabVisible(i, true);
+        m_searchNoResults->setVisible(false);
+        return;
+    }
+
+    // Which tabs contain the query anywhere in their option strings. The tab's
+    // own title counts too: typing "Audio" finds the Audio tab without opening
+    // it first.
+    int firstVisible = -1;
+    int visibleCount = 0;
+    for (int i = 0; i < n; ++i) {
+        QVector<QPair<QString, QWidget *>> strings;
+        if (auto *scroll = qobject_cast<QScrollArea *>(m_tabWidget->widget(i)))
+            collectTabStrings(scroll->widget(), strings);
+        bool match = m_tabWidget->tabText(i).contains(m_searchQuery, Qt::CaseInsensitive);
+        for (const auto &s : strings) {
+            if (s.first.contains(m_searchQuery, Qt::CaseInsensitive)) {
+                match = true;
+                break;
+            }
+        }
+        m_tabWidget->setTabVisible(i, match);
+        if (match) {
+            if (firstVisible < 0)
+                firstVisible = i;
+            ++visibleCount;
+        }
+    }
+
+    // Explicit "no results" state: empty tab list + a notice under the search
+    // box. Nothing to switch to, so clear the selection (shows an empty page).
+    if (visibleCount == 0) {
+        m_tabWidget->setCurrentIndex(-1);
+        m_searchNoResults->setText(tr("No matches for \"%1\"").arg(m_searchQuery));
+        m_searchNoResults->setVisible(true);
+        return;
+    }
+    m_searchNoResults->setVisible(false);
+    // The current tab may have been filtered out: move to the first match so
+    // the page under the column is not an unrelated tab.
+    if (m_tabWidget->currentIndex() < 0
+        || !m_tabWidget->isTabVisible(m_tabWidget->currentIndex())) {
+        m_tabWidget->setCurrentIndex(firstVisible);
+    }
+}
+
+void SettingsDialog::highlightMatchesInTab(int index)
+{
+    if (m_searchQuery.length() < kSearchMinChars || index < 0 || index >= m_tabWidget->count())
+        return;
+    if (auto *scroll = qobject_cast<QScrollArea *>(m_tabWidget->widget(index))) {
+        QVector<QPair<QString, QWidget *>> strings;
+        collectTabStrings(scroll->widget(), strings);
+        for (const auto &s : strings) {
+            if (!s.first.contains(m_searchQuery, Qt::CaseInsensitive))
+                continue;
+            QWidget *hit = s.second;
+            scroll->ensureWidgetVisible(hit, 0, 60);
+            // Temporary highlight so the eye lands on the match instead of
+            // scanning the tab. Restored on a short timer; the color follows
+            // the theme's accent when there is one.
+            const QString old = hit->styleSheet();
+            const QString accent = m_theme && m_theme->highlight().isValid()
+                                       ? m_theme->highlight().name()
+                                       : QStringLiteral("#3daee9");
+            hit->setStyleSheet(QStringLiteral("background-color:%1; border-radius:4px;")
+                                   .arg(accent));
+            QTimer::singleShot(1800, hit, [hit, old] { hit->setStyleSheet(old); });
+            return;
+        }
+    }
+}
+
+void SettingsDialog::collectTabStrings(const QWidget *root, QVector<QPair<QString, QWidget *>> &out)
+{
+    if (!root)
+        return;
+    // One pass over the whole subtree: every widget is classified by its
+    // textual role (option label, checkbox/radio, group title, button, combo
+    // item) and contributes its strings. A QLabel *inside* a group or a layout
+    // is found just like one sitting directly in the form, so nothing that is
+    // on screen is missed.
+    const QList<QWidget *> widgets = root->findChildren<QWidget *>();
+    for (QWidget *w : widgets) {
+        if (auto *label = qobject_cast<QLabel *>(w)) {
+            if (!label->text().isEmpty())
+                out.append({label->text(), label});
+        } else if (auto *btn = qobject_cast<QAbstractButton *>(w)) {
+            if (!btn->text().isEmpty())
+                out.append({btn->text(), btn});
+        } else if (auto *group = qobject_cast<QGroupBox *>(w)) {
+            if (!group->title().isEmpty())
+                out.append({group->title(), group});
+        } else if (auto *combo = qobject_cast<QComboBox *>(w)) {
+            for (int i = 0; i < combo->count(); ++i)
+                out.append({combo->itemText(i), combo});
+        }
+    }
 }
 
 QList<QColor> SettingsDialog::tabPalette(int count) const
@@ -3187,30 +3355,37 @@ void SettingsDialog::rebuildVideoTab()
 
 void SettingsDialog::showVideoTab()
 {
+    // The target tab may be hidden by the search: these right-click arrivals
+    // are explicit "show me this" gestures, so drop the filter first.
+    clearSearch();
     if (m_videoTabIndex >= 0 && m_videoTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_videoTabIndex);
 }
 
 void SettingsDialog::showColorAutoTab()
 {
+    clearSearch();
     if (m_colorAutoTabIndex >= 0 && m_colorAutoTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_colorAutoTabIndex);
 }
 
 void SettingsDialog::showAudioTab()
 {
+    clearSearch();
     if (m_audioTabIndex >= 0 && m_audioTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_audioTabIndex);
 }
 
 void SettingsDialog::showNetworkTab()
 {
+    clearSearch();
     if (m_networkTabIndex >= 0 && m_networkTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_networkTabIndex);
 }
 
 void SettingsDialog::showMonitorsTab(const QString &dockId)
 {
+    clearSearch();
     // Edit that dock, not whichever one the dialog was left on: the whole point
     // of arriving here is that the user pointed at one (right-click → Dock →
     // Nombre, or a freshly created empty dock). No-op when it is the current
@@ -5457,6 +5632,7 @@ QWidget *SettingsDialog::createTranslationsTab()
 
 void SettingsDialog::showTranslationsTab()
 {
+    clearSearch();
     if (m_translationsTabIndex >= 0 && m_translationsTabIndex < m_tabWidget->count())
         m_tabWidget->setCurrentIndex(m_translationsTabIndex);
 }

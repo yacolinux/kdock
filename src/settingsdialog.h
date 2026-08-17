@@ -207,6 +207,22 @@ private:
     // deterministic — it follows whatever is pinned/running.
     void applyTabColors();
     QList<QColor> tabPalette(int count) const;
+    // Search box above the tab column. With at least kSearchMinChars typed it
+    // filters the tab list down to the tabs that contain the text (option
+    // labels, checkbox/radio texts, group titles, button texts, combo items).
+    void applySearchFilter();
+    // Empty the search box and show every tab again. Used by the show*Tab()
+    // right-click arrivals, which are explicit "take me to this tab" gestures
+    // and must not land on a tab the filter happened to hide.
+    void clearSearch();
+    // Scroll to + briefly highlight the first control of `index` whose text
+    // matches the active query. No-op when the search is not active.
+    void highlightMatchesInTab(int index);
+    // Every searchable string of one tab (and the widget carrying it), so the
+    // filter and the highlight share one pass over the widget tree.
+    static void collectTabStrings(const QWidget *root, QVector<QPair<QString, QWidget *>> &out);
+    // Minimum query length before the search starts filtering.
+    static constexpr int kSearchMinChars = 4;
     // Switch the dialog to edit another dock's config.
     void selectDock(const QString &dockId);
     // Jumps off a dock that no longer exists (removeDock() deletes its
@@ -331,6 +347,15 @@ private:
     QPushButton *m_scriptRunnerBrowse = nullptr;
     ColoredTabWidget *m_tabWidget;
     IconColorProvider *m_iconColors = nullptr;
+    // Search box above the tab column (a row of its own, left-aligned to the
+    // column's width), plus the debounce that re-filters as the user types and
+    // the label shown when no tab matches. The query is kept here so
+    // buildTabs() can re-apply the filter after a tab rebuild (dock switch,
+    // language change).
+    QLineEdit *m_searchEdit = nullptr;
+    QLabel *m_searchNoResults = nullptr;
+    QTimer *m_searchDebounce = nullptr;
+    QString m_searchQuery;
     // Audio tab: the three device-section containers are repopulated live from
     // AudioControl::changed(); m_audioSliderDown suppresses the rebuild while a
     // volume slider is being dragged so the handle doesn't jump.

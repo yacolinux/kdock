@@ -29,6 +29,8 @@
 #include "theme.h"
 
 #include <QComboBox>
+#include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QSettings>
 #include <QTabWidget>
@@ -264,6 +266,105 @@ private slots:
         secondCfg->setPinned({QStringLiteral("kate.desktop")});
         QCOMPARE(firstCfg->pinned().size(), 1);
         QCOMPARE(secondCfg->pinned().size(), 1);
+    }
+
+    // La búsqueda de opciones: con menos de 4 caracteres no filtra; con 4 o más
+    // deja solo las solapas cuyo texto coincide; sin ninguna coincidencia llega
+    // al estado "sin resultados" (barra vacía + aviso); y limpiar el campo lo
+    // devuelve todo.
+    void searchFiltersTheTabs()
+    {
+        const QString id = seedDock(QStringLiteral("VIRT-1"));
+
+        Theme theme;
+        DesktopEntryIndex apps;
+        m_shared.theme = &theme;
+        m_shared.apps = &apps;
+        DockManager manager(m_shared);
+
+        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, nullptr, &manager, &theme);
+
+        QLineEdit *search = dlg.findChild<QLineEdit *>(QStringLiteral("settingsSearch"));
+        QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
+        QLabel *notice = dlg.findChild<QLabel *>(QStringLiteral("settingsSearchNoResults"));
+        QVERIFY2(search && tabs && notice, "no se encontró el buscador o el tab widget");
+        QVERIFY(tabs->count() >= 3);
+
+        // isVisible() de un widget exige que toda la cadena de ancestros sea
+        // visible, así que sin mostrar el diálogo el aviso siempre diría "no
+        // visible" aunque esté marcado para mostrarse.
+        dlg.show();
+        QTest::qWait(50);
+        QVERIFY(dlg.isVisible());
+
+        // El buscador vive en una fila propia arriba del tab widget, alineado a
+        // la izquierda con el ancho de la columna de solapas: la geometría lo
+        // confirma sin necesidad de capturas. Se compara en coordenadas del
+        // diálogo (el ancestro común de ambos).
+        const QPoint searchInDlg = search->mapTo(&dlg, QPoint(0, 0));
+        const QPoint tabbarInDlg = tabs->tabBar()->mapTo(&dlg, QPoint(0, 0));
+        QVERIFY2(searchInDlg.x() >= tabbarInDlg.x() - 2,
+                 "el buscador debería quedar alineado con la columna de solapas");
+        QVERIFY2(searchInDlg.y() < tabbarInDlg.y(),
+                 "el buscador debería quedar ARRIBA de la primera solapa");
+
+        // Visual check on demand: KDOCK_DUMP_DIALOG=<dir> saves the dialog at
+        // the three search states so the layout can be eyeballed (the offscreen
+        // platform renders QWidget::grab() fine, no X server needed).
+        if (const char *dumpDir = qgetenv("KDOCK_DUMP_DIALOG").constData()) {
+            const QString dir = QString::fromLocal8Bit(dumpDir);
+            dlg.grab().save(dir + QStringLiteral("/dlg_initial.png"));
+            search->setText(QStringLiteral("opacity"));
+            QTest::qWait(200);
+            dlg.grab().save(dir + QStringLiteral("/dlg_filtered.png"));
+            search->setText(QStringLiteral("zzzz-no-existe"));
+            QTest::qWait(200);
+            dlg.grab().save(dir + QStringLiteral("/dlg_noresult.png"));
+            search->clear();
+            QTest::qWait(200);
+        }
+
+        const auto allVisible = [tabs] {
+            for (int i = 0; i < tabs->count(); ++i) {
+                if (!tabs->isTabVisible(i))
+                    return false;
+            }
+            return true;
+        };
+        QVERIFY(allVisible());
+
+        // Menos del umbral: nada se oculta.
+        search->setText(QStringLiteral("opa"));
+        QTest::qWait(200); // el debounce del buscador
+        QVERIFY(allVisible());
+
+        // Con 4+: solo las solapas que contienen "opacity" quedan. El umbral es
+        // el del texto del usuario, no el de la cadena buscada.
+        search->setText(QStringLiteral("opacity"));
+        QTest::qWait(200);
+        bool sawVisible = false;
+        bool sawHidden = false;
+        for (int i = 0; i < tabs->count(); ++i) {
+            if (tabs->isTabVisible(i))
+                sawVisible = true;
+            else
+                sawHidden = true;
+        }
+        QVERIFY(sawVisible && sawHidden);
+
+        // Sin coincidencias: estado explícito, barra vacía + aviso visible.
+        search->setText(QStringLiteral("zzzz-no-existe"));
+        QTest::qWait(200);
+        for (int i = 0; i < tabs->count(); ++i)
+            QVERIFY2(!tabs->isTabVisible(i), "con búsqueda sin resultados deberían ocultarse todas");
+        QVERIFY2(notice->isVisible(), "debería aparecer el aviso de 'sin resultados'");
+
+        // Limpiar restaura todo (el botón de limpiar del QLineEdit va por el
+        // mismo setText("")).
+        search->clear();
+        QTest::qWait(200);
+        QVERIFY(allVisible());
+        QVERIFY(!notice->isVisible());
     }
 };
 
