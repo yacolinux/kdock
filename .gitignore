@@ -3,6 +3,7 @@ build/
 
 # Backups sueltos
 *.bak
+HISTORY.md
 
 # Temporales de editor / compilación
 *~
