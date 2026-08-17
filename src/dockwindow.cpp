@@ -1,5 +1,6 @@
 #include "dockwindow.h"
 
+#include "apppreviews.h"
 #include "apprestart.h"
 #include "brightnesscontrol.h"
 #include "batterycontrol.h"
@@ -31,6 +32,7 @@
 #include "settingsdialog.h"
 #include "systraymodel.h"
 #include "systrayimageprovider.h"
+#include "thumbnailimageprovider.h"
 #include "controlmanagerlauncher.h"
 #include "weathercontrol.h"
 #include "weatherlauncher.h"
@@ -73,7 +75,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        DisksControl *disks, NetworkControl *network,
                        AppearanceControl *appearance, WindowMonitor *monitor,
                        VirtualDesktops *desktops, WeatherControl *weather,
-                       AutoColorScheme *autoColors)
+                       AutoColorScheme *autoColors, AppPreviews *appPreviews)
     : m_config(config)
     , m_theme(theme)
     , m_model(model)
@@ -93,6 +95,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_appearance(appearance)
     , m_desktops(desktops)
     , m_autoColors(autoColors)
+    , m_appPreviews(appPreviews)
 {
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
@@ -138,6 +141,11 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     if (m_systrayHost)
         engine()->addImageProvider(QStringLiteral("systray"),
                                    new SystrayImageProvider(m_systrayHost));
+    // Window captures for the apps block's hover previews. One provider per
+    // engine (the engine takes ownership), all of them over the one shared cache.
+    if (m_appPreviews)
+        engine()->addImageProvider(QStringLiteral("thumb"),
+                                   m_appPreviews->createImageProvider());
     rootContext()->setContextProperty(QStringLiteral("iconColors"), new IconColorProvider(this));
     rootContext()->setContextProperty(QStringLiteral("config"), m_config);
     rootContext()->setContextProperty(QStringLiteral("theme"), m_theme);
@@ -168,6 +176,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // it travels through Shared like every other backend rather than being
     // built here.
     rootContext()->setContextProperty(QStringLiteral("autoColors"), m_autoColors);
+    rootContext()->setContextProperty(QStringLiteral("appPreviews"), m_appPreviews);
     rootContext()->setContextProperty(QStringLiteral("dockIsPrimary"), m_primary);
     rootContext()->setContextProperty(QStringLiteral("apps"), m_apps);
     rootContext()->setContextProperty(QStringLiteral("showdesktop"), monitor);

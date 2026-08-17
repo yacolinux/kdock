@@ -6,4 +6,11 @@ Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock
 Icon=preferences-desktop-icons
 Categories=Utility;
 NoDisplay=true
+# Both keys are matched by KWin against the *absolute* path in Exec= (it resolves
+# the caller's /proc/<pid>/exe through KApplicationTrader). Without the first
+# there is no window list at all. Without the second every CaptureWindow call
+# comes back as org.kde.KWin.ScreenShot2.Error.NoAuthorized and the apps block's
+# hover previews never appear — which looks exactly like a bug in the dock.
+# `kdock --dump-captures <dir>` tells the two apart.
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2

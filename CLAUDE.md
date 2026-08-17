@@ -134,7 +134,8 @@ y el bug "seguía" (2026-08-10).
 El install escribe **doce** cosas: los seis binarios y sus seis `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
-tarjetas caen a ícono). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager` y
+tarjetas caen a ícono, y desde 2026-08-17 `kdock` se queda sin las vistas previas al hoverear
+un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager` y
 `kdock-weather` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
 el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos tres, saltealo
 y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las seis líneas
@@ -520,6 +521,13 @@ la librería que comparten `kdock` y los tests). Linkear `kdock.dir` da *"vtable
 definir"* para cualquier `QObject` — su `mocs_compilation.cpp` está **vacío** y los `moc_*.cpp`
 se compilan del otro lado. Y no mezcles las dos: `qrc_translations.cpp` está en ambas y salen
 *"definiciones múltiples"*.
+
+**Y filtrá los `.o` huérfanos**: el `find` agarra también objetos de fuentes que ya no existen
+(el build no los borra), y el link falla con *"vtable sin definir"* / *"referencia sin definir"*
+sobre una clase que no está en el árbol — se lee como el error de linkear `kdock.dir` en vez de
+`kdock_core.dir`, que es otra cosa. Pasó con `src/appmenuwindow.cpp.o` (2026-08-17). Se listan
+con un bucle que compruebe que el `.cpp` de cada `.o` sigue existiendo, o se saca el que moleste
+con un `grep -v`.
 
 **Relinkeá la sonda después de cada `cmake --build`**: el `g++` de arriba no depende de nada,
 así que si solo recompilás el proyecto la sonda sigue siendo la vieja y ves el bug que creías
@@ -920,12 +928,20 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 
   El segundo **conserva** lo ya traducido y te dice cuántas entradas siguen iguales a
   capabase (o sea, cuánto falta traducir). Las dos herramientas son idempotentes.
-- **La misma cadena en C++ y en QML son DOS entradas del catálogo**, en dos secciones
-  (`Configuracion` la del `tr()`, `UIdock` la del `qsTr()`), así que traducir la del diálogo
-  **no** traduce la idéntica del menú. Pasa apenas se lleva una opción del diálogo al clic
-  derecho: el menú sale en inglés con el resto de la UI en español y parece que no se regeneró
-  el catálogo (2026-08-15, las casillas de *Apps Seleccionables*). Después de
-  `sync-translations.py`, buscá la clave **dos veces** en `spanish.md`.
+- **La misma cadena en C++ y en QML es UNA sola entrada del catálogo, y alcanza para las dos.**
+  `gen-capabase.py` deduplica entre secciones a propósito (*"the lookup map is shared between
+  the two sections, so a string used in both places is written once, in whichever comes
+  first"*) y `KdockTranslator::translate()` hace `Q_UNUSED(context)`: busca por texto fuente en
+  **una** tabla. O sea que una opción que se lleva del diálogo al clic derecho —el mismo texto
+  en un `tr()` y en un `qsTr()`— aparece una vez sola, en `UIdock` o en `Configuracion` según
+  cuál se enumere primero, y traducirla ahí traduce las dos.
+  Verificado el 2026-08-17 con la casilla *Vista previa de la ventana*: la clave quedó **solo**
+  en `UIdock`, y con un `spanish.md` de prueba que la mapea a `MARCA-COMPARTIDA` la casilla del
+  **diálogo** (un `tr()`) sale con ese texto. Antes acá decía lo contrario —que eran dos
+  entradas y que había que buscar la clave dos veces— y eso manda a buscar un duplicado que no
+  existe. El síntoma del 2026-08-15 era real pero la causa es la de dos ítems más abajo: un
+  `.md` de usuario sembrado antes de que la cadena existiera, que `mergeSection()` es lo que
+  arregla.
 - **`defaultWidgetLabel()` no lleva `tr()`** a propósito: esa tabla *es* capabase, y las
   traducciones se indexan por token en la sección `Widgets`. Si le ponés `tr()`, el nombre del
   widget queda traducido dos veces por dos caminos distintos.
@@ -1158,6 +1174,66 @@ además de test de regresión contra los `pinned=` de todos los `.conf`.
   nombre del `.desktop`.
 
 Ambas resueltas por las heurísticas 5 y 6 de `forAppId()` (ver `AGENTS.md` → Dock Model).
+
+## Probar las vistas previas al hoverear un ícono (bloque Apps)
+
+Desde 2026-08-17 **kdock también pide capturas a KWin** (`AGENTS.md` → *Vista previa de
+ventana*). Tres cosas que hay que saber, y ninguna es evidente:
+
+**1. `kdock.desktop` lleva ahora `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`, y
+el privilegio es POR EJECUTABLE.** O sea que el `--dump-captures` de `kdock-previews` **no
+responde por kdock**, y un `./build/kdock` sin `.desktop` propio recibe `NoAuthorized` en cada
+captura: no aparece ninguna vista previa y se ve **idéntico** a un bug del QML. Por eso kdock
+tiene su propio volcado, que no abre ninguna ventana y sirve en la sesión real:
+
+```bash
+kdock --dump-captures /tmp/kdock-thumbs
+```
+
+0 ventanas → falta `X-KDE-Wayland-Interfaces`. Ventanas sí y capturas `NoAuthorized` → falta la
+otra clave, o ksycoca no la vio. Para probar **el binario del build** sin reinstalarle el dock
+al usuario: un `.desktop` temporal en `~/.local/share/applications/` con las dos claves, más el
+refresco de ksycoca con la ruta explícita de más arriba. Copiá el binario a una ruta **sin `#`**
+(`/tmp/kdock-diag/kdock`) y apuntá el `Exec=` ahí; y **borrá el `.desktop` al terminar**, con
+otro refresco. Verificado así el 2026-08-17: 16 ventanas, 16 capturas, las minimizadas incluidas.
+
+**2. El hover NO se puede disparar con `xdotool`** (XTEST no llega a un cliente Wayland nativo,
+misma trampa que el diálogo del panel de control). Lo que funcionó es un **hook temporal en el
+delegate de `Dock.qml`**: un `Timer` que llama a `root.queueAppPreview(content, appsGrid.appsModel,
+delegateRoot.index, appsGrid.sectionToken)` — o sea el sitio de llamada de producción con los
+argumentos de producción, con lo único falso siendo el disparador. Con eso se probaron, en tres
+corridas, los tres casos que importan:
+
+- **positivo**: `windowCount > 0` en el bloque de apps → aparece la micro ventana;
+- **negativos** (`console.log` del token + `root.previewUuid` después de llamar): un lanzador
+  sin ventanas y un `appsel1` con ventana → `previewUuid` vacío en las 14 rondas, nada en
+  pantalla;
+- **re-targeting**: intervalos escalonados por índice (`3000 + index * 900`) hacen que los
+  íconos se turnen, y tres capturas de pantalla seguidas muestran tres posiciones distintas con
+  tres ventanas distintas. Es la prueba de que el ciclo destruir/rehacer del xdg_popup no se
+  traba (un xdg_popup no se puede mover).
+
+**Acordate de sacar el hook** (`grep -c TEMP-PROBE qml/ src/` tiene que dar 0).
+
+**Y ojo con lo que el hook mide: `root.previewUuid` y `appPreview.visible` son estado GLOBAL**,
+no del delegate que los imprime. Solo hay un preview a la vez, así que el reporte de cualquier
+ícono ve el que puso *otro*, y un widget con la casilla apagada aparece en el log como
+`visible=true` — que se lee exactamente como una fuga de la reja y no lo es (2026-08-17,
+probando las previews de *Apps Seleccionables*). Lo que sí atribuye es **el uuid**: si el único
+que llegó a mostrarse pertenece a una app que solo lista el bloque habilitado, la reja aguantó.
+`grep -o 'uuid=\[{[^}]*}\]' | sort | uniq -c` contra la salida de `--dump-captures` lo resuelve
+de una.
+
+**3. La instancia aislada va con `hideMode=3`** (*las ventanas pasan abajo*), no con
+`autohide=true`: es visible —hace falta para capturar la pantalla— y **no reserva espacio**, así
+que no le mueve ninguna ventana al usuario. `autohide=true` no le mueve nada pero tampoco deja
+ver nada, y `hideMode=0` le re-acomoda las maximizadas.
+
+Y la comprobación del requisito que da nombre a la feature —que la micro ventana **no** sea un
+toplevel, o sea que no pueda salir en el dock ni en una barra de tareas— es un `--dump-captures`
+**con el preview en pantalla**: enumera todo lo que KWin reporta como ventana, y el preview no
+tiene que estar. Ojo con el `grep`: acá hay una Konsole cuyo *título* contiene "kdock" y da un
+falso positivo.
 
 ## Depurar las vistas previas (`kdock-previews`)
 

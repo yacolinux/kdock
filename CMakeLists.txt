@@ -27,6 +27,14 @@ add_library(kdock_core OBJECT
     src/windowmonitor.cpp     src/windowmonitor.h
     src/taskmanager.cpp       src/taskmanager.h
     src/plasmawindowmonitor.cpp src/plasmawindowmonitor.h
+    # Window captures (org.kde.KWin.ScreenShot2). Shared verbatim with
+    # kdock-previews, which is where they were written; the dock uses them for
+    # the hover previews of the apps block (src/apppreviews.h).
+    src/screenshotsource.cpp  src/screenshotsource.h
+    src/thumbnailsource.h
+    src/thumbnailcache.cpp    src/thumbnailcache.h
+    src/thumbnailimageprovider.cpp src/thumbnailimageprovider.h
+    src/apppreviews.cpp       src/apppreviews.h
     src/desktopentry.cpp      src/desktopentry.h
     src/dockmodel.cpp         src/dockmodel.h
     src/theme.cpp             src/theme.h
@@ -108,7 +116,7 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
 
 qt_add_resources(kdock_core "qml"
     PREFIX "/"
-    FILES qml/Dock.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+    FILES qml/Dock.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
 
 # Shipped translation layers. They are copied to

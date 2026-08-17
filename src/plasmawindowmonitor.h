@@ -15,7 +15,9 @@ class PlasmaWindow : public AbstractWindow, public QtWayland::org_kde_plasma_win
 {
     Q_OBJECT
 public:
-    PlasmaWindow(struct ::org_kde_plasma_window *object, QObject *parent);
+    // `uuid` is the handle KWin announced this window under; it is carried on
+    // AbstractWindow because the screenshot API takes nothing else.
+    PlasmaWindow(struct ::org_kde_plasma_window *object, const QString &uuid, QObject *parent);
     ~PlasmaWindow() override;
 
     bool ready = false; // initial_state received
@@ -65,7 +67,7 @@ protected:
     void org_kde_plasma_window_management_show_desktop_changed(uint32_t state) override;
 
 private:
-    void wrapWindow(struct ::org_kde_plasma_window *window);
+    void wrapWindow(struct ::org_kde_plasma_window *window, const QString &uuid);
     WindowMonitor *m_owner;
 };
 

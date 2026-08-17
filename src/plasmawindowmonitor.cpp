@@ -1,9 +1,11 @@
 #include "plasmawindowmonitor.h"
 
-PlasmaWindow::PlasmaWindow(struct ::org_kde_plasma_window *object, QObject *parent)
+PlasmaWindow::PlasmaWindow(struct ::org_kde_plasma_window *object, const QString &id,
+                           QObject *parent)
     : AbstractWindow(parent)
     , QtWayland::org_kde_plasma_window(object)
 {
+    uuid = id;
 }
 
 PlasmaWindow::~PlasmaWindow()
@@ -142,7 +144,9 @@ void PlasmaWindowMonitor::org_kde_plasma_window_management_window_with_uuid(uint
                                                                             const QString &uuid)
 {
     Q_UNUSED(id);
-    wrapWindow(get_window_by_uuid(uuid));
+    // The uuid is the only handle the screenshot API accepts, and this event is
+    // the only place it is ever sent: it has to be kept now or not at all.
+    wrapWindow(get_window_by_uuid(uuid), uuid);
 }
 
 void PlasmaWindowMonitor::org_kde_plasma_window_management_show_desktop_changed(uint32_t state)
@@ -157,9 +161,9 @@ void PlasmaWindowMonitor::requestShowDesktop(bool show)
                       : QtWayland::org_kde_plasma_window_management::show_desktop_disabled);
 }
 
-void PlasmaWindowMonitor::wrapWindow(struct ::org_kde_plasma_window *window)
+void PlasmaWindowMonitor::wrapWindow(struct ::org_kde_plasma_window *window, const QString &uuid)
 {
-    auto *w = new PlasmaWindow(window, m_owner);
+    auto *w = new PlasmaWindow(window, uuid, m_owner);
     // Wait for the full initial burst before exposing the window
     connect(w, &PlasmaWindow::initialStateDone, m_owner,
             [this, w] { m_owner->registerWindow(w); });

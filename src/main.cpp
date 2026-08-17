@@ -1,4 +1,6 @@
 #include <QApplication>
+#include <QDir>
+#include <QImage>
 #include <QQmlEngine>
 #include <QQuickStyle>
 #include <QScreen>
@@ -14,6 +16,7 @@
 
 #include <functional>
 
+#include "apppreviews.h"
 #include "apprestart.h"
 #include "clockwidget.h"
 #include "clockwidget2.h"
@@ -54,8 +57,11 @@
 #include "relanzadoresmanager.h"
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
+#include "screenshotsource.h"
 #include "systray.h"
 #include "systraymodel.h"
+#include "thumbnailcache.h"
+#include "thumbnailsource.h"
 #include "theme.h"
 #include "translations.h"
 #include "volumecontrol.h"
@@ -157,6 +163,89 @@ static int runNextWallpaperCli(QApplication &app, const QString &screenName)
     return app.exec();
 }
 
+// --dump-captures <dir>: ask KWin for one capture of every window it reports,
+// write them as PNGs and exit, without building a single dock.
+//
+// kdock-previews has the same flag, and it does *not* answer for this binary:
+// KWin grants org.kde.KWin.ScreenShot2 per executable (it resolves the caller's
+// /proc/<pid>/exe against an installed .desktop), so one of them being authorized
+// says nothing about the other. This is what separates "kdock is not allowed to
+// capture" from "the hover previews have a bug in the QML" — from the outside
+// both look like nothing appearing.
+//
+// It goes through the dock's own WindowMonitor, i.e. the very objects that feed
+// the previews, so a uuid missing here is a uuid missing there.
+static int runDumpCapturesCli(QApplication &app, const QString &dir)
+{
+    if (!app.platformName().contains(QLatin1String("wayland"))) {
+        qWarning("kdock: --dump-captures needs the Wayland session (the window list "
+                 "comes from a Wayland protocol).");
+        return 1;
+    }
+    QDir().mkpath(dir);
+
+    auto *monitor = WindowMonitor::create(&app);
+    if (!monitor) {
+        qWarning("kdock: the compositor offers no window-management protocol; without it "
+                 "there is nothing to capture. On KWin this means the installed "
+                 "kdock.desktop is missing X-KDE-Wayland-Interfaces.");
+        return 1;
+    }
+    auto *source = new ScreenShotSource(&app);
+    auto *pending = new int(0);
+    auto *done = new int(0);
+
+    QObject::connect(source, &ThumbnailSource::thumbnailReady, &app,
+                     [dir, done](const QString &uuid, const QImage &image) {
+                         // The braces of KWin's uuid are legal in a file name but
+                         // noisy; the cache's own normalization is what the image
+                         // provider uses, so reuse it here too.
+                         const QString path = dir + QLatin1Char('/')
+                             + ThumbnailCache::normalizeKey(uuid) + QStringLiteral(".png");
+                         const bool ok = image.save(path);
+                         qInfo("captured %s -> %dx%d %s", qPrintable(uuid), image.width(),
+                               image.height(), ok ? "saved" : "SAVE FAILED");
+                         ++*done;
+                     });
+    QObject::connect(source, &ThumbnailSource::thumbnailFailed, &app,
+                     [done](const QString &uuid, const QString &reason) {
+                         qWarning("failed  %s -> %s", qPrintable(uuid), qPrintable(reason));
+                         ++*done;
+                     });
+
+    // Let KWin's initial window burst drain, then queue one capture per window
+    // (ScreenShotSource serializes them).
+    QTimer::singleShot(1200, &app, [monitor, source, pending] {
+        qInfo("kdock: %lld window(s) reported by the compositor",
+              qint64(monitor->windows.size()));
+        for (AbstractWindow *w : std::as_const(monitor->windows)) {
+            qInfo("  %s  [%s]%s%s%s  %dx%d+%d+%d  %s",
+                  w->uuid.isEmpty() ? "(no uuid)" : qPrintable(w->uuid), qPrintable(w->appId),
+                  w->minimized ? " MIN" : "", w->activated ? " ACTIVE" : "",
+                  w->skipTaskbar ? " SKIPTASKBAR" : "", w->geometry.width(),
+                  w->geometry.height(), w->geometry.x(), w->geometry.y(), qPrintable(w->title));
+            if (w->uuid.isEmpty())
+                continue; // wlr backend: no handle, no capture
+            source->request(w->uuid, QSize()); // full size: show what KWin hands over
+            ++*pending;
+        }
+        if (*pending == 0)
+            QCoreApplication::quit();
+    });
+
+    // Hard stop: one capture can block on a client that stopped drawing.
+    QTimer::singleShot(15000, &app, &QCoreApplication::quit);
+    auto *poll = new QTimer(&app);
+    poll->setInterval(200);
+    QObject::connect(poll, &QTimer::timeout, &app, [pending, done] {
+        if (*pending > 0 && *done >= *pending)
+            QCoreApplication::quit();
+    });
+    poll->start();
+
+    return app.exec();
+}
+
 int main(int argc, char *argv[])
 {
     // Must be decided before QGuiApplication constructs the platform
@@ -230,6 +319,16 @@ int main(int argc, char *argv[])
                 screen = args.at(si + 1);
             return runNextWallpaperCli(app, screen);
         }
+        // One-shot diagnostic: prove the ScreenShot2 path (authorization
+        // included) without any dock in the way. See runDumpCapturesCli.
+        {
+            const int i = args.indexOf(QStringLiteral("--dump-captures"));
+            if (i >= 0) {
+                const QString dir = i + 1 < args.size() ? args.at(i + 1)
+                                                        : QStringLiteral("/tmp/kdock-thumbs");
+                return runDumpCapturesCli(app, dir);
+            }
+        }
         // One-shot diagnostic probe: dump window state on every virtual-desktop
         // switch without building any dock.
         if (args.contains(QStringLiteral("--probe-maximize"))) {
@@ -287,6 +386,9 @@ int main(int argc, char *argv[])
     // kdock-weather reaches the dock without a restart.
     WeatherConfig weatherConfig;
     WeatherControl weather(&weatherConfig);
+    // Window thumbnails for the apps block's hover previews. Inert until the
+    // QML asks for a capture, so a session with the feature off pays nothing.
+    AppPreviews appPreviews(monitor);
 
     // One dock per enabled monitor; the manager handles hotplug and the
     // per-monitor config files (see DockManager). The clocks are created
@@ -317,6 +419,7 @@ int main(int argc, char *argv[])
     shared.appearance = &appearance;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
+    shared.appPreviews = &appPreviews;
 
     // ColorAuto: the color scheme (and optionally the docks' own colors)
     // following the wallpaper. Built **before** the manager on purpose — every

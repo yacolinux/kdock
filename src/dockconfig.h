@@ -151,6 +151,9 @@ class DockConfig : public QObject
     Q_PROPERTY(QColor autoAccent READ autoAccent NOTIFY autoColorChanged)
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(bool showTooltips READ showTooltipsProp NOTIFY showTooltipsChanged)
+    Q_PROPERTY(bool appPreview READ appPreviewProp NOTIFY appPreviewChanged)
+    Q_PROPERTY(int appPreviewSize READ appPreviewSizeProp NOTIFY appPreviewChanged)
+    Q_PROPERTY(int appPreviewDelayMs READ appPreviewDelayMsProp NOTIFY appPreviewChanged)
     Q_PROPERTY(QString qtStyle READ qtStyleProp NOTIFY qtStyleChanged)
     Q_PROPERTY(QStringList menuFavorites READ menuFavorites WRITE setMenuFavorites NOTIFY menuFavoritesChanged)
     Q_PROPERTY(QStringList widgetOrder READ widgetOrder WRITE setWidgetOrder NOTIFY widgetOrderChanged)
@@ -345,6 +348,29 @@ public:
     // ToolTip shows on any element of any dock. Shared setting, not per dock.
     static bool showTooltips();
     static void setShowTooltips(bool on);
+
+    // Hover previews of the apps block (General tab), shared like the tooltips
+    // above: they are a feel setting, and one checkbox per dock on a machine
+    // with a dozen of them is not one.
+    //
+    // **Off by default on purpose.** It is the one dock feature that calls out
+    // to KWin on hover, and it only works at all once the installed
+    // kdock.desktop carries X-KDE-DBUS-Restricted-Interfaces — so it is the
+    // user who turns it on, not an upgrade.
+    static constexpr int kAppPreviewSizeDefault = 260;
+    static constexpr int kAppPreviewSizeMin = 120;
+    static constexpr int kAppPreviewSizeMax = 600;
+    static constexpr int kAppPreviewDelayDefault = 250;
+    static constexpr int kAppPreviewDelayMax = 2000;
+    static bool appPreview();
+    static void setAppPreview(bool on);
+    // Width of the preview in logical px; the height follows the window's own
+    // aspect ratio.
+    static int appPreviewSize();
+    static void setAppPreviewSize(int px);
+    // How long the pointer has to rest on the icon first.
+    static int appPreviewDelayMs();
+    static void setAppPreviewDelayMs(int ms);
 
     // Auto-hide timing (General tab), both shared like the tooltips above: the
     // slide is a feel setting, and having to set it once per dock on a machine
@@ -725,6 +751,10 @@ public:
     // but QML reads it as a per-instance property so the ToolTip bindings
     // (`config.showTooltips`) re-evaluate when the dialog flips the checkbox.
     bool showTooltipsProp() const { return showTooltips(); }
+    // Same trick again, for the apps block's hover previews.
+    bool appPreviewProp() const { return appPreview(); }
+    int appPreviewSizeProp() const { return appPreviewSize(); }
+    int appPreviewDelayMsProp() const { return appPreviewDelayMs(); }
     // Same trick as showTooltipsProp(): the value is shared, but QML reads it
     // per instance so the Behavior durations re-evaluate when the dialog moves
     // the spinbox.
@@ -954,6 +984,18 @@ public:
     // reads the two together (DockModel::groupsWindows()).
     Q_INVOKABLE bool widgetUngroupWindows(const QString &token) const;
     Q_INVOKABLE void setWidgetUngroupWindows(const QString &token, bool on);
+    // "Vista previa de la ventana al pasar el mouse", per widget. Deliberately
+    // **independent** of the dock-wide appPreview(), which governs the apps
+    // block and nothing else: the two blocks are separate surfaces and a user
+    // may well want previews on one widget and on nothing else. What *is*
+    // shared is the size and the delay (they live in General, once).
+    //
+    // Off by default, and that is also the performance story: nothing here is
+    // periodic, so a widget with the flag off never reaches the capture path —
+    // QML checks this before asking the model for anything (see
+    // Dock.qml → queueAppPreview).
+    Q_INVOKABLE bool widgetAppPreview(const QString &token) const;
+    Q_INVOKABLE void setWidgetAppPreview(const QString &token, bool on);
     // Re-read the monitor's appsel lists and make this widget rebuild. Manual on
     // purpose: everything here already re-runs on the changes kdock sees go by,
     // and the alternative to a button for the ones it misses is a timer.
@@ -971,6 +1013,7 @@ signals:
     void widgetExcludeOthersChanged(const QString &token);
     void widgetExcludeMonitorChanged(const QString &token);
     void widgetUngroupWindowsChanged(const QString &token);
+    void widgetAppPreviewChanged(const QString &token);
     // Some appsel list on this monitor changed — possibly on *another* dock.
     // Carries no token because the change is not this config's: it is relayed
     // here (see notifyMonitorAppsChanged) so a model only ever connects to its
@@ -1007,6 +1050,9 @@ signals:
     void aliasChanged();
     void dockDesktopsChanged();
     void showTooltipsChanged();
+    // One signal for the three preview keys: QML re-reads all of them together
+    // and none of them is hot enough to deserve its own.
+    void appPreviewChanged();
     void qtStyleChanged();
     void panelModeChanged();
     void compactChanged();

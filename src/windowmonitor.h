@@ -18,6 +18,11 @@ public:
 
     QString title;
     QString appId;
+    // KWin's window handle, as sent by window_with_uuid. It is the `handle`
+    // argument of org.kde.KWin.ScreenShot2.CaptureWindow, i.e. the only way to
+    // ask for a thumbnail of this window (see src/apppreviews.h). Empty on the
+    // wlr backend, which has no equivalent — and no ScreenShot2 either.
+    QString uuid;
     bool activated = false;
     bool minimized = false;
     bool skipTaskbar = false;

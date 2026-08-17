@@ -1,5 +1,6 @@
 #include "screenshotsource.h"
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusError>
@@ -165,11 +166,15 @@ void ScreenShotSource::startCapture(const Request &req)
                     m_error = err.name() + QLatin1String(": ") + err.message();
                     if (!m_authWarned && err.name().endsWith(QLatin1String("NoAuthorized"))) {
                         m_authWarned = true;
-                        qWarning("kdock-previews: KWin refused the screenshot "
-                                 "(NoAuthorized). The installed kdock-previews.desktop must "
-                                 "carry X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2 "
-                                 "and an Exec= with this binary's absolute path. Cards fall back "
-                                 "to the app icon.");
+                        // Named after the running binary because the privilege is
+                        // granted per executable: kdock-previews being authorized
+                        // says nothing about kdock, and vice versa.
+                        qWarning("%s: KWin refused the screenshot (NoAuthorized). The "
+                                 "installed .desktop of this binary must carry "
+                                 "X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2 "
+                                 "and an Exec= with its absolute path. Thumbnails are "
+                                 "silently unavailable until then.",
+                                 qPrintable(QCoreApplication::applicationName()));
                     }
                 } else {
                     m_replyOk = true;

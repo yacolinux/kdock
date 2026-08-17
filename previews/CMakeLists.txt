@@ -17,11 +17,14 @@ qt_add_executable(kdock-previews
     src/previewsservice.cpp         src/previewsservice.h
     src/kwinwindows.cpp             src/kwinwindows.h
     src/virtualdesktops.cpp         src/virtualdesktops.h
-    src/screenshotsource.cpp        src/screenshotsource.h
-    src/thumbnailsource.h
-    src/thumbnailcache.cpp          src/thumbnailcache.h
-    src/thumbnailimageprovider.cpp  src/thumbnailimageprovider.h
     # Shared with kdock, unmodified:
+    # The capture pipeline was written here and now lives in ../src: the dock
+    # draws the same thumbnails for the hover previews of its apps block, and
+    # two copies of a D-Bus protocol is one too many.
+    ${KDOCK_SHARED_SRC}/screenshotsource.cpp ${KDOCK_SHARED_SRC}/screenshotsource.h
+    ${KDOCK_SHARED_SRC}/thumbnailsource.h
+    ${KDOCK_SHARED_SRC}/thumbnailcache.cpp   ${KDOCK_SHARED_SRC}/thumbnailcache.h
+    ${KDOCK_SHARED_SRC}/thumbnailimageprovider.cpp ${KDOCK_SHARED_SRC}/thumbnailimageprovider.h
     ${KDOCK_SHARED_SRC}/layershell.cpp    ${KDOCK_SHARED_SRC}/layershell.h
     ${KDOCK_SHARED_SRC}/desktopentry.cpp  ${KDOCK_SHARED_SRC}/desktopentry.h
     ${KDOCK_SHARED_SRC}/iconprovider.cpp  ${KDOCK_SHARED_SRC}/iconprovider.h

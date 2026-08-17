@@ -42,6 +42,7 @@ class TileMenuLauncher;
 class ControlManagerLauncher;
 class VirtualDesktops;
 class AutoColorScheme;
+class AppPreviews;
 
 class AbstractWindow;
 
@@ -69,7 +70,8 @@ public:
                WindowMonitor *monitor = nullptr,
                VirtualDesktops *desktops = nullptr,
                WeatherControl *weather = nullptr,
-               AutoColorScheme *autoColors = nullptr);
+               AutoColorScheme *autoColors = nullptr,
+               AppPreviews *appPreviews = nullptr);
     // Takes the settings dialog down with the dock. The dialog is a top-level
     // QDialog with no parent (a QQuickView is a QWindow, so it cannot be one),
     // which means nothing else would ever delete it.
@@ -201,6 +203,7 @@ private:
     AppearanceControl *m_appearance = nullptr;
     VirtualDesktops *m_desktops = nullptr;
     AutoColorScheme *m_autoColors = nullptr;
+    AppPreviews *m_appPreviews = nullptr;
     // Drives the separate kdock-tilemenu process (context property
     // "tileLauncher"); owned by this window.
     TileMenuLauncher *m_tileLauncher = nullptr;

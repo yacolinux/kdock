@@ -41,6 +41,7 @@ Menu {
         function onWidgetExcludeOthersChanged(t) { if (t === menu.token) menu.rev++ }
         function onWidgetExcludeMonitorChanged(t) { if (t === menu.token) menu.rev++ }
         function onWidgetUngroupWindowsChanged(t) { if (t === menu.token) menu.rev++ }
+        function onWidgetAppPreviewChanged(t) { if (t === menu.token) menu.rev++ }
     }
 
     readonly property bool onlyPinned: (menu.rev, config.widgetOnlyPinned(menu.token))
@@ -83,6 +84,16 @@ Menu {
         // there is nothing left to ungroup.
         enabled: config.groupWindows
         onTriggered: config.setWidgetUngroupWindows(menu.token, !on)
+    }
+    IconMenuItem {
+        readonly property bool on: (menu.rev, config.widgetAppPreview(menu.token))
+        text: qsTr("Vista previa de la ventana")
+        iconName: "view-preview"
+        checkable: true
+        checked: on
+        // No `enabled` guard: this flag is independent of the General tab's
+        // checkbox (that one is the apps block's), so it always does something.
+        onTriggered: config.setWidgetAppPreview(menu.token, !on)
     }
     MenuSeparator {}
     IconMenuItem {

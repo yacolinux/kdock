@@ -115,3 +115,12 @@ Las dos están apagadas salvo que se las pida explícitamente.
   que los scripts normalizan `repo` con `cd … && pwd`.
 - **La ruta del repo tiene un `#`**: no se puede pasar como `-D` con string literal (rompe la
   compilación) ni en un `Exec=` de un `.desktop` (KConfig no lo parsea).
+- **Un chequeo estático que dejó de cubrir lo suyo se ve igual que un árbol limpio.**
+  `check-tr-separator.py` prohíbe `" = "` dentro de una cadena traducible, y durante toda su
+  vida no revisó **ni un solo `tr()` de C++**: su patrón era `\bq?sTr`, que matchea `qsTr` y
+  `sTr` pero no `tr`. Encima iba línea por línea, y C++ concatena literales adyacentes, así que
+  un `tr()` partido en dos escondía el separador en la segunda línea. Salía verde en las dos
+  corridas. Al taparlo (2026-08-17) aparecieron dos cadenas rotas que ya estaban en el árbol.
+  Por eso ese script ahora trae un **`SELFTEST`** que corre antes del repo y falla si alguno de
+  sus once casos deja de detectarse: un check nuevo que no puede fallar por sí mismo no prueba
+  nada. El control es sacarle el arreglo y ver que el autotest lo cante.

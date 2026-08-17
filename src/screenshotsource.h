@@ -15,7 +15,9 @@
 // and rejects everyone else with
 //   org.kde.KWin.ScreenShot2.Error.NoAuthorized
 // So a build-tree binary is *not* authorized until a .desktop pointing at it is
-// installed. See kdock-previews.desktop.in and PLAN.md.
+// installed. The authorization is **per executable**: both kdock.desktop.in and
+// kdock-previews.desktop.in carry the key, and one of them answering says
+// nothing about the other.
 //
 // Cost control: exactly one capture is in flight at a time (KWin re-renders the
 // window offscreen for each one), requests are coalesced per uuid, the image is

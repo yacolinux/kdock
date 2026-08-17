@@ -673,8 +673,24 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   `tr("vacío = la fecha y la hora")` entra como clave `vacío` con valor `la fecha y la hora`:
   no falla, no avisa, y esa cadena **no se puede traducir nunca**. Se destapó escribiendo el
   panel de control (2026-08-08) y ya estaba latente en el tooltip de *Dock length*
-  (`"0 = auto (panel stretches…"`, `src/settingsdialog.cpp`), que por eso sigue en capabase en
-  todos los idiomas. Escribí `vacío: la fecha y la hora` y listo.
+  (`"0 = auto (panel stretches…"`, `src/settingsdialog.cpp`). Escribí `vacío: la fecha y la
+  hora` y listo. Hay un test que lo prohíbe (`tests/static/check-tr-separator.py`), pero
+  **tuvo dos agujeros que lo dejaron sin cubrir C++ entero**, los dos tapados el 2026-08-17:
+  - **Su patrón era `\bq?sTr`**, que matchea `qsTr` y `sTr` y **nunca `tr`**. O sea que durante
+    toda su vida revisó el QML y ni un solo `tr()` de C++. Al corregirlo aparecieron dos
+    cadenas rotas que ya estaban en el árbol, y una de ellas tenía su traducción al español
+    partida al medio *dentro del `.md`*: `Name for "%1" (empty = Nombre para «%1» (vacío` —
+    clave y valor truncados los dos, así que en español se veía el texto en inglés.
+  - **C++ concatena literales adyacentes y el chequeo iba línea por línea.** Un `tr()` partido
+    en dos líneas (hay ~147 en el árbol) escondía el `" = "` en la segunda, que el patrón ni
+    empezaba a matchear. QML **no** concatena, así que la unión se hace solo en `.cpp`/`.h`.
+
+  La moraleja que quedó congelada en el script: **un chequeo que dejó de cubrir lo suyo se ve
+  exactamente igual que un árbol limpio**. Por eso ahora corre un `SELFTEST` de once casos
+  —los dos agujeros incluidos— antes de mirar el repo, y falla si alguno deja de detectarse.
+  Y si necesitás barrer el catálogo a mano: en `capabase.md` **toda entrada es identidad**
+  (`X = X`), salvo la cabecera y la sección `## Widgets` (que es `token = etiqueta` a
+  propósito), así que una línea donde clave ≠ valor solo puede ser una cadena partida.
 - **`Window.window` se lee desde un `Item`, no desde adentro de un `Timer`.** La property
   adjunta se resuelve sobre el objeto donde se la usa, así que un
   `running: Window.window.visible` dentro de un `Timer` escupe *"Window.window does only

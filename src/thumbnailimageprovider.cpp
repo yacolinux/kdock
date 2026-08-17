@@ -19,7 +19,7 @@ QImage ThumbnailImageProvider::requestImage(const QString &id, QSize *size,
         // (It happened: QUrl percent-encodes the braces of KWin's uuid.)
         static QAtomicInt warned;
         if (!uuid.isEmpty() && warned.testAndSetRelaxed(0, 1)) {
-            qWarning("kdock-previews: no thumbnail behind image provider id '%s' "
+            qWarning("kdock: no thumbnail behind image provider id '%s' "
                      "(cache key would be '%s'). The card stays empty.",
                      qPrintable(id), qPrintable(ThumbnailCache::normalizeKey(uuid)));
         }

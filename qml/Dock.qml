@@ -721,7 +721,177 @@ Item {
         onTriggered: root.revealed = root.revealWanted
     }
 
-    onRevealedChanged: if (revealed) dockWindow.setHidden(false)
+    onRevealedChanged: {
+        if (revealed)
+            dockWindow.setHidden(false)
+        else
+            hideAppPreview() // a preview left hanging over a dock that slid away
+    }
+
+    // ---- App icon hover previews -----------------------------------------
+    // A micro window showing the capture of the app's window while the pointer
+    // rests on its icon. AppPreviewWindow.qml explains *what* the surface is;
+    // this is *when* it shows.
+    //
+    // The very same component (appsComp) draws the dock's apps block and every
+    // selectable-apps widget, told apart by sectionToken. Each block carries its
+    // own switch and the two kinds are **independent** (see
+    // DockConfig::widgetAppPreview): previews on one widget and nowhere else is
+    // a valid setup. The switch is read before anything else, so a block with it
+    // off never even asks the model for a window.
+
+    // The window whose capture is on screen (or on its way). Empty = idle. It is
+    // also the filter for late replies: a capture that comes back for a uuid we
+    // are no longer pointing at is a reply to a hover the user already left.
+    property string previewUuid: ""
+    // Capture width in device pixels, kept for the refresh timer.
+    property int previewCaptureW: 0
+    // What the delay timer is going to show, once it fires.
+    property var previewPendingItem: null
+    property var previewPendingModel: null
+    property int previewPendingRow: -1
+
+    // Whether the block that `token` names shows previews: the empty token is
+    // the dock's apps block, anything else a selectable-apps widget with its own
+    // flag. `previewFlagRev` is the usual trick for a Q_INVOKABLE with no NOTIFY
+    // of its own (same as config.gapRevision): touch the counter so the read
+    // re-runs when the dialog or the right-click menu flips the flag.
+    property int previewFlagRev: 0
+    function appPreviewEnabled(token) {
+        return token === "" ? config.appPreview
+                            : (previewFlagRev, config.widgetAppPreview(token))
+    }
+
+    Connections {
+        target: config
+        function onWidgetAppPreviewChanged(token) {
+            root.previewFlagRev++
+            // Turned off under the pointer: take down whatever is on screen.
+            if (!config.widgetAppPreview(token))
+                root.hideAppPreview()
+        }
+    }
+
+    // Called from an icon's MouseArea on hover. `token` says which block asked;
+    // each one carries its own switch.
+    function queueAppPreview(item, model, row, token) {
+        if (!appPreviews || !appPreviewEnabled(token)) {
+            hideAppPreview()
+            return
+        }
+        previewPendingItem = item
+        previewPendingModel = model
+        previewPendingRow = row
+        hoverPreviewTimer.restart()
+    }
+
+    function showAppPreview(item, model, row) {
+        if (!item || !model || !appPreviews || !appPreviews.available())
+            return
+        var info = model.previewWindow(row)
+        // No uuid: a separator, a launcher with nothing running, or a compositor
+        // that is not KWin. Nothing appears, which is the wanted behavior.
+        if (!info || !info.uuid)
+            return
+
+        // The aspect ratio comes from the window's own geometry, so the surface
+        // is the right shape before the first capture lands and never resizes
+        // under the pointer.
+        var w = Math.max(60, config.appPreviewSize)
+        var aspect = (info.width > 0 && info.height > 0) ? (info.width / info.height) : 1.6
+        var h = Math.max(40, Math.round(w / aspect))
+
+        // Position in the dock's own coordinates first and map at the end: on
+        // Wayland the popup's anchor rect is measured against the dock's
+        // surface, so both ends have to come out of the same frame. Mixing in
+        // Screen.* would put the preview anywhere (the compositor never tells a
+        // layer-shell client where its surface ended up).
+        var c = item.mapToItem(root, item.width / 2, item.height / 2)
+        var gap = 8
+        var px, py
+        if (root.horizontal) {
+            px = Math.round(c.x - w / 2)
+            py = config.edge === 0 ? -(h + gap) : root.height + gap
+        } else {
+            py = Math.round(c.y - h / 2)
+            px = config.edge === 2 ? root.width + gap : -(w + gap)
+        }
+        // Clamped along the dock only; across it the preview is *meant* to be
+        // outside the surface, which is where the screen is.
+        if (root.horizontal)
+            px = Math.max(0, Math.min(px, root.width - w))
+        else
+            py = Math.max(0, Math.min(py, root.height - h))
+        var g = root.mapToGlobal(px, py)
+
+        // An xdg_popup cannot be moved once mapped, so re-targeting means a new
+        // surface: hide first, always.
+        appPreview.visible = false
+
+        previewUuid = info.uuid
+        previewCaptureW = Math.round(w * Screen.devicePixelRatio)
+        appPreview.width = w
+        appPreview.height = h
+        appPreview.x = g.x
+        appPreview.y = g.y
+        appPreview.thumbId = appPreviews.thumbId(info.uuid)
+
+        // A capture we already have shows instantly; otherwise the window stays
+        // hidden until one arrives (see the Connections below), so a refused
+        // ScreenShot2 degrades to "nothing appears" instead of an empty frame.
+        var rev = appPreviews.revision(info.uuid)
+        appPreview.revision = rev
+        if (rev > 0)
+            appPreview.visible = true
+        appPreviews.request(info.uuid, previewCaptureW)
+    }
+
+    function hideAppPreview() {
+        hoverPreviewTimer.stop()
+        if (previewUuid !== "") {
+            if (appPreviews)
+                appPreviews.cancel(previewUuid)
+            previewUuid = ""
+        }
+        appPreview.visible = false
+    }
+
+    Timer {
+        id: hoverPreviewTimer
+        interval: Math.max(0, config.appPreviewDelayMs)
+        onTriggered: root.showAppPreview(root.previewPendingItem, root.previewPendingModel,
+                                         root.previewPendingRow)
+    }
+
+    // Keep the visible preview from going stale. Only one is ever on screen, and
+    // AppPreviews reuses a capture younger than its freshness window, so this
+    // costs KWin at most one offscreen re-render per second.
+    Timer {
+        id: previewRefreshTimer
+        interval: 1000
+        repeat: true
+        running: appPreview.visible && root.previewUuid !== ""
+        onTriggered: if (appPreviews) appPreviews.request(root.previewUuid, root.previewCaptureW)
+    }
+
+    Connections {
+        target: appPreviews
+        function onThumbnailReady(uuid, revision) {
+            if (uuid !== root.previewUuid)
+                return // the pointer left this icon while KWin was drawing
+            appPreview.revision = revision
+            appPreview.visible = true
+        }
+    }
+
+    AppPreviewWindow {
+        id: appPreview
+        frameColor: theme.background
+        borderColor: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.35)
+    }
+
+    onMenuOpenChanged: if (menuOpen) hideAppPreview()
+    onDraggingChanged: if (dragging) hideAppPreview()
 
     // ---- Section helpers -------------------------------------------------
 
@@ -1585,8 +1755,11 @@ Item {
 
                         ToolTip {
                             popupType: Popup.Window
+                            // The hover preview says the same thing with the
+                            // window itself; two of them over one icon is noise.
                             visible: config.showTooltips && mouseArea.containsMouse
                                      && !contextMenu.visible && !mouseArea.drag.active
+                                     && !appPreview.visible
                             delay: 600
                             text: delegateRoot.title || delegateRoot.name
                         }
@@ -1801,7 +1974,16 @@ Item {
                             anchors.fill: parent
                             hoverEnabled: true
                             acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                            // Hover preview of this app's window. The section
+                            // token is what keeps it to the dock's own apps
+                            // block; a selectable-apps widget passes its own and
+                            // queueAppPreview() declines.
+                            onEntered: root.queueAppPreview(content, appsGrid.appsModel,
+                                                            delegateRoot.index,
+                                                            appsGrid.sectionToken)
+                            onExited: root.hideAppPreview()
                             onPressed: (mouse) => {
+                                root.hideAppPreview()
                                 drag.target = mouse.button === Qt.LeftButton ? content : null
                             }
                             onReleased: content.Drag.drop()

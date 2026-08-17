@@ -57,6 +57,14 @@ public:
     Q_INVOKABLE void sendToDesktop(int row, int position);
     Q_INVOKABLE void togglePinned(int row);
     Q_INVOKABLE QVariantList windowList(int row) const;
+    // The one window this row's hover preview shows: its active window, or the
+    // first one if none is. Returns {uuid, width, height}; **empty** for a
+    // separator and for a launcher with nothing running, which is what makes
+    // "no window, no preview" fall out instead of being special-cased in QML.
+    // The size is the window's own geometry: it gives the preview its aspect
+    // ratio before the capture arrives, so the surface never resizes under the
+    // pointer.
+    Q_INVOKABLE QVariantMap previewWindow(int row) const;
     Q_INVOKABLE void activateWindow(int row, int windowIndex);
     Q_INVOKABLE void moveItem(int from, int to); // drag-and-drop reordering
     Q_INVOKABLE void syncWindows();               // deferred re-sync after startup

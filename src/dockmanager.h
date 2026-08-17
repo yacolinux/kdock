@@ -60,6 +60,7 @@ class AppearanceControl;
 class VirtualDesktops;
 class DesktopWallpapers;
 class AutoColorScheme;
+class AppPreviews;
 
 class DockManager : public QObject
 {
@@ -94,6 +95,10 @@ public:
         AppearanceControl *appearance = nullptr;
         VirtualDesktops *desktops = nullptr;
         DesktopWallpapers *desktopWallpapers = nullptr;
+        // Window thumbnails for the apps block's hover previews. Shared on
+        // purpose: captures are serialized process-wide and two docks pointing
+        // at the same window reuse the one image.
+        AppPreviews *appPreviews = nullptr;
         // ColorAuto. Injected after construction (setAutoColorScheme): it needs
         // the manager itself to reach the docks, so the two cannot both be
         // built with the other already in hand.

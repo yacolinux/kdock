@@ -609,6 +609,33 @@ QVariantList DockModel::windowList(int row) const
     return list;
 }
 
+QVariantMap DockModel::previewWindow(int row) const
+{
+    QVariantMap map;
+    if (row < 0 || row >= m_items.size())
+        return map;
+    const Item &item = m_items.at(row);
+    if (item.isSeparator || item.windows.isEmpty())
+        return map;
+
+    AbstractWindow *pick = item.windows.first();
+    for (AbstractWindow *w : item.windows) {
+        if (w->activated) {
+            pick = w;
+            break;
+        }
+    }
+    // The wlr backend leaves both empty: no uuid means no capture, and QML
+    // treats that exactly like "no window".
+    if (pick->uuid.isEmpty())
+        return map;
+
+    map[QStringLiteral("uuid")] = pick->uuid;
+    map[QStringLiteral("width")] = pick->geometry.width();
+    map[QStringLiteral("height")] = pick->geometry.height();
+    return map;
+}
+
 void DockModel::moveItem(int from, int to)
 {
     if (from == to || from < 0 || to < 0 || from >= m_items.size() || to >= m_items.size())

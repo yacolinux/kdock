@@ -1156,6 +1156,54 @@ QWidget *SettingsDialog::createGeneralTab()
         form->addRow(tr("Tooltips:"), cb);
     }
 
+    // Hover previews of the apps block: a small undecorated window with the
+    // capture of the app's window. Shared, like the tooltips above.
+    {
+        auto *cb = new QCheckBox(tr("Vista previa de la ventana al pasar el mouse"), tab);
+        cb->setChecked(DockConfig::appPreview());
+        cb->setToolTip(tr("Al pasar el mouse por un ícono de Apps que tenga una ventana "
+                          "abierta, muestra una ventanita sin bordes con la captura de esa "
+                          "ventana. Necesita KWin, y que el kdock.desktop instalado declare "
+                          "X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2. Vale "
+                          "para el bloque Apps; cada widget Apps Seleccionables tiene su "
+                          "propia casilla, en la solapa Widgets y en su clic derecho."));
+        form->addRow(tr("Vista previa:"), cb);
+
+        auto *size = new QSpinBox(tab);
+        size->setRange(DockConfig::kAppPreviewSizeMin, DockConfig::kAppPreviewSizeMax);
+        size->setSingleStep(20);
+        size->setSuffix(tr(" px"));
+        size->setValue(DockConfig::appPreviewSize());
+        size->setToolTip(tr("Ancho de la vista previa, acá y en los widgets Apps "
+                            "Seleccionables. El alto sale de la proporción real de la "
+                            "ventana, así que la captura nunca se deforma."));
+        connect(size, &QSpinBox::valueChanged, this,
+                [](int px) { DockConfig::setAppPreviewSize(px); });
+        form->addRow(tr("· Tamaño:"), size);
+
+        auto *delay = new QSpinBox(tab);
+        delay->setRange(0, DockConfig::kAppPreviewDelayMax);
+        delay->setSingleStep(50);
+        delay->setSuffix(tr(" ms"));
+        delay->setValue(DockConfig::appPreviewDelayMs());
+        // No " = " in a translatable string: the catalog splits on the first one
+        // (see tests/static/check-tr-separator.py).
+        delay->setToolTip(tr("Cuánto tiene que quedarse el mouse sobre el ícono antes de "
+                             "que aparezca la vista previa. Con 0 aparece enseguida."));
+        connect(delay, &QSpinBox::valueChanged, this,
+                [](int ms) { DockConfig::setAppPreviewDelayMs(ms); });
+        form->addRow(tr("· Retardo:"), delay);
+
+        // Both numbers are meaningless with the feature off, and a disabled row
+        // says so better than a tooltip.
+        size->setEnabled(cb->isChecked());
+        delay->setEnabled(cb->isChecked());
+        connect(cb, &QCheckBox::toggled, size, &QWidget::setEnabled);
+        connect(cb, &QCheckBox::toggled, delay, &QWidget::setEnabled);
+        connect(cb, &QCheckBox::toggled, this,
+                [](bool on) { DockConfig::setAppPreview(on); });
+    }
+
     // Separators (both kinds) and their size live in the Layout tab: they are
     // part of the section order, not a numeric setting.
 
@@ -2265,8 +2313,24 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     // above already measure ~700 px and a QHBoxLayout of checkboxes cannot
     // shrink below its labels, so a fourth one pushed the panel past the
     // dialog's width (measured 862 against 785) and brought a scrollbar with it.
+    // Hover previews, per widget. **Independent of the General tab's checkbox**,
+    // which governs the apps block and nothing else: previews on this widget and
+    // on nothing else is a valid setup, so there is no master to disable it
+    // against. Size and delay are the shared ones (General, once).
+    auto *preview = new QCheckBox(tr("Vista previa de la ventana"), box);
+    preview->setChecked(m_config->widgetAppPreview(token));
+    preview->setToolTip(
+        tr("Al pasar el mouse por un ícono de este widget que tenga una ventana abierta, "
+           "muestra una ventanita sin bordes con la captura de esa ventana. Es "
+           "independiente de la casilla de la solapa General, que solo vale para el "
+           "bloque Apps; el tamaño y el retardo sí salen de ahí. Con esto apagado el "
+           "widget no le pide ni una captura a KWin."));
+    connect(preview, &QCheckBox::toggled, this,
+            [this, token](bool on) { m_config->setWidgetAppPreview(token, on); });
+
     auto *ungroupRow = new QHBoxLayout;
     ungroupRow->addWidget(ungroup);
+    ungroupRow->addWidget(preview);
     ungroupRow->addStretch();
     layout->addLayout(ungroupRow);
 
@@ -2299,6 +2363,7 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     follow(&DockConfig::widgetExcludeOthersChanged, excludeOthers, &DockConfig::widgetExcludeOthers);
     follow(&DockConfig::widgetExcludeMonitorChanged, excludeMonitor, &DockConfig::widgetExcludeMonitor);
     follow(&DockConfig::widgetUngroupWindowsChanged, ungroup, &DockConfig::widgetUngroupWindows);
+    follow(&DockConfig::widgetAppPreviewChanged, preview, &DockConfig::widgetAppPreview);
     syncFlags();
 
     auto *list = new QListWidget(box);
@@ -4233,7 +4298,10 @@ QWidget *SettingsDialog::createLayoutTab()
         bool ok = false;
         const QString name = QInputDialog::getText(
             this, tr("Rename section"),
-            tr("Name for \"%1\" (empty = default):").arg(sectionLabel(token)),
+            // Sin " = " adentro: el catálogo parte por el primero y esta cadena
+            // pasó meses con su traducción al español cortada al medio
+            // (tests/static/check-tr-separator.py).
+            tr("Name for \"%1\" (empty: default):").arg(sectionLabel(token)),
             QLineEdit::Normal, m_config->widgetName(token), &ok);
         if (ok)
             m_config->setWidgetName(token, name);
@@ -6210,7 +6278,7 @@ QWidget *SettingsDialog::createMonitorsTab()
         bool ok = false;
         const QString text = QInputDialog::getText(
             this, tr("Nombre del dock"),
-            tr("Alias para \"%1\" (vacío = dejar solo el monitor y el número):")
+            tr("Alias para \"%1\" (vacío: dejar solo el monitor y el número):")
                 .arg(dockLabel(dockId)),
             QLineEdit::Normal, current, &ok);
         if (ok)

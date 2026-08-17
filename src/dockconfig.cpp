@@ -204,6 +204,61 @@ void DockConfig::setShowTooltips(bool on)
         emit cfg->showTooltipsChanged();
 }
 
+bool DockConfig::appPreview()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("appPreview"), false).toBool();
+}
+
+void DockConfig::setAppPreview(bool on)
+{
+    if (appPreview() == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("appPreview"), on);
+    // Shared setting read per instance in QML (see appPreviewProp), so every
+    // live dock has to be pinged for its bindings to re-evaluate.
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->appPreviewChanged();
+}
+
+int DockConfig::appPreviewSize()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(kAppPreviewSizeMin,
+                  s.value(QStringLiteral("appPreviewSize"), kAppPreviewSizeDefault).toInt(),
+                  kAppPreviewSizeMax);
+}
+
+void DockConfig::setAppPreviewSize(int px)
+{
+    const int value = qBound(kAppPreviewSizeMin, px, kAppPreviewSizeMax);
+    if (appPreviewSize() == value)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("appPreviewSize"), value);
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->appPreviewChanged();
+}
+
+int DockConfig::appPreviewDelayMs()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return qBound(0, s.value(QStringLiteral("appPreviewDelayMs"), kAppPreviewDelayDefault).toInt(),
+                  kAppPreviewDelayMax);
+}
+
+void DockConfig::setAppPreviewDelayMs(int ms)
+{
+    const int value = qBound(0, ms, kAppPreviewDelayMax);
+    if (appPreviewDelayMs() == value)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("appPreviewDelayMs"), value);
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->appPreviewChanged();
+}
+
 int DockConfig::hideAnimationMs()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);
@@ -1281,6 +1336,23 @@ void DockConfig::setWidgetUngroupWindows(const QString &token, bool on)
         return;
     m_settings.setValue(token + QStringLiteral("/ungroupWindows"), on);
     emit widgetUngroupWindowsChanged(token);
+}
+
+bool DockConfig::widgetAppPreview(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return false;
+    // Off by default: it is the switch that decides whether this widget asks
+    // KWin for captures at all, so an upgrade must not turn it on for anybody.
+    return m_settings.value(token + QStringLiteral("/appPreview"), false).toBool();
+}
+
+void DockConfig::setWidgetAppPreview(const QString &token, bool on)
+{
+    if (!isAppsWidgetToken(token) || widgetAppPreview(token) == on)
+        return;
+    m_settings.setValue(token + QStringLiteral("/appPreview"), on);
+    emit widgetAppPreviewChanged(token);
 }
 
 void DockConfig::reloadAppsWidget(const QString &token)
