@@ -1110,6 +1110,7 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **Un clic por coordenadas contra una lista que se reordena apunta a otra fila.**
 - **Clave de fila en `DockModel`**
 - **`enabledScreens=` vacío no es lista vacía**
+- **Una sonda sin `XDG_DATA_HOME` aislado le deja al usuario un escritorio SIN DOCKS, y no se repara sola.**
 - **`kdock-previews` necesita DOS privilegios de KWin**
 - **Correr `./build/previews/kdock-previews` no está autorizado.**
 

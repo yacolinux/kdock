@@ -885,6 +885,28 @@ este archivo y leé la entrada correspondiente (o toda la sección).
 - **`enabledScreens=` vacío no es lista vacía**: QSettings lo devuelve como `[""]`, así que
   `migrateFirstRun()` cree que ya hay docks habilitados y **no crea ninguno**. Para una
   config de prueba, omití la clave por completo en vez de dejarla vacía.
+- **Una sonda sin `XDG_DATA_HOME` aislado le deja al usuario un escritorio SIN DOCKS, y no se
+  repara sola.** La receta de sondas de `DockManager`/`SettingsDialog` siembra
+  `enabledScreens=NOEXISTE-0` y monitores inventados (`VIRT-1`); si la corrida no aisló el home,
+  eso queda escrito en el `kdock.conf` **real**. Al siguiente arranque `wantedDocks()` no
+  encuentra ningún monitor que coincida, se crean **cero** ventanas, y como
+  `setQuitOnLastWindowClosed(false)` el proceso se queda vivo e invisible: desde afuera se ve
+  igual que *"compila pero no ejecuta"*. Y no se recupera nunca, porque `migrateFirstRun()`
+  corta con `if (!DockConfig::enabledDocks().isEmpty()) return` — la lista no está vacía, está
+  llena de basura. Mordió el 2026-08-16 y se llevó los 12 docks del usuario.
+  El diagnóstico es una línea, y conviene hacerlo **antes** de mirar el código que se acaba de
+  tocar:
+
+  ```bash
+  grep -nE "^(enabledScreens|knownScreens|knownDocks)=" ~/.local/share/kdock/kdock.conf
+  ```
+
+  La cura es restaurar esas tres claves desde el `backup-<timestamp>/kdock.conf` del último
+  install (el resto del archivo no se toca: el `snapshot` de wallpapers es estado de runtime
+  legítimo y revertirlo le cambia el fondo). Y borrar los `kdock-NOEXISTE-0.conf` /
+  `kdock-VIRT-1-0.conf` que el propio kdock creó al leer esa lista.
+  **La suite no tiene este problema** —`tests/unit/sandbox.h` pone el home descartable antes de
+  `QApplication`, verificado por md5 del archivo real—; el riesgo es de las sondas a mano.
 - **`kdock-previews` necesita DOS privilegios de KWin**, no uno:
   `X-KDE-Wayland-Interfaces=org_kde_plasma_window_management` (ver las ventanas) y
   `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (capturarlas). KWin resuelve
