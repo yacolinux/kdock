@@ -696,7 +696,11 @@ Item {
     // two properties because hiding can be delayed (config.hideDelayMs): the
     // dock comes back the instant it is wanted, and only goes away once the
     // pointer has stayed off it for that long. Revealing is never delayed.
-    readonly property bool revealWanted: !hideWanted || dockHover.hovered || menuOpen || dragging
+    // `dockHover.hovered && !dockHoverStale` instead of plain `dockHover.hovered`:
+    // see dockHoverStale below — KWin can lose the leave event for this
+    // surface, and without this the dock is stuck revealed forever (2026-08-18).
+    readonly property bool revealWanted: !hideWanted || (dockHover.hovered && !dockHoverStale)
+                                         || menuOpen || dragging
     // Starts out as a binding so the first frame is right (a dock configured to
     // auto-hide comes up hidden); the handler below breaks it on the first
     // change, which is the point — from there the value is driven, not derived.
@@ -744,6 +748,15 @@ Item {
     // also the filter for late replies: a capture that comes back for a uuid we
     // are no longer pointing at is a reply to a hover the user already left.
     property string previewUuid: ""
+    // `onExited` on the icon's MouseArea is the fast path that closes the
+    // preview, but KWin does not always deliver it once the xdg_popup has
+    // appeared next to the icon (same class of unreliable-leave bug the
+    // older icon tooltip hit and fixed with an inactivity watchdog instead
+    // of trusting the leave event — see previewWatchdog below and 2026-08-18
+    // in CLAUDE-TRAMPS.md). Updated from queueAppPreview() and from the
+    // icon's onPositionChanged; a lost leave stops updating it, so the
+    // watchdog's elapsed-time check still catches it.
+    property real previewIconLastActivity: 0
     // Capture width in device pixels, kept for the refresh timer.
     property int previewCaptureW: 0
     // What the delay timer is going to show, once it fires.
@@ -775,6 +788,7 @@ Item {
     // Called from an icon's MouseArea on hover. `token` says which block asked;
     // each one carries its own switch.
     function queueAppPreview(item, model, row, token) {
+        previewIconLastActivity = Date.now()
         if (!appPreviews || !appPreviewEnabled(token)) {
             hideAppPreview()
             return
@@ -872,6 +886,23 @@ Item {
         repeat: true
         running: appPreview.visible && root.previewUuid !== ""
         onTriggered: if (appPreviews) appPreviews.request(root.previewUuid, root.previewCaptureW)
+    }
+
+    // Safety net for the lost-onExited case documented at previewIconLastActivity
+    // above: if nothing has touched that timestamp in a while, the icon's
+    // MouseArea is not receiving events either, so treat it as "left" even
+    // though no exited fired. Only runs while a preview is up, and does
+    // nothing when onExited works normally (hideAppPreview() already ran and
+    // appPreview.visible is false by the time this would trigger).
+    Timer {
+        id: previewWatchdog
+        interval: 300
+        repeat: true
+        running: appPreview.visible
+        onTriggered: {
+            if (Date.now() - root.previewIconLastActivity > 600)
+                root.hideAppPreview()
+        }
     }
 
     Connections {
@@ -1101,6 +1132,44 @@ Item {
 
     HoverHandler {
         id: dockHover
+    }
+
+    // dockHover.hovered has been observed stuck true for hours after KWin
+    // failed to deliver this surface's pointer-leave (live case: 2026-08-18,
+    // an eDP-1 dodge dock stayed fully visible over a maximized window for
+    // ~12h; a plain restart fixed it instantly, proving the C++ overlap
+    // logic was fine and the stuck bit was this QML-side flag). Wayland
+    // gives no way to query the real cursor position from here to check
+    // `hovered` against ground truth (see the icon preview's inactivity
+    // watchdog above for the same limitation), so this is the same
+    // trade-off: treat a long stretch with no fresh pointer position as
+    // "probably not really hovered anymore" and let hideWanted win. Narrowly
+    // scoped (menu/drag/preview all block it) to keep the false-positive
+    // window — hiding out from under someone genuinely resting the pointer
+    // — as small as it can be while still being able to self-heal at all.
+    property bool dockHoverStale: false
+    property real dockHoverLastActivity: 0
+    property point dockHoverPos: dockHover.point.position
+    onDockHoverPosChanged: { dockHoverLastActivity = Date.now(); dockHoverStale = false }
+    Connections {
+        target: dockHover
+        function onHoveredChanged() {
+            if (dockHover.hovered) {
+                root.dockHoverLastActivity = Date.now()
+                root.dockHoverStale = false
+            }
+        }
+    }
+    Timer {
+        id: dockHoverWatchdog
+        interval: 1000
+        repeat: true
+        running: root.hideWanted && dockHover.hovered && !root.dockHoverStale
+                 && !root.menuOpen && !root.dragging && !appPreview.visible
+        onTriggered: {
+            if (Date.now() - root.dockHoverLastActivity > 4000)
+                root.dockHoverStale = true
+        }
     }
 
     Item {
@@ -1982,6 +2051,7 @@ Item {
                                                             delegateRoot.index,
                                                             appsGrid.sectionToken)
                             onExited: root.hideAppPreview()
+                            onPositionChanged: root.previewIconLastActivity = Date.now()
                             onPressed: (mouse) => {
                                 root.hideAppPreview()
                                 drag.target = mouse.button === Qt.LeftButton ? content : null

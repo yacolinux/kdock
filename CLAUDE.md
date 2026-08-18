@@ -1131,6 +1131,7 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **Una sonda sin `XDG_DATA_HOME` aislado le deja al usuario un escritorio SIN DOCKS, y no se repara sola.**
 - **`kdock-previews` necesita DOS privilegios de KWin**
 - **Correr `./build/previews/kdock-previews` no está autorizado.**
+- **Un `HoverHandler` sobre la superficie del dock se puede quedar pegado en `hovered=true` para siempre, y con eso muere el auto-hide entero.**
 
 ## Depurar agrupación de ventanas
 

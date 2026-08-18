@@ -361,6 +361,16 @@ se va cuando el ícono pierde el hover.
   `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2`. Es **por ejecutable**, así que el
   `--dump-captures` de `kdock-previews` no responde por kdock: por eso kdock tiene el suyo
   (`kdock --dump-captures <dir>`, `runDumpCapturesCli()` en `src/main.cpp`).
+- **`onExited` de la `MouseArea` del ícono no es confiable como único cierre** (2026-08-18): es
+  la misma familia de bug que ya se había resuelto una vez para el tooltip de ícono más viejo —
+  "ni `HoverHandler` ni `MouseArea.onExited` de la superficie del popup separada disparan el
+  leave de forma confiable en KWin" cuando aparece un xdg_popup pegado al ícono — pero el código
+  nuevo volvió a depender solo del leave. Fix: `previewIconLastActivity` (actualizado desde
+  `queueAppPreview()` y `onPositionChanged` de la `MouseArea`) + `previewWatchdog`, un `Timer`
+  de 300 ms que corre solo mientras `appPreview.visible` y cierra si pasaron 600 ms sin
+  actividad — sin tocar el camino rápido (`onExited` sigue ahí y en el caso normal dispara antes
+  de que el watchdog llegue a mirar). Ver el bullet de `dockHover` en *Modos de ocultamiento*:
+  el mismo problema, un piso más arriba, se comió el auto-hide entero.
 
 ### App-icon labels (`config.iconLabelMode` + `appsComp` in `Dock.qml`)
 - Six modes (`DockConfig::IconLabelMode`): **icon only** (0, default — pixel-identical to the pre-label dock), **name below** (1), **name at the right** (2), **name only** (3), **name above** (4), **name at the left** (5). The values are persisted, hence the non-obvious order: 4 and 5 were added later. Scope: the `apps` block only (launchers + running windows); every other section uses `widgetLabelMode` (see below).
@@ -604,6 +614,53 @@ ocultamiento"), y son cuatro:
 - Verificado en la sesión real (segunda instancia aislada, 2026-08-09): dodge escondido con una
   ventana encima y visible en un escritorio vacío; `windows-below` visible sobre la ventana y sin
   reservar espacio; con alineación End el rect calculado coincidió al píxel con la captura.
+- **`dockHover.hovered` se puede quedar pegado en `true` para siempre, y entonces nada —ni
+  dodge ni auto-hide— vuelve a esconder el dock** (bug reportado 2026-08-18: el dock de `eDP-1`,
+  modo Dodge, quedó fijo a la vista sobre una ventana maximizada durante ~12h; un simple reinicio
+  del proceso lo arregló al instante). Diagnóstico en vivo con `KDOCK_DEBUG_DODGE=1`: al
+  reiniciar, `updateWindowsOverlap()` calculó `overlap=1` correctamente de una — la lógica de
+  C++ (conexiones a `windowAdded`/`windowRemoved`/`changed`, filtro de escritorio, intersección
+  de rects) está bien. La captura de pantalla antes del reinicio mostró el dock dibujado *encima*
+  de la ventana que lo tapaba, con `windowsOverlap` casi seguro ya en `true` en ese momento — o
+  sea que el punto pegado está del lado de QML, en `root.revealWanted` (`hideWanted &&
+  (dockHover.hovered && !dockHoverStale) ...`, línea ~699).
+  - **Sospecha fundada, no solo intuición**: `dockHover` es un `HoverHandler` sobre `root`, la
+    superficie entera del dock — el mismo tipo de construcción que ya se rompió una vez con la
+    feature de *Vista previa de ventana* (ver el bullet de `previewIconLastActivity` más arriba):
+    un xdg_popup que aparece/desaparece pegado a la superficie del dock (el preview se
+    crea/destruye por cada ícono, "cambiar de ícono destruye y rehace el popup") es exactamente
+    la clase de evento que KWin puede no reportarle un *leave* limpio a la superficie de abajo.
+    El commit inmediatamente anterior al bug (`3a0a77f`, la vista previa al hoverear) fue la
+    primera vez que apareció un popup de este tipo pegado al dock durante el uso normal.
+  - **Por qué no hay una forma limpia de verificarlo contra el terreno**: bajo Wayland un cliente
+    no puede consultar la posición real del cursor salvo que ya tenga el foco de puntero — que es
+    justo lo que está en duda. Es la misma limitación por la que el watchdog del preview (arriba)
+    usa inactividad en vez de una consulta de posición.
+  - **Fix, mismo patrón que el del preview, pero acotado más estrecho** porque acá el costo de un
+    falso positivo es mayor (esconder el dock entero, no un tooltip chico): `dockHoverStale`
+    (bool) más `dockHoverLastActivity`, actualizado por `dockHover.point.position` (vía una
+    property intermedia — `HoverHandler` no expone un `onPositionChanged` directo en QML) y por
+    `onHoveredChanged` de una `Connections` sobre `dockHover`. Un `Timer` (`dockHoverWatchdog`,
+    1 s) marca `dockHoverStale = true` recién a los **4 s** sin actividad, y **solo corre**
+    mientras `hideWanted && dockHover.hovered && !menuOpen && !dragging && !appPreview.visible`
+    — o sea, nunca mientras hay un menú abierto, un arrastre en curso o un preview a la vista.
+    `revealWanted` resta `dockHoverStale` del término de hover; cualquier movimiento real
+    (`point.position` cambia) lo resetea a `false` de inmediato, así que revelar de nuevo (mover
+    el mouse a la franja) funciona igual que siempre.
+  - **Trade-off a sabiendas**: si alguien deja el mouse **completamente quieto** sobre el dock
+    (sin menú, sin arrastre, sin preview) más de 4 s mientras el modo pide ocultar, el dock se
+    esconde solo — antes eso no pasaba nunca (correctamente). Se aceptó a cambio de no quedar
+    pegado indefinidamente; si esto molesta más de lo que arregla, subir el umbral de 4 s en
+    `dockHoverWatchdog` (`qml/Dock.qml`) es el primer lugar para tocar.
+  - **No se pudo verificar el arreglo contra el estado podrido real** (nadie puede esperar 12h a
+    pedido): la verificación fue reproducir el síntoma (captura con el dock pintado sobre la
+    ventana), confirmar que `updateWindowsOverlap()` sigue calculando bien, y confirmar que el
+    dock instalado con el fix sigue escondiéndose igual que antes con `KDOCK_DEBUG_DODGE=1` — o
+    sea, sin regresión, pero sin la prueba directa de que esto es *la* causa. **Si vuelve a pasar,
+    arrancar el diagnóstico desde acá**: con `KDOCK_DEBUG_DODGE=1` puesto de antemano (no se
+    puede agregar después sin reiniciar, y reiniciar es lo que borra el estado podrido), y
+    revisando si `dockHoverStale` en algún momento llegó a `true` sin que el dock reapareciera
+    después (lo que apuntaría a que el atasco real está en otro lado, no en `dockHover`).
 
 ### Suite de tests (`tests/`, ctest, 2026-08-09)
 

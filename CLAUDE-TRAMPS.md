@@ -959,3 +959,31 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   `#` (p. ej. `/tmp/kdock-prev-dev/`) y apuntá ahí. Borralo al terminar: mientras exista, le
   concede privilegio de captura a lo que haya en esa ruta.
 
+- **Un `HoverHandler` sobre la superficie del dock se puede quedar pegado en `hovered=true`
+  para siempre, y con eso muere el auto-hide entero** (2026-08-18, reportado por el usuario: el
+  dock de `eDP-1` en modo Dodge quedó fijo a la vista sobre una ventana maximizada durante ~12h;
+  un reinicio del proceso lo arregló al instante). `dockHover` (en `qml/Dock.qml`) es un
+  `HoverHandler` sobre `root`, y `root.revealWanted` lo usa directo (`dockHover.hovered`) sin
+  ningún mecanismo de corrección. Diagnóstico en vivo con `KDOCK_DEBUG_DODGE=1`: al reiniciar,
+  `DockWindow::updateWindowsOverlap()` calculó `overlap=1` correctamente de una — la lógica de
+  C++ no tenía nada malo. La sospecha (no probada contra el estado podrido original, que ya no
+  existía) es la misma familia de bug que ya había mordido una vez a un popup de ícono más viejo
+  (ver la entrada de `MouseArea.onExited` en la sección de *Popups y menús*, y el bullet
+  `previewIconLastActivity` en `AGENTS.md` → *Vista previa de ventana*): el commit anterior al
+  bug agregó, por primera vez, un xdg_popup (la miniatura de ventana al hoverear un ícono) que
+  se crea y destruye pegado a la superficie del dock — justo la clase de evento que KWin puede
+  no reportarle con un *leave* limpio a la superficie de abajo.
+  **No hay forma de consultar la posición real del cursor bajo Wayland sin tener ya el foco de
+  puntero** (que es justo lo que está en duda), así que no hay un chequeo "contra el terreno"
+  posible — la misma limitación que ya había forzado al fix del popup viejo a usar inactividad
+  en vez de una consulta de posición. El fix acá es el mismo patrón, con un umbral más largo
+  (4 s en vez de 600 ms, y apagado mientras hay menú/arrastre/preview) porque el costo de un
+  falso positivo es mayor: esconder el dock entero en vez de una miniatura chica. Ver el bullet
+  de `dockHoverStale` en `AGENTS.md` → *Modos de ocultamiento* para el detalle completo y el
+  trade-off aceptado (un mouse **completamente** quieto sobre el dock más de 4 s, sin menú ni
+  arrastre ni preview, ahora lo esconde solo — antes eso no pasaba).
+  **Si esto vuelve a pasar**, el punto de partida es distinto al de la primera vez: dejar
+  `KDOCK_DEBUG_DODGE=1` puesto de antemano (no se puede agregar después sin reiniciar, que es
+  justo lo que borra el estado podrido) y revisar si `dockHoverStale` en algún momento llegó a
+  `true` sin que el dock volviera a aparecer — eso descartaría a `dockHover` como la causa y
+  apuntaría a otro lado (p. ej. `windowsOverlap` en sí, o `revealed`/la animación).
