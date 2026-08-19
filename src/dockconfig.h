@@ -152,6 +152,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool groupWindows READ groupWindows WRITE setGroupWindows NOTIFY groupWindowsChanged)
     Q_PROPERTY(bool showTooltips READ showTooltipsProp NOTIFY showTooltipsChanged)
     Q_PROPERTY(bool appPreview READ appPreviewProp NOTIFY appPreviewChanged)
+    Q_PROPERTY(bool appPreviewButtons READ appPreviewButtonsProp NOTIFY appPreviewChanged)
     Q_PROPERTY(int appPreviewSize READ appPreviewSizeProp NOTIFY appPreviewChanged)
     Q_PROPERTY(int appPreviewDelayMs READ appPreviewDelayMsProp NOTIFY appPreviewChanged)
     Q_PROPERTY(QString qtStyle READ qtStyleProp NOTIFY qtStyleChanged)
@@ -364,6 +365,11 @@ public:
     static constexpr int kAppPreviewDelayMax = 2000;
     static bool appPreview();
     static void setAppPreview(bool on);
+    // Whether the preview draws the minimize/maximize/close buttons over the
+    // capture. Only the buttons: the preview stays alive under the pointer
+    // either way, which is what makes it reachable at all.
+    static bool appPreviewButtons();
+    static void setAppPreviewButtons(bool on);
     // Width of the preview in logical px; the height follows the window's own
     // aspect ratio.
     static int appPreviewSize();
@@ -753,6 +759,7 @@ public:
     bool showTooltipsProp() const { return showTooltips(); }
     // Same trick again, for the apps block's hover previews.
     bool appPreviewProp() const { return appPreview(); }
+    bool appPreviewButtonsProp() const { return appPreviewButtons(); }
     int appPreviewSizeProp() const { return appPreviewSize(); }
     int appPreviewDelayMsProp() const { return appPreviewDelayMs(); }
     // Same trick as showTooltipsProp(): the value is shared, but QML reads it

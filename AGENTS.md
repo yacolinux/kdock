@@ -299,8 +299,32 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
 ### Vista previa de ventana al pasar el mouse (`src/apppreviews.{h,cpp}` + `qml/AppPreviewWindow.qml`, 2026-08-17)
 
 Al hoverear un ícono —del bloque **Apps** o de un widget **Apps Seleccionables**— que tenga una
-ventana abierta, aparece una **micro ventana sin decoraciones** con la captura de esa ventana;
-se va cuando el ícono pierde el hover.
+ventana abierta, aparece una **micro ventana sin decoraciones** con la captura de esa ventana,
+con tres botones para manejarla. **Se queda mientras el puntero esté encima de ella**, que es lo
+que hace que los botones se puedan apretar.
+
+- **Los tres botones** (esquina superior derecha, sobre la captura, con un fondo que se opaca al
+  hover) son minimizar, maximizar y cerrar, y **actúan sobre la ventana que se está viendo**, no
+  sobre todas las del ícono: `DockModel::closeWindow()` / `setWindowMinimized()` /
+  `setWindowMaximized()`, las tres por `(fila, windowIndex)` y con los rangos chequeados, porque
+  QML se queda con ese par mientras el preview está arriba y un rebuild del modelo se lo deja
+  viejo. **Restaurar de minimizada es `unminimize()` + `activate()`**: una ventana que vuelve
+  detrás de todas las demás se lee como un botón que no hizo nada. Un clic sobre la captura
+  activa la ventana.
+- **Los íconos cambian con el estado** y los dos "restaurar" son nombres distintos a propósito:
+  `window-minimize` ↔ `window-restore` (un rombo en Breeze) y `window-maximize` ↔
+  `window-restore-pip` (una ventanita adentro de otra). Con un solo nombre para los dos, la tira
+  en estado minimizado+maximizado muestra la misma figura dos veces y no hay forma de saber cuál
+  es cuál. (`view-restore`, el tercer candidato obvio, a 14 px es un borrón — se elige mirando el
+  render, nunca el `find`.) El botón de maximizar **no existe** si la ventana no es maximizable
+  (`maximizable` del protocolo plasma-window, o `canMaximize()` en el backend wlr).
+- **La casilla `appPreviewButtons`** (compartida, General → *Vista previa* → *· Botones*) prende
+  y apaga los botones; arranca en **true**, al revés que `appPreview`. La **persistencia bajo el
+  puntero no es opcional**: va con o sin botones.
+- **El estado se refresca solo**: `refreshPreviewState()` relee `previewWindow(previewRow)` desde
+  un `Connections` sobre el modelo del preview (`dataChanged` sin argumentos — releer una fila es
+  más barato que inspeccionar los `QModelIndex`, y esquiva la duda de cómo se leen desde QML). Si
+  la ventana desapareció o el uuid ya no coincide, el preview se baja.
 
 - **Un interruptor por bloque, y son independientes.** El mismo `appsComp` dibuja el bloque de
   apps y cada widget appsel, distinguidos por `sectionToken`; `root.appPreviewEnabled(token)`
@@ -319,7 +343,8 @@ se va cuando el ícono pierde el hover.
   siguen entre sí (`follow()` en el diálogo; el contador `rev` en el menú, porque el getter es
   un `Q_INVOKABLE` sin NOTIFY). Del lado de QML el equivalente es `root.previewFlagRev`, que
   además baja el preview si lo apagan con el puntero encima.
-- **Qué ventana**: `DockModel::previewWindow(row)` devuelve `{uuid, width, height}` de la
+- **Qué ventana**: `DockModel::previewWindow(row)` devuelve
+  `{uuid, width, height, windowIndex, title, minimized, maximized, maximizable}` de la
   ventana **activa** del ícono (o la primera). Mapa vacío para un separador, para un lanzador
   sin ventanas y para el backend wlroots (no hay uuid, y tampoco hay ScreenShot2): sin uuid no
   aparece nada, que es justo el comportamiento pedido — no hay ningún caso especial en QML.
@@ -342,9 +367,31 @@ se va cuando el ícono pierde el hover.
   aparecer en el dock ni en ninguna barra de tareas (verificado con `--dump-captures` con el
   preview en pantalla: 15 ventanas, ninguna es el preview), y **se posiciona** relativo al dock.
   Un toplevel fallaría las dos, y encima se abriría *debajo* del propio panel. `Qt.Popup` haría
-  un grab y se comería el clic derecho del ícono.
-  `Qt.WindowTransparentForInput` completa el juego: si el popup cayera bajo el cursor, el ícono
-  perdería el hover, el preview se escondería, el cursor volvería al ícono… para siempre.
+  un grab y se comería el clic derecho del ícono. Y la tercera mitad, la que hace posibles los
+  botones: **sin grab, la superficie igual recibe input** para sus `MouseArea`.
+- **`Qt.WindowTransparentForInput` se fue** (estaba desde el commit original). Prevenía un bucle
+  real —si el popup cayera bajo el cursor, el ícono perdería el hover, el preview se escondería,
+  el cursor volvería al ícono… para siempre—, pero los botones necesitan input. El bucle se
+  cierra ahora por el otro lado: el preview **no se esconde** cuando el puntero está encima
+  (`previewLastActivity`), y se ubica siempre del otro lado del borde del dock, nunca abajo del
+  ícono que lo llamó.
+- **Los íconos de los botones van con `widgetIconSuffix`**, no con `theme.revision` pelado: son
+  line-art monocromo sobre un velo del color del panel, o sea el mismo problema de fondo que
+  cualquier ícono de widget, con la misma cura (el tercer campo de la URL `image://icon`).
+- **Cerrar es por inactividad, en dos escalones** (`previewWatchdog`, cada 300 ms): **600 ms** sin
+  actividad como siempre, y **5 s** mientras la última actividad haya venido de la superficie del
+  preview (`previewPointerOnSurface`). El escalón largo es el que hace usable la feature: apuntar
+  a un botón de 20 px es quedarse quieto, y 600 ms de eso cerraban el preview a mitad del clic.
+  Es el mismo trade-off ya aceptado en `dockHoverStale` — un puntero **completamente** quieto 5 s
+  encima lo cierra, y a cambio un *leave* perdido se cura solo.
+- **El `onExited` del ícono ya no cierra: arranca `previewLeaveTimer` (250 ms)**. Entre el ícono y
+  el popup hay 8 px de nada, y cerrar al salir dejaba los botones inalcanzables; cualquier
+  `activity()` del preview para el timer.
+- **`revealWanted` suma `appPreview.visible`** (*Modos de ocultamiento*): el preview es una
+  superficie aparte, así que ir del ícono hacia él suelta `dockHover` y un dock que se esconde se
+  deslizaría —llevándose el popup, porque `onRevealedChanged` lo baja—. Es seguro porque
+  `previewWatchdog` garantiza que `appPreview.visible` no se queda pegado, y `dockHoverWatchdog`
+  ya se abstenía mientras hay preview.
 - **La posición se calcula en coordenadas del dock y se mapea al final** (`mapToItem(root, …)`
   → `root.mapToGlobal()`). El anchor rect del popup se mide contra la superficie del dock, así
   que los dos extremos tienen que salir del mismo marco; meter `Screen.*` ahí pone el preview
@@ -365,12 +412,14 @@ se va cuando el ícono pierde el hover.
   la misma familia de bug que ya se había resuelto una vez para el tooltip de ícono más viejo —
   "ni `HoverHandler` ni `MouseArea.onExited` de la superficie del popup separada disparan el
   leave de forma confiable en KWin" cuando aparece un xdg_popup pegado al ícono — pero el código
-  nuevo volvió a depender solo del leave. Fix: `previewIconLastActivity` (actualizado desde
-  `queueAppPreview()` y `onPositionChanged` de la `MouseArea`) + `previewWatchdog`, un `Timer`
-  de 300 ms que corre solo mientras `appPreview.visible` y cierra si pasaron 600 ms sin
-  actividad — sin tocar el camino rápido (`onExited` sigue ahí y en el caso normal dispara antes
-  de que el watchdog llegue a mirar). Ver el bullet de `dockHover` en *Modos de ocultamiento*:
-  el mismo problema, un piso más arriba, se comió el auto-hide entero.
+  nuevo volvió a depender solo del leave. Fix: `previewLastActivity` (actualizado desde
+  `queueAppPreview()`, desde el `onPositionChanged` de la `MouseArea` y —desde que la superficie
+  recibe input— desde el `activity()` del propio preview) + `previewWatchdog`, un `Timer`
+  de 300 ms que corre solo mientras `appPreview.visible` y cierra por inactividad con los dos
+  umbrales de más arriba — sin tocar el camino rápido (`onExited` sigue ahí, ahora vía
+  `previewLeaveTimer`, y en el caso normal cierra antes de que el watchdog llegue a mirar). Ver
+  el bullet de `dockHover` en *Modos de ocultamiento*: el mismo problema, un piso más arriba, se
+  comió el auto-hide entero.
 
 ### App-icon labels (`config.iconLabelMode` + `appsComp` in `Dock.qml`)
 - Six modes (`DockConfig::IconLabelMode`): **icon only** (0, default — pixel-identical to the pre-label dock), **name below** (1), **name at the right** (2), **name only** (3), **name above** (4), **name at the left** (5). The values are persisted, hence the non-obvious order: 4 and 5 were added later. Scope: the `apps` block only (launchers + running windows); every other section uses `widgetLabelMode` (see below).
@@ -626,7 +675,7 @@ ocultamiento"), y son cuatro:
   (dockHover.hovered && !dockHoverStale) ...`, línea ~699).
   - **Sospecha fundada, no solo intuición**: `dockHover` es un `HoverHandler` sobre `root`, la
     superficie entera del dock — el mismo tipo de construcción que ya se rompió una vez con la
-    feature de *Vista previa de ventana* (ver el bullet de `previewIconLastActivity` más arriba):
+    feature de *Vista previa de ventana* (ver el bullet de `previewLastActivity` más arriba):
     un xdg_popup que aparece/desaparece pegado a la superficie del dock (el preview se
     crea/destruye por cada ícono, "cambiar de ícono destruye y rehace el popup") es exactamente
     la clase de evento que KWin puede no reportarle un *leave* limpio a la superficie de abajo.

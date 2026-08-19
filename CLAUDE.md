@@ -1109,6 +1109,7 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **`Window.window` se lee desde un `Item`, no desde adentro de un `Timer`.**
 - **Un `QDBusArgument` local va `const` — y en `BatteryControl` no lo estaba.**
 - **Popups y menús**
+- **Un popup del dock con el que se pueda INTERACTUAR va con `Qt.ToolTip`, nunca con `Qt.Popup`** — y no puede cerrarse por *leave*.
 - **QML no concatena literales adyacentes como C++.**
 - **Un `Menu` de QtQuick.Controls no se dimensiona solo a su ítem más largo.**
 - **Un `Menu` o un `ToolTip` declarados dentro del delegate se instancian por fila.**
@@ -1215,6 +1216,23 @@ corridas, los tres casos que importan:
   traba (un xdg_popup no se puede mover).
 
 **Acordate de sacar el hook** (`grep -c TEMP-PROBE qml/ src/` tiene que dar 0).
+
+**Pero los botones de la vista previa NO necesitan nada de eso** (2026-08-19): `AppPreviewWindow.qml`
+es autocontenido a propósito —no toca ninguna context property, todo entra por properties— así que
+se instancia solo con un `QQmlComponent` y el `image://icon` registrado, y bajo Xvfb es una ventana
+X normal. O sea que **`xdotool` sí le hace clic**, y las señales se leen de un `console.log`:
+
+```bash
+cp qml/AppPreviewWindow.qml /tmp/apvprobe/qml/          # la ruta del repo tiene un '#'
+# Probe.qml: un AppPreviewWindow con las properties a mano y un console.log por señal
+xdotool mousemove 260 14 click 1     # los tres botones: 320-4-66 → centros 260 / 283 / 306
+```
+
+Con eso se verificaron en una corrida los cuatro gestos (los tres botones + el clic en la captura)
+y que **todos** emiten `activity()`, que es lo que impide que el watchdog cierre el preview a
+mitad del clic. Es también la forma de elegir los nombres de ícono: `PROBE_MIN=1 PROBE_MAX=1`
+dibuja la tira en estado "restaurar" y ahí se ve, por ejemplo, que `window-restore` para los dos
+botones son dos rombos idénticos y que `view-restore` a 14 px es un borrón.
 
 **Y ojo con lo que el hook mide: `root.previewUuid` y `appPreview.visible` son estado GLOBAL**,
 no del delegate que los imprime. Solo hay un preview a la vez, así que el reporte de cualquier

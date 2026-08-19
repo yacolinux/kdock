@@ -49,6 +49,7 @@ kdock_add_unit_test(tst_wallpapercolors)
 kdock_add_unit_test(tst_autocolorscheme)
 kdock_add_unit_test(tst_configarchive)
 kdock_add_unit_test(tst_appswidget)
+kdock_add_unit_test(tst_apppreview)
 kdock_add_unit_test(tst_settingsdialog)
 kdock_add_unit_test(tst_audiocontrol)
 
@@ -68,7 +69,7 @@ add_custom_command(
 add_custom_target(kdock_fakebin ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/fakebin/.stamp)
 foreach(t tst_dockgeometry tst_dockconfig tst_dockmanager tst_desktopentry tst_translations tst_brightness
           tst_qmlload tst_weather tst_wallpapercolors tst_autocolorscheme tst_configarchive
-          tst_appswidget tst_settingsdialog tst_audiocontrol)
+          tst_appswidget tst_apppreview tst_settingsdialog tst_audiocontrol)
     add_dependencies(${t} kdock_fakebin)
 endforeach()
 

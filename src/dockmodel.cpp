@@ -633,6 +633,18 @@ QVariantMap DockModel::previewWindow(int row) const
     map[QStringLiteral("uuid")] = pick->uuid;
     map[QStringLiteral("width")] = pick->geometry.width();
     map[QStringLiteral("height")] = pick->geometry.height();
+    // What the preview's window buttons need: which window they act on, and the
+    // two states they toggle. `windowIndex` is the index into this row's window
+    // list, i.e. the same coordinate activateWindow() and the per-window menu
+    // entries already use.
+    map[QStringLiteral("windowIndex")] = item.windows.indexOf(pick);
+    map[QStringLiteral("title")] = pick->title.isEmpty() ? item.displayName() : pick->title;
+    map[QStringLiteral("minimized")] = pick->minimized;
+    map[QStringLiteral("maximized")] = pick->maximized;
+    // The two backends spell the capability differently: plasma-window fills the
+    // flag from its state bitmask, wlr-foreign-toplevel answers the method. Ask
+    // both, or the maximize button would never show on one of them.
+    map[QStringLiteral("maximizable")] = pick->maximizable || pick->canMaximize();
     return map;
 }
 
@@ -665,9 +677,44 @@ void DockModel::moveItem(int from, int to)
 
 void DockModel::activateWindow(int row, int windowIndex)
 {
+    if (AbstractWindow *w = windowAt(row, windowIndex))
+        w->activate();
+}
+
+AbstractWindow *DockModel::windowAt(int row, int windowIndex) const
+{
     if (row < 0 || row >= m_items.size())
-        return;
+        return nullptr;
     const Item &item = m_items.at(row);
-    if (windowIndex >= 0 && windowIndex < item.windows.size())
-        item.windows.at(windowIndex)->activate();
+    if (windowIndex < 0 || windowIndex >= item.windows.size())
+        return nullptr;
+    return item.windows.at(windowIndex);
+}
+
+void DockModel::closeWindow(int row, int windowIndex)
+{
+    if (AbstractWindow *w = windowAt(row, windowIndex))
+        w->requestClose();
+}
+
+void DockModel::setWindowMinimized(int row, int windowIndex, bool on)
+{
+    AbstractWindow *w = windowAt(row, windowIndex);
+    if (!w)
+        return;
+    if (on) {
+        w->minimize();
+    } else {
+        // Restoring means "give it back to me", not just "undo the minimize":
+        // an unminimized window that stays behind everything else reads as a
+        // button that did nothing. Same pair activate() already does.
+        w->unminimize();
+        w->activate();
+    }
+}
+
+void DockModel::setWindowMaximized(int row, int windowIndex, bool on)
+{
+    if (AbstractWindow *w = windowAt(row, windowIndex))
+        w->setMaximized(on);
 }

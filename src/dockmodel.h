@@ -58,14 +58,24 @@ public:
     Q_INVOKABLE void togglePinned(int row);
     Q_INVOKABLE QVariantList windowList(int row) const;
     // The one window this row's hover preview shows: its active window, or the
-    // first one if none is. Returns {uuid, width, height}; **empty** for a
-    // separator and for a launcher with nothing running, which is what makes
-    // "no window, no preview" fall out instead of being special-cased in QML.
+    // first one if none is. Returns {uuid, width, height, windowIndex, title,
+    // minimized, maximized, maximizable}; **empty** for a separator and for a
+    // launcher with nothing running, which is what makes "no window, no preview"
+    // fall out instead of being special-cased in QML.
     // The size is the window's own geometry: it gives the preview its aspect
     // ratio before the capture arrives, so the surface never resizes under the
-    // pointer.
+    // pointer. The rest is what the preview's window buttons act on and draw
+    // themselves from; QML re-reads the map on dataChanged, which is what makes
+    // the buttons follow the window's real state.
     Q_INVOKABLE QVariantMap previewWindow(int row) const;
     Q_INVOKABLE void activateWindow(int row, int windowIndex);
+    // The three window operations the hover preview's buttons offer, on the one
+    // window `windowIndex` names (previewWindow() reports it). Deliberately
+    // per-window and not per-icon, unlike closeAll()/sendToDesktop(): the
+    // preview shows *a* window, so its buttons may not act on the others.
+    Q_INVOKABLE void closeWindow(int row, int windowIndex);
+    Q_INVOKABLE void setWindowMinimized(int row, int windowIndex, bool on);
+    Q_INVOKABLE void setWindowMaximized(int row, int windowIndex, bool on);
     Q_INVOKABLE void moveItem(int from, int to); // drag-and-drop reordering
     Q_INVOKABLE void syncWindows();               // deferred re-sync after startup
     // Every name the apps block draws (separators have none), for Dock.qml's
@@ -138,6 +148,10 @@ private:
     int rowOfKey(const QString &key) const;
     int rowOfWindow(AbstractWindow *window) const;
     QString keyForWindow(AbstractWindow *w) const;
+    // Bounds-checked lookup shared by every per-window invokable: a stale row or
+    // index (the preview's buttons hold on to both across a rebuild) has to be a
+    // no-op, never a crash.
+    AbstractWindow *windowAt(int row, int windowIndex) const;
 
     DockConfig *m_config;
     QString m_widgetToken; // empty = the dock's apps block

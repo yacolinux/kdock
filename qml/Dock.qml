@@ -699,8 +699,16 @@ Item {
     // `dockHover.hovered && !dockHoverStale` instead of plain `dockHover.hovered`:
     // see dockHoverStale below — KWin can lose the leave event for this
     // surface, and without this the dock is stuck revealed forever (2026-08-18).
+    // `appPreview.visible` is in there because the preview is a surface of its
+    // own, outside the dock: moving the pointer from the icon onto it drops
+    // dockHover, and without this term a hiding dock would slide away — taking
+    // the popup anchored to it along, since onRevealedChanged closes the
+    // preview. The buttons would be unreachable in exactly the modes where the
+    // dock is used most. Safe against the stuck-flag family of bug because
+    // previewWatchdog always closes the preview on its own; and dockHoverWatchdog
+    // already stands down while a preview is up, so the two agree.
     readonly property bool revealWanted: !hideWanted || (dockHover.hovered && !dockHoverStale)
-                                         || menuOpen || dragging
+                                         || menuOpen || dragging || appPreview.visible
     // Starts out as a binding so the first frame is right (a dock configured to
     // auto-hide comes up hidden); the handler below breaks it on the first
     // change, which is the point — from there the value is driven, not derived.
@@ -753,16 +761,28 @@ Item {
     // appeared next to the icon (same class of unreliable-leave bug the
     // older icon tooltip hit and fixed with an inactivity watchdog instead
     // of trusting the leave event — see previewWatchdog below and 2026-08-18
-    // in CLAUDE-TRAMPS.md). Updated from queueAppPreview() and from the
-    // icon's onPositionChanged; a lost leave stops updating it, so the
+    // in CLAUDE-TRAMPS.md). Fed by queueAppPreview(), by the icon's
+    // onPositionChanged **and** by the preview surface's own activity() since
+    // that surface takes input; a lost leave stops updating it, so the
     // watchdog's elapsed-time check still catches it.
-    property real previewIconLastActivity: 0
+    property real previewLastActivity: 0
+    // When that last activity came from the preview surface rather than from the
+    // icon. It is the closest thing to "the pointer is on the preview" that can
+    // be trusted here — a real hover flag would be exactly the bit KWin leaves
+    // stuck true. All it buys is the longer idle threshold in previewWatchdog.
+    property bool previewPointerOnSurface: false
     // Capture width in device pixels, kept for the refresh timer.
     property int previewCaptureW: 0
     // What the delay timer is going to show, once it fires.
     property var previewPendingItem: null
     property var previewPendingModel: null
     property int previewPendingRow: -1
+    // Which row the preview on screen belongs to, so the buttons know what to
+    // act on and refreshPreviewState() knows what to re-read. Separate from the
+    // previewPending* above: those are the *next* preview, and by the time a
+    // button is clicked the pointer may already be queueing another one.
+    property var previewModel: null
+    property int previewRow: -1
 
     // Whether the block that `token` names shows previews: the empty token is
     // the dock's apps block, anything else a selectable-apps widget with its own
@@ -788,7 +808,7 @@ Item {
     // Called from an icon's MouseArea on hover. `token` says which block asked;
     // each one carries its own switch.
     function queueAppPreview(item, model, row, token) {
-        previewIconLastActivity = Date.now()
+        noteIconActivity()
         if (!appPreviews || !appPreviewEnabled(token)) {
             hideAppPreview()
             return
@@ -797,6 +817,23 @@ Item {
         previewPendingModel = model
         previewPendingRow = row
         hoverPreviewTimer.restart()
+    }
+
+    // The pointer is on an icon: it left the preview surface, if it ever was
+    // there, and the short idle threshold applies again.
+    function noteIconActivity() {
+        previewLastActivity = Date.now()
+        previewPointerOnSurface = false
+        previewLeaveTimer.stop()
+    }
+
+    // The pointer is on the preview surface. Cancels the grace period the icon's
+    // onExited started, which is what lets the pointer cross the gap between the
+    // icon and the popup without the preview closing on the way.
+    function noteSurfaceActivity() {
+        previewLastActivity = Date.now()
+        previewPointerOnSurface = true
+        previewLeaveTimer.stop()
     }
 
     function showAppPreview(item, model, row) {
@@ -843,12 +880,15 @@ Item {
         appPreview.visible = false
 
         previewUuid = info.uuid
+        previewModel = model
+        previewRow = row
         previewCaptureW = Math.round(w * Screen.devicePixelRatio)
         appPreview.width = w
         appPreview.height = h
         appPreview.x = g.x
         appPreview.y = g.y
         appPreview.thumbId = appPreviews.thumbId(info.uuid)
+        applyPreviewState(info)
 
         // A capture we already have shows instantly; otherwise the window stays
         // hidden until one arrives (see the Connections below), so a refused
@@ -860,13 +900,73 @@ Item {
         appPreviews.request(info.uuid, previewCaptureW)
     }
 
+    // Copy the window's state onto the buttons. `info` is a previewWindow() map.
+    function applyPreviewState(info) {
+        appPreview.windowIndex = info.windowIndex !== undefined ? info.windowIndex : -1
+        appPreview.minimized = info.minimized === true
+        appPreview.maximized = info.maximized === true
+        appPreview.maximizable = info.maximizable === true
+    }
+
+    // Re-read the shown row after the model reported a change: pressing minimize
+    // has to turn that button into "restore", and a window maximized from
+    // anywhere else has to be reflected too.
+    function refreshPreviewState() {
+        if (!appPreview.visible || !previewModel || previewRow < 0)
+            return
+        var info = previewModel.previewWindow(previewRow)
+        // Not the window we are showing any more: it closed, the row was
+        // rebuilt out from under us, or — with several windows under one icon —
+        // the compositor made a different one active and previewWindow() now
+        // picks that. Closing beats swapping the thumbnail under the pointer:
+        // an xdg_popup cannot be moved, so a swap means destroying and
+        // recreating the surface mid-gesture.
+        if (!info || !info.uuid || info.uuid !== previewUuid) {
+            hideAppPreview()
+            return
+        }
+        applyPreviewState(info)
+    }
+
+    Connections {
+        // The model of the preview on screen; null while idle, so this is
+        // connected to nothing most of the time. No arguments: re-reading one
+        // row is cheaper than inspecting the QModelIndexes to find out whether
+        // it was ours.
+        target: root.previewModel
+        function onDataChanged() { root.refreshPreviewState() }
+        function onModelReset() { root.hideAppPreview() }
+        function onRowsRemoved() { root.refreshPreviewState() }
+        function onRowsMoved() { root.refreshPreviewState() }
+    }
+
+    // What the preview's buttons do. All three go through the row+index pair
+    // recorded when the preview was shown, and DockModel bounds-checks both.
+    function previewWindowAction(action, on) {
+        if (!previewModel || previewRow < 0 || appPreview.windowIndex < 0)
+            return
+        if (action === "activate")
+            previewModel.activateWindow(previewRow, appPreview.windowIndex)
+        else if (action === "close")
+            previewModel.closeWindow(previewRow, appPreview.windowIndex)
+        else if (action === "minimize")
+            previewModel.setWindowMinimized(previewRow, appPreview.windowIndex, on)
+        else if (action === "maximize")
+            previewModel.setWindowMaximized(previewRow, appPreview.windowIndex, on)
+        noteSurfaceActivity()
+    }
+
     function hideAppPreview() {
         hoverPreviewTimer.stop()
+        previewLeaveTimer.stop()
+        previewPointerOnSurface = false
         if (previewUuid !== "") {
             if (appPreviews)
                 appPreviews.cancel(previewUuid)
             previewUuid = ""
         }
+        previewModel = null
+        previewRow = -1
         appPreview.visible = false
     }
 
@@ -888,19 +988,40 @@ Item {
         onTriggered: if (appPreviews) appPreviews.request(root.previewUuid, root.previewCaptureW)
     }
 
-    // Safety net for the lost-onExited case documented at previewIconLastActivity
-    // above: if nothing has touched that timestamp in a while, the icon's
-    // MouseArea is not receiving events either, so treat it as "left" even
-    // though no exited fired. Only runs while a preview is up, and does
-    // nothing when onExited works normally (hideAppPreview() already ran and
-    // appPreview.visible is false by the time this would trigger).
+    // Grace period for the gap between the icon and the popup. The icon's
+    // onExited no longer closes the preview outright: there are 8 px of nothing
+    // in between, and closing on the way out would make the buttons
+    // unreachable. Any activity() from the preview surface stops this timer;
+    // if none comes, the pointer really did leave and the preview closes about
+    // as promptly as it used to.
+    Timer {
+        id: previewLeaveTimer
+        interval: 250
+        onTriggered: root.hideAppPreview()
+    }
+
+    // Safety net for the lost-leave case documented at previewLastActivity
+    // above: if nothing has touched that timestamp in a while, neither the
+    // icon's MouseArea nor the preview surface is receiving events, so treat it
+    // as "left" even though no exited fired. Only runs while a preview is up,
+    // and does nothing when the leave arrives normally (the grace timer has
+    // already closed it by then).
+    //
+    // Two thresholds, and the long one is the whole point of the feature:
+    // aiming at a 20 px button means holding the pointer perfectly still, and
+    // 600 ms of that would close the preview mid-click. While the last activity
+    // came from the preview surface the budget is 5 s — the same trade-off
+    // already accepted for dockHoverStale below: a pointer parked dead still on
+    // the preview for 5 s closes it, and in exchange a hover bit stuck by a
+    // dropped leave heals on its own instead of pinning the popup forever.
     Timer {
         id: previewWatchdog
         interval: 300
         repeat: true
         running: appPreview.visible
         onTriggered: {
-            if (Date.now() - root.previewIconLastActivity > 600)
+            var budget = root.previewPointerOnSurface ? 5000 : 600
+            if (Date.now() - root.previewLastActivity > budget)
                 root.hideAppPreview()
         }
     }
@@ -917,8 +1038,24 @@ Item {
 
     AppPreviewWindow {
         id: appPreview
+        // Which window of previewRow the buttons act on. Lives here rather than
+        // in root because it belongs to the surface on screen, exactly like
+        // `minimized`/`maximized` do.
+        property int windowIndex: -1
+
         frameColor: theme.background
         borderColor: Qt.rgba(theme.foreground.r, theme.foreground.g, theme.foreground.b, 0.35)
+        buttonColor: theme.foreground
+        // The buttons are monochrome line art over a scrim of the panel colour:
+        // same background problem as every widget icon, so the same override.
+        iconSuffix: root.widgetIconSuffix
+        showButtons: config.appPreviewButtons
+
+        onActivity: root.noteSurfaceActivity()
+        onActivateRequested: root.previewWindowAction("activate", true)
+        onCloseRequested: root.previewWindowAction("close", true)
+        onMinimizeToggled: (on) => root.previewWindowAction("minimize", on)
+        onMaximizeToggled: (on) => root.previewWindowAction("maximize", on)
     }
 
     onMenuOpenChanged: if (menuOpen) hideAppPreview()
@@ -2050,8 +2187,13 @@ Item {
                             onEntered: root.queueAppPreview(content, appsGrid.appsModel,
                                                             delegateRoot.index,
                                                             appsGrid.sectionToken)
-                            onExited: root.hideAppPreview()
-                            onPositionChanged: root.previewIconLastActivity = Date.now()
+                            // Not hideAppPreview(): the pointer may be on its
+                            // way to the preview's buttons, and there are 8 px
+                            // of nothing to cross first. previewLeaveTimer
+                            // closes it unless the preview says otherwise.
+                            onExited: if (appPreview.visible) previewLeaveTimer.restart()
+                                      else root.hideAppPreview()
+                            onPositionChanged: root.noteIconActivity()
                             onPressed: (mouse) => {
                                 root.hideAppPreview()
                                 drag.target = mouse.button === Qt.LeftButton ? content : null

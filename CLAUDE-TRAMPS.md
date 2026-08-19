@@ -746,6 +746,26 @@ este archivo y leé la entrada correspondiente (o toda la sección).
     "limpios" dieron verde sobre esto.
 - **Popups y menús**: siempre `popupType: Popup.Window`, si no quedan recortados dentro
   de la superficie del dock en Wayland.
+- **Un popup del dock con el que se pueda INTERACTUAR va con `Qt.ToolTip`, nunca con
+  `Qt.Popup`** — y no puede cerrarse por *leave*. Las dos mitades costaron una feature entera
+  cada una, y la segunda mordió dos veces (la miniatura de ventana volvió a caer en ella el
+  2026-08-18, después de que un preview más viejo ya la hubiera resuelto):
+  - **El grab.** `Qt::Popup` hace un *input grab* de Wayland mientras está abierto y **se traga
+    el clic derecho del ícono de abajo**: el menú contextual no abre y parece un bug del menú.
+    `Qt::ToolTip` no hace grab y su superficie **igual recibe input** para sus `MouseArea`, que
+    es lo que hace posibles los botones de `qml/AppPreviewWindow.qml`. Con transient parent es
+    además un xdg_popup, o sea que `LayerSurface::attachPopup()` lo posiciona contra el dock y
+    `plasma-window-management` no lo reporta como ventana.
+  - **El leave.** Ni `HoverHandler` ni `MouseArea.onExited` de la superficie del popup separada
+    disparan el *leave* de forma confiable en KWin, así que cualquier `containsMouse`/`hovered`
+    que use para decidir si sigue abierto **queda pegado en `true` para siempre**. El cierre va
+    por **inactividad**: un timestamp que actualizan el cuerpo *y cada botón*
+    (`onEntered`/`onPositionChanged`) más un `Timer` repetitivo. Y si el popup es clickeable,
+    el umbral tiene que ser largo mientras el puntero esté encima (5 s en el preview): apuntar a
+    un botón chico es quedarse quieto, y 600 ms de quietud cierran el popup a mitad del clic.
+  - **Y el corolario de layout**: entre el ícono y el popup hay un hueco, y cerrar en el
+    `onExited` del ícono deja los botones **inalcanzables** aunque todo lo demás esté bien. Va
+    con un timer de gracia (250 ms) que la actividad del popup cancela.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú
   padre.** Por eso las cabeceras de submenú eran las únicas sin ícono mientras todas las hojas
   ya eran `IconMenuItem`. Se arregla con `delegate: SubMenuDelegate {}` en el menú padre, y el
@@ -969,7 +989,7 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   C++ no tenía nada malo. La sospecha (no probada contra el estado podrido original, que ya no
   existía) es la misma familia de bug que ya había mordido una vez a un popup de ícono más viejo
   (ver la entrada de `MouseArea.onExited` en la sección de *Popups y menús*, y el bullet
-  `previewIconLastActivity` en `AGENTS.md` → *Vista previa de ventana*): el commit anterior al
+  `previewLastActivity` en `AGENTS.md` → *Vista previa de ventana*): el commit anterior al
   bug agregó, por primera vez, un xdg_popup (la miniatura de ventana al hoverear un ícono) que
   se crea y destruye pegado a la superficie del dock — justo la clase de evento que KWin puede
   no reportarle con un *leave* limpio a la superficie de abajo.

@@ -28,6 +28,7 @@
 #include "settingsdialog.h"
 #include "theme.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
@@ -83,6 +84,18 @@ private:
                 data << c->itemData(i).toString();
             if (data.contains(QStringLiteral("VIRT-1")) && data.contains(QStringLiteral("VIRT-9")))
                 return c;
+        }
+        return nullptr;
+    }
+
+    // Un casillero por su etiqueta. Nunca por índice: findChildren recorre el
+    // árbol de padres, no el orden de construcción, y el diálogo tiene decenas
+    // de QCheckBox.
+    static QCheckBox *checkBoxNamed(SettingsDialog *dlg, const QString &text)
+    {
+        for (QCheckBox *cb : dlg->findChildren<QCheckBox *>()) {
+            if (cb->text() == text)
+                return cb;
         }
         return nullptr;
     }
@@ -370,6 +383,42 @@ private slots:
         QTest::qWait(200);
         QVERIFY(allVisible());
         QVERIFY(!notice->isVisible());
+    }
+
+    // La casilla de los botones de la vista previa: escribe la clave compartida
+    // y sigue al interruptor maestro. Manejar el diálogo desde código es lo
+    // único que prueba el cableado — una captura muestra el casillero igual si
+    // el connect no está.
+    void previewButtonsCheckboxFollowsItsMaster()
+    {
+        const QString id = seedDock(QStringLiteral("VIRT-1"));
+
+        Theme theme;
+        DesktopEntryIndex apps;
+        m_shared.theme = &theme;
+        m_shared.apps = &apps;
+        DockManager manager(m_shared);
+
+        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, nullptr, &manager, &theme);
+
+        QCheckBox *master = checkBoxNamed(&dlg, QStringLiteral("Vista previa de la ventana al pasar el mouse"));
+        QCheckBox *buttons = checkBoxNamed(&dlg, QStringLiteral("Minimizar, maximizar y cerrar"));
+        QVERIFY2(master && buttons, "no se encontraron las casillas de la vista previa");
+
+        // La vista previa arranca apagada, así que el casillero de los botones
+        // arranca deshabilitado aunque su propia clave esté en true.
+        QVERIFY(!master->isChecked());
+        QVERIFY(!buttons->isEnabled());
+        QVERIFY(buttons->isChecked());
+
+        master->setChecked(true);
+        QVERIFY(DockConfig::appPreview());
+        QVERIFY(buttons->isEnabled());
+
+        buttons->setChecked(false);
+        QVERIFY(!DockConfig::appPreviewButtons());
+        buttons->setChecked(true);
+        QVERIFY(DockConfig::appPreviewButtons());
     }
 };
 

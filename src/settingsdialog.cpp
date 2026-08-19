@@ -1194,12 +1194,24 @@ QWidget *SettingsDialog::createGeneralTab()
                 [](int ms) { DockConfig::setAppPreviewDelayMs(ms); });
         form->addRow(tr("· Retardo:"), delay);
 
-        // Both numbers are meaningless with the feature off, and a disabled row
-        // says so better than a tooltip.
+        auto *buttons = new QCheckBox(tr("Minimizar, maximizar y cerrar"), tab);
+        buttons->setChecked(DockConfig::appPreviewButtons());
+        buttons->setToolTip(tr("Dibuja tres botones sobre la esquina de la vista previa, que "
+                               "actúan sobre esa ventana. Con o sin botones, la vista previa "
+                               "se queda mientras el mouse esté encima de ella, y un clic en "
+                               "la captura trae la ventana al frente."));
+        connect(buttons, &QCheckBox::toggled, this,
+                [](bool on) { DockConfig::setAppPreviewButtons(on); });
+        form->addRow(tr("· Botones:"), buttons);
+
+        // The three rows are meaningless with the feature off, and disabling
+        // them says so better than a tooltip.
         size->setEnabled(cb->isChecked());
         delay->setEnabled(cb->isChecked());
+        buttons->setEnabled(cb->isChecked());
         connect(cb, &QCheckBox::toggled, size, &QWidget::setEnabled);
         connect(cb, &QCheckBox::toggled, delay, &QWidget::setEnabled);
+        connect(cb, &QCheckBox::toggled, buttons, &QWidget::setEnabled);
         connect(cb, &QCheckBox::toggled, this,
                 [](bool on) { DockConfig::setAppPreview(on); });
     }

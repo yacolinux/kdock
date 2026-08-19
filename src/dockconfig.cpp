@@ -222,6 +222,26 @@ void DockConfig::setAppPreview(bool on)
         emit cfg->appPreviewChanged();
 }
 
+bool DockConfig::appPreviewButtons()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    // On by default, unlike appPreview() itself: whoever turned the preview on
+    // gets the buttons without having to find a second switch, and turning them
+    // off is the exception (the capture alone, as the feature shipped in
+    // 2026-08-17).
+    return s.value(QStringLiteral("appPreviewButtons"), true).toBool();
+}
+
+void DockConfig::setAppPreviewButtons(bool on)
+{
+    if (appPreviewButtons() == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("appPreviewButtons"), on);
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->appPreviewChanged();
+}
+
 int DockConfig::appPreviewSize()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);
