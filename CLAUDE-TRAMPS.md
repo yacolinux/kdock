@@ -535,6 +535,12 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   nuevo), pero un test que escribe, reemplaza y relee por `QSettings` falla una vez cada tantas
   corridas y parece un bug del import. En un test, leé el archivo (`QFile`) y no `QSettings`:
   `tests/unit/tst_configarchive.cpp` lo hace y lo explica.
+  Dos precisiones que costaron ocho corridas midiéndolo (2026-08-19, `tst_qtcompat`): **no es
+  "dentro del mismo segundo" sino dentro del mismo MILISEGUNDO** —`QFileInfo::lastModified()` es
+  de ms—, y por eso el síntoma no es "falla" sino **50/50**, que es peor: la primera lectura
+  parece confirmar un bug del producto que no existe. Y si un test necesita simular la escritura
+  de *otro programa*, tiene que ir por `QFile`: una hecha con `QSettings` le actualiza el caché
+  al propio proceso y el test pasa igual con la guarda sacada.
 - **Una sección que se repite (`spring`, `sep`, `gap<n>`) NO va en `knownWidgetTokens()`**: esa
   lista se deduplica. Va en `DockConfig::isRepeatableToken()`, que es de donde
   `reconcileWidgetOrder()` saca el permiso para dejar pasar un token más de una vez. Si te

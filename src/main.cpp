@@ -48,6 +48,7 @@
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
 #include "autocolorscheme.h"
+#include "qtcompat.h"
 #include "darkmodeappearance.h"
 #include "networkcontrol.h"
 #include "weatherconfig.h"
@@ -381,6 +382,10 @@ int main(int argc, char *argv[])
     DisksControl disks;
     NetworkControl network;
     AppearanceControl appearance(&theme);
+    // "Modo QT": mirrors the KDE color scheme onto the LXQt session palette, so
+    // the schemes every picker of kdock already applies also reach the rest of
+    // the desktop's Qt applications. Off by default and inert while off.
+    QtCompat qtCompat(&theme);
     // The weather widget draws from the same backend the mini-app and the
     // control panel use; its own config file is watched, so a city picked in
     // kdock-weather reaches the dock without a restart.
@@ -417,6 +422,7 @@ int main(int argc, char *argv[])
     shared.network = &network;
     shared.weather = &weather;
     shared.appearance = &appearance;
+    shared.qtCompat = &qtCompat;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
     shared.appPreviews = &appPreviews;

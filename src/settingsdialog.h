@@ -162,6 +162,12 @@ private:
                                 const QString &title, const QString &tip);
     // Repaint the "saved as default" line. No-op when the tab isn't built.
     void reloadColorAutoDefaults();
+    // "Modo QT": the KDE color scheme translated onto the LXQt session palette
+    // (QtCompat). Next to ColorAuto because it is the third feature that
+    // rewrites the desktop's appearance. Not per-dock.
+    QWidget *createQtCompatTab();
+    // Repaint the ten translated swatches. No-op when the tab isn't built.
+    void reloadQtCompatTranslation();
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
     QWidget *createScriptRunnersTab();
@@ -419,4 +425,8 @@ private:
     // ColorAuto tab: the "saved as default" line, re-read whenever the feature
     // is toggled (enabling is what captures those defaults).
     QLabel *m_colorAutoDefaults = nullptr;
+
+    // Modo QT tab: the form that lists the ten translated colors, refilled on
+    // every Theme::changed (i.e. whenever the KDE scheme moves).
+    QFormLayout *m_qtCompatForm = nullptr;
 };

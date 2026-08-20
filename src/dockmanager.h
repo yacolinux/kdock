@@ -60,6 +60,7 @@ class AppearanceControl;
 class VirtualDesktops;
 class DesktopWallpapers;
 class AutoColorScheme;
+class QtCompat;
 class AppPreviews;
 
 class DockManager : public QObject
@@ -103,6 +104,9 @@ public:
         // the manager itself to reach the docks, so the two cannot both be
         // built with the other already in hand.
         AutoColorScheme *autoColors = nullptr;
+        // "Modo QT": pushes the KDE color scheme onto the LXQt session palette.
+        // Only the Settings dialog reaches it; no dock or QML uses it.
+        QtCompat *qtCompat = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -257,6 +261,7 @@ public:
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
     AutoColorScheme *autoColorScheme() const { return m_shared.autoColors; }
     void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
+    QtCompat *qtCompat() const { return m_shared.qtCompat; }
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

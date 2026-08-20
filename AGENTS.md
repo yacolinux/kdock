@@ -1121,6 +1121,31 @@ tres diálogos vive.
 - **`AutoColorScheme` se construye ANTES que `DockManager`** (y recibe el manager con `setManager()` después). Los docks lo reciben como context property al crearse, y los primeros se crean dentro del constructor del manager: al revés, arrancaban con `autoColors` nulo y el widget nacía muerto.
 - **No es un widget del dock en el sentido de la sección**: el token `colorauto` sí lo es (y va en `knownWidgetTokens()`, que `tests/static/check-widget-tokens.py` verifica), pero la feature en sí toca `Dock.qml` sobre todo por los tres bindings de color.
 
+### Modo QT — el esquema de KDE aplicado a la sesión LXQt (`src/qtcompat.{h,cpp}`, 2026-08-19)
+
+- **Qué problema resuelve.** Todos los selectores de esquema de color de kdock terminan escribiendo `kdeglobals` (`plasma-apply-colorscheme`), y kdock lo lee a mano (`Theme`). Bajo Plasma eso alcanzaba: `plasma-integration` le arma la `QPalette` a cada app desde ese archivo. Bajo **LXQt** el tema de plataforma es `lxqt`, que **nunca mira `kdeglobals`**, así que el resto de las apps Qt del escritorio se quedaban con la paleta que hubiera dejado `lxqt-config-appearance`.
+- **El puente es la paleta del propio tema de plataforma de LXQt.** Leyendo su fuente (`lxqt-qtplugin/src/lxqtplatformtheme.cpp`, en esta máquina el `.so` **no viene de dpkg**: es el build propio del usuario, fuente en `~/IA/apps-nuevas/lxqt-wayland/`):
+  - `loadSettings()` lee **diez** claves del grupo `[Palette]` de `~/.config/lxqt/lxqt.conf`, arma `QPalette(window_color)` y pisa los roles que sean válidos (deriva `AlternateBase` del base y los `Disabled` con alpha 130);
+  - tiene un `QFileSystemWatcher` sobre el archivo y en `onSettingsChanged()` hace `QApplication::setPalette()` + `style()->polish()`. O sea que **escribir esas diez claves repinta en vivo todas las apps Qt ya abiertas**: sin variables de entorno, sin relanzar nada, sin qt6ct.
+  - Ya sortea la trampa del `rename` de `QSettings` (re-arma el watch si el archivo se fue de `files()`), así que escribir con `QSettings` es seguro.
+- **El mapeo**, que es toda la feature:
+
+  | clave de `lxqt.conf` | grupo de `kdeglobals` |
+  |---|---|
+  | `window_color` / `window_text_color` | `Colors:Window/BackgroundNormal` / `ForegroundNormal` |
+  | `base_color` / `text_color` | `Colors:View/BackgroundNormal` / `ForegroundNormal` |
+  | `highlight_color` / `highlighted_text_color` | `Colors:Selection/BackgroundNormal` / `ForegroundNormal` |
+  | `link_color` / `link_visited_color` | `Colors:View/ForegroundLink` / `ForegroundVisited` |
+  | `tooltip_base_color` / `tooltip_text_color` | `Colors:Tooltip/BackgroundNormal` / `ForegroundNormal` |
+
+  El respaldo de cada una es la paleta viva (`qGuiApp->palette()`): hay `.colors` en circulación que no traen `Colors:Tooltip`, y sin respaldo esas dos claves quedarían fuera y los tooltips seguirían el esquema **anterior** para siempre.
+- **`kdeglobals` es la fuente de verdad, no la solapa.** No hay esquema propio guardado: se traduce lo que ese archivo diga en cada momento, y el disparador es `Theme::changed` (que ya vigila el archivo) con un debounce de 250 ms. Eso es lo que hace que **cualquier otro selector de kdock llegue a LXQt sin una línea extra** — el widget del dock, la solapa Colores, ColorAuto y el modo oscuro ya escriben ahí. El selector de la solapa es por eso un `ThemePickerButton` en modo **`ApplyToDesktop`**: es un espejo, no un segundo ajuste.
+- **Una reescritura idéntica no se hace.** El plugin solo rearma su paleta cuando alguno de los diez valores cambió (su `paletteChanged_`) — el mismo "already set" que tiene `plasma-apply-colorscheme` —, así que escribir lo mismo no repinta nada y solo churnearía el archivo cada vez que algo toca `kdeglobals`.
+- **Apagar el interruptor solo deja de aplicar: NO restaura.** Decisión de producto: la última paleta escrita queda puesta para que el usuario la maneje con `lxqt-config-appearance`. Restaurar pelearía con lo que haya hecho él en el medio.
+- **Arranca en `false` y apagado es inerte**, y eso no es opcional: esto escribe en la sesión viva y **`XDG_DATA_HOME` no aísla `lxqt.conf`** (sale de `QSettings::UserScope`, o sea de `XDG_CONFIG_HOME`). La reja del `enabled` es lo único que hace inocua a cualquier sonda que construya la clase.
+- **Solo el diálogo lo alcanza** (`DockManager::Shared::qtCompat` → `SettingsDialog::createQtCompatTab()`); ningún dock ni QML lo usa, así que no hay nada del checklist de siete archivos de un widget.
+- Probado por `tests/unit/tst_qtcompat.cpp` (10 casos): el mapeo de las diez claves, que apagado no escriba, que la reescritura idéntica no toque el archivo (medido por mtime+tamaño), que apagar no restaure, que el resto del `lxqt.conf` sobreviva, que una edición externa se pise con *Aplicar ahora*, y la propagación de punta a punta `kdeglobals` → `Theme::changed` → `lxqt.conf`.
+
 ### Clic derecho de un widget: acción vs. menú de sección
 - El clic derecho sobre un widget abre por defecto el **menú de sección** (agregar separador, color de fondo, etiquetas, renombrar, Configuración). Algunos widgets se lo gastan en una segunda acción, y eso se declara en **un solo lugar** de `Dock.qml`: `sectionHasAltClick(token)` dice cuáles, y `sectionAltClick(token)` hace qué. Hoy: `volume` → mezclador (solapa Audio), `brightness` → solapa VideoEnergía, `movetoscreen` → monitor anterior, `maxmin` → minimizar, `closewindow` → mandar la ventana al escritorio siguiente sin seguirla, `darkmode` → modo oscuro (el clic izquierdo pone el modo normal).
 - **`Shift`+clic derecho siempre abre el menú de sección**, en todos los widgets (`secMouse.onClicked`). Es la única vía al menú en esos tres — antes el widget de volumen simplemente se quedaba sin menú.
@@ -1144,6 +1169,35 @@ tres diálogos vive.
 - **KEY finding (verified live, final)**: on this Plasma 6, switching a containment's `wallpaperPlugin` to `org.kde.image` and then (in a **separate** `evaluateScript` call) **back** to `org.kde.slideshow` + `reloadConfig()` makes KDE **advance the slideshow to its next image and repaint** — exactly like the desktop's right-click "Next Wallpaper". No `Image` is written by us. (Doing the toggle in one call does **not** repaint; writing the slideshow `Image` + `reloadConfig()` alone does **not** repaint either.) So the final script is just: (1) list target screens (connected, currently `org.kde.slideshow`, geometry-matched if `KDOCK_SCREEN`); (2) set them to `org.kde.image` **without** `reloadConfig()`; (3) `sleep 0`; (4) set them back to `org.kde.slideshow` + `reloadConfig()`. **Two subtleties that fixed a double-change flash**: (a) the image switch must NOT `reloadConfig()` — reloading there repaints to whatever stale image is stored in the `org.kde.image` group first (a visible extra change); (b) `sleep 0` is enough (the two separate D-Bus calls already serialize). Result: a single visible advance, slideshow mode preserved. The slideshow config (folder/interval/order) is never touched. **This replaced an earlier version that read `SlidePaths` and computed the next image in bash — no longer needed.**
 - **Targeting**: `KDOCK_SCREEN` set (dock icon) → only that monitor, mapping connector→Plasma screen index by geometry via `kscreen-doctor --json` (pos) matched against `screenGeometry(i)`. No var (console) → every connected screen currently in `org.kde.slideshow`.
 - **Gotchas**: use `qdbus6` (there is no `qdbus`); run it with `bash`/`./` not `sh` (Ubuntu `sh` is dash → the bash arrays / `<(...)` / `<<<` fail). `ScriptRunnersManager::run()` executes an **executable** script directly (honoring its shebang), else falls back to `sh <path>`.
+
+#### Script Runner de ejemplo para LXQt (`scripts/next-qt-wall.sh`, 2026-08-19)
+
+El gemelo de los dos de abajo para una sesión **LXQt** corriendo sobre un compositor de
+terceros (p. ej. KWin/Wayland): avanza el **slideshow propio de LXQt**, que maneja
+`pcmanfm-qt --desktop`. No habla con plasmashell: habla con el proceso vivo de pcmanfm-qt.
+
+- **Config que usa** (`~/.config/pcmanfm-qt/<perfil>/settings.conf`, sección `[Desktop]`):
+  `WallpaperDirectory`, `WallpaperRandomize`, `LastSlide`, `SlideShowInterval`. El perfil se
+  **detecta** del `--profile=<name>` del proceso vivo (`pgrep -f 'pcmanfm-qt.*--desktop'`),
+  con fallback a `lxqt`. Guard: sin `SlideShowInterval > 0` o sin directorio válido, no hace
+  nada — el "slideshow propio de LXQt" no está activo.
+- **El "siguiente" es espejo de `DesktopWindow::pickWallpaper()`** de pcmanfm-qt (verificado en
+  el fuente): lista las imágenes del directorio con los formatos que Qt lee y orden `QDir::Name`
+  (`LC_ALL=C sort`); con `WallpaperRandomize=true` elige **al azar excluyendo `LastSlide`**, si
+  no, el **siguiente alfabético** después de `LastSlide` con wrap (o el primero si no está).
+- **Aplica por D-Bus**: `qdbus6 org.pcmanfm.PCManFM /Application
+  org.pcmanfm.Application.setWallpaper <file> ""` — el mismo método que ejecuta
+  `pcmanfm-qt --set-wallpaper`; el modo vacío conserva `WallpaperMode`. Fallback a la CLI.
+  **Aplica a TODAS las pantallas**: bajo Wayland pcmanfm-qt fuerza `perScreenWallpaper=false`
+  y las ventanas de escritorio comparten un solo wallpaper (hay un `FIXME: support different
+  wallpapers on different screen` en el fuente), así que a diferencia de `next2.sh` **ignora
+  `KDOCK_SCREEN` a propósito**.
+- **`LastSlide` se escribe en disco después de aplicar** (reemplazo quirúrgico de esa única
+  línea con awk, o inserción al final de `[Desktop]` si falta): es best-effort, porque el
+  proceso vivo conserva su propio `lastSlide` en memoria y `setWallpaper` no lo toca — solo
+  ordena el arranque siguiente. `setWallpaper` sí escribe `Wallpaper` y hace `save()`.
+- Dependencias en runtime: `qdbus6`, `pgrep`. Wire-up: *Configuración → Script Runner*,
+  `scriptPath` al archivo.
 
 #### Script Runners de ejemplo (`scripts/next2.sh`, `scripts/next-all.sh`, 2026-08-14)
 

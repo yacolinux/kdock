@@ -20,6 +20,7 @@
 #include "configarchive.h"
 #include "iconpickerdialog.h"
 #include "themepicker.h"
+#include "qtcompat.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
 #include "weatherconfig.h"
@@ -56,6 +57,7 @@
 #include <QImageReader>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -339,6 +341,13 @@ void SettingsDialog::buildTabs()
         addTab(createColorAutoTab(), tr("ColorAuto"));
         m_colorAutoTabIndex = m_tabWidget->count() - 1;
     }
+    // Third of the tabs that rewrite the desktop's appearance, hence next to
+    // the other two: the KDE color scheme translated onto the LXQt session
+    // palette. The form is a member, so reset it before the tab is rebuilt —
+    // a language change deletes every widget the old one owned.
+    m_qtCompatForm = nullptr;
+    if (m_manager && m_manager->qtCompat())
+        addTab(createQtCompatTab(), tr("Modo QT"));
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
@@ -4208,6 +4217,156 @@ QWidget *SettingsDialog::createColorAutoTab()
     // Dark mode suspends the feature, so the tab has to follow that too.
     connect(m_config, &DockConfig::darkModeChanged, tab, syncEnabled);
     syncEnabled();
+
+    layout->addStretch();
+    return tab;
+}
+
+// One row of the translation table: the lxqt.conf key, a swatch and the hex.
+// The swatch is drawn here and not through themePreviewPixmap(): that one draws
+// the three-color preview of a whole scheme, this is one color per row.
+void SettingsDialog::reloadQtCompatTranslation()
+{
+    if (!m_qtCompatForm)
+        return;
+    QtCompat *compat = m_manager ? m_manager->qtCompat() : nullptr;
+    if (!compat)
+        return;
+
+    while (m_qtCompatForm->rowCount() > 0)
+        m_qtCompatForm->removeRow(0);
+
+    QWidget *parent = m_qtCompatForm->parentWidget();
+    const QVariantList rows = compat->translation();
+    if (rows.isEmpty()) {
+        m_qtCompatForm->addRow(new QLabel(
+            tr("No se pudo leer kdeglobals: no hay nada que traducir."), parent));
+        return;
+    }
+    const int side = 16;
+    for (const QVariant &entry : rows) {
+        const QVariantMap map = entry.toMap();
+        const QString key = map.value(QStringLiteral("key")).toString();
+        const QString hex = map.value(QStringLiteral("color")).toString();
+
+        // Outlined, not a plain fill: half of these colors are near-black or
+        // near-white by design, and a borderless swatch of one of them is
+        // invisible against the dialog — which reads as a missing row.
+        QPixmap swatch(side, side);
+        swatch.fill(Qt::transparent);
+        {
+            QPainter p(&swatch);
+            p.fillRect(1, 1, side - 2, side - 2, QColor(hex));
+            QColor edge = parent ? parent->palette().color(QPalette::WindowText)
+                                 : QColor(Qt::gray);
+            edge.setAlpha(120);
+            p.setPen(edge);
+            p.drawRect(0, 0, side - 1, side - 1);
+        }
+        auto *value = new QLabel(parent);
+        auto *icon = new QLabel(parent);
+        icon->setPixmap(swatch);
+        value->setText(hex);
+        auto *row = new QWidget(parent);
+        auto *rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->addWidget(icon);
+        rowLayout->addWidget(value);
+        rowLayout->addStretch();
+        m_qtCompatForm->addRow(key, row);
+    }
+}
+
+QWidget *SettingsDialog::createQtCompatTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+    QtCompat *compat = m_manager ? m_manager->qtCompat() : nullptr;
+
+    auto *intro = new QLabel(
+        tr("Bajo LXQt las apps Qt no leen el esquema de color de KDE: su paleta sale del "
+           "grupo <b>[Palette]</b> de <tt>lxqt.conf</tt>. Esto traduce el esquema que ya "
+           "elegís en kdock a esas diez claves y las escribe ahí, así que <b>las apps que "
+           "ya están abiertas se repintan solas</b> — el tema de plataforma de LXQt vigila "
+           "ese archivo.<br><br>"
+           "El esquema no se guarda acá: es siempre el que está puesto en KDE, así que "
+           "cambiarlo desde cualquier otro selector de kdock (el widget del dock, la solapa "
+           "Colores, ColorAuto, el modo oscuro) también llega a LXQt."), tab);
+    intro->setWordWrap(true);
+    layout->addWidget(intro);
+
+    auto *enabled = new QCheckBox(tr("Aplicar el esquema de color a las apps Qt/LXQt"), tab);
+    enabled->setToolTip(tr("Al destildarlo kdock deja de aplicar, pero NO devuelve la paleta "
+                           "anterior: la última que escribió queda puesta, para manejarla "
+                           "con lxqt-config-appearance."));
+    enabled->setChecked(QtCompat::enabled());
+    connect(enabled, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setEnabled(on);
+    });
+    layout->addWidget(enabled);
+
+    // --- The scheme, which is KDE's own ------------------------------------
+    // ApplyToDesktop on purpose: this picker is a mirror, not a second setting.
+    // It writes kdeglobals like every other color-scheme selector of kdock, and
+    // QtCompat follows through Theme::changed.
+    auto *schemeBox = new QGroupBox(tr("Esquema de color"), tab);
+    auto *schemeForm = new QFormLayout(schemeBox);
+    if (m_appearance) {
+        auto *pick = new ThemePickerButton(m_appearance, QStringLiteral("colors"),
+                                           ThemePickerPopup::ApplyToDesktop, schemeBox);
+        pick->setToolTip(tr("La misma lista que el selector de KDE. Elegir acá cambia el "
+                            "esquema del escritorio y, con la casilla de arriba tildada, "
+                            "lo traduce a la paleta de LXQt."));
+        schemeForm->addRow(tr("Esquema:"), pick);
+    } else {
+        schemeForm->addRow(new QLabel(tr("(sin AppearanceControl)"), schemeBox));
+    }
+    layout->addWidget(schemeBox);
+
+    // --- What would be written ---------------------------------------------
+    auto *transBox = new QGroupBox(tr("Traducción a la paleta de LXQt"), tab);
+    auto *transOuter = new QVBoxLayout(transBox);
+    auto *transHost = new QWidget(transBox);
+    m_qtCompatForm = new QFormLayout(transHost);
+    transOuter->addWidget(transHost);
+    layout->addWidget(transBox);
+    reloadQtCompatTranslation();
+
+    auto *applyNow = new QPushButton(tr("Aplicar ahora"), tab);
+    applyNow->setToolTip(tr("Reescribe las diez claves aunque nada haya cambiado en KDE. "
+                            "Sirve cuando la paleta de lxqt.conf se fue de sincro por "
+                            "afuera (lxqt-config-appearance, por ejemplo)."));
+    connect(applyNow, &QPushButton::clicked, this, [this] {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->applyNow();
+    });
+    layout->addWidget(applyNow);
+
+    // --- Diagnostics --------------------------------------------------------
+    // Which file is being written and whether anything is going to notice. The
+    // write happens either way (it is the session's file, not kdock's), but
+    // under another platform theme nothing repaints, and without this line that
+    // reads exactly like a broken feature.
+    auto *diag = new QLabel(tab);
+    diag->setWordWrap(true);
+    diag->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    const QString platform = qEnvironmentVariable("QT_QPA_PLATFORMTHEME");
+    QString text = tr("Archivo: <tt>%1</tt><br>QT_QPA_PLATFORMTHEME: <b>%2</b>")
+                       .arg(QtCompat::lxqtConfPath(),
+                            platform.isEmpty() ? tr("(sin definir)") : platform);
+    if (!QtCompat::lxqtPlatformTheme()) {
+        text += tr("<br><i>Esta sesión no usa el tema de plataforma «lxqt»: las claves se "
+                   "escriben igual, pero no va a repintarse nada.</i>");
+    }
+    diag->setText(text);
+    layout->addWidget(diag);
+
+    // The table follows the KDE scheme, whoever changed it.
+    if (m_theme)
+        connect(m_theme, &Theme::changed, tab, [this] { reloadQtCompatTranslation(); });
+    if (compat)
+        connect(compat, &QtCompat::changed, tab, [this] { reloadQtCompatTranslation(); });
 
     layout->addStretch();
     return tab;

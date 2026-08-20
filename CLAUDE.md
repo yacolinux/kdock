@@ -640,6 +640,42 @@ alcanza), simulando la carrera a mano: escribir el valor oscuro en el `kdeglobal
 paso y paso. El control positivo —sacar la guarda, recompilar, correr— pasa de `PASS` a
 `prev=DarkTest` en una corrida.
 
+### Probar el Modo QT (paleta de LXQt) sin repintarle la sesión al usuario
+
+`QtCompat` traduce el `kdeglobals` vivo al grupo `[Palette]` de `~/.config/lxqt/lxqt.conf`, y el
+tema de plataforma de LXQt vigila ese archivo: escribirlo **repinta todas las apps Qt abiertas**.
+O sea que no hay caja de arena posible salvo una: **lo que aísla es `XDG_CONFIG_HOME`, no
+`XDG_DATA_HOME`** — `lxqt.conf` sale de `QSettings::UserScope`. Una sonda que solo aísle
+`XDG_DATA_HOME` le cambia los colores a la sesión de verdad.
+
+Con las dos variables descartables se prueba todo sin tocar nada; el sandbox de
+`tests/unit/sandbox.h` ya pone las dos, que es por lo que `tst_qtcompat` corre en CI:
+
+```bash
+rm -rf /tmp/qtc && mkdir -p /tmp/qtc/config/lxqt /tmp/qtc/data/kdock
+cp ~/.config/lxqt/lxqt.conf /tmp/qtc/config/lxqt/     # para probar que el resto sobrevive
+# ...un kdeglobals sembrado con colores reconocibles...
+env XDG_CONFIG_HOME=/tmp/qtc/config XDG_DATA_HOME=/tmp/qtc/data QT_QPA_PLATFORM=offscreen ./sonda
+```
+
+Tres cosas que costaron una corrida cada una:
+
+- **La segunda mitad de la feature no se prueba con una aserción sobre el archivo.** Que las
+  diez claves queden bien escritas **no** prueba que algo se repinte: eso depende del
+  `QFileSystemWatcher` del plugin, que vive en otro proceso. Lo único que lo prueba es la sesión
+  real (abrir una app Qt, cambiar el esquema, mirar). Vale lo mismo que para los fondos de
+  pantalla: la config miente, hay que mirar la pantalla.
+- **`QSettings` no distingue una reescritura del mismo tamaño hecha en el mismo milisegundo.**
+  Su caché por ruta se revalida por (mtime, tamaño), y el mtime es de milisegundos. Un test que
+  cambie `17,18,19` por `90,91,92` a pocos ms de la lectura anterior sale **cara o cruca** —
+  pasó, 50/50 en ocho corridas. En una prueba de *cableado* elegí valores de largo distinto
+  (`9,9,9`) y una pausa; el caché en sí se prueba aparte, con una edición externa hecha por
+  `QFile` (que es como llega la de otro programa, mientras que una hecha con `QSettings` le
+  actualiza el caché al propio proceso y no prueba nada).
+- **Ni el arnés ni CI ejercitan los dos `sync()` de `qtcompat.cpp`.** Están como guarda contra lo
+  de arriba, no como arreglo de nada observado: sacarlos deja las diez pruebas en verde. El
+  comentario del código lo dice; no los "verifiques" a partir de un test que pasa igual.
+
 ### Arnés de `kdock-weather`
 
 El más barato de los seis: la ventana es un toplevel común, así que se corre desde `build/`, se

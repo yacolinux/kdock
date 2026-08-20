@@ -93,6 +93,7 @@ add_library(kdock_core OBJECT
     src/connectioneditor.cpp    src/connectioneditor.h
     src/routesdialog.cpp        src/routesdialog.h
     src/appearancecontrol.cpp   src/appearancecontrol.h
+    src/qtcompat.cpp            src/qtcompat.h
     src/darkmodeappearance.cpp  src/darkmodeappearance.h
     src/translations.cpp        src/translations.h
     src/previewslauncher.cpp    src/previewslauncher.h
