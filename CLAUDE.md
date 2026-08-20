@@ -112,6 +112,14 @@ sigue mapeado en memoria y el install lo reemplaza sin `ETXTBSY`. Sí hay que re
 para que tome el nuevo (su menú *Dock → Reiniciar* se re-lanza solo); reiniciarle el dock
 al usuario sin avisar deja la pantalla sin dock, así que preguntá antes.
 
+**En la sesión LXQt el dock lo arranca `~/.config/autostart/kdock.desktop`, y ahí `Terminal=`
+importa.** Con `Terminal=true` —que es lo que escribe el *Autostart* de `lxqt-config-session`—
+libqtxdg envuelve el `Exec=` en el emulador de terminal por omisión
+(`XdgDesktopFileData::startApplicationDetached`, `libqtxdg/src/qtxdg/xdgdesktopfile.cpp`), o sea
+que kdock arranca **adentro de una qterminal**. La huella queda en el proceso aunque después
+cierres la terminal: `tr '\0' '\n' < /proc/$(pgrep -x kdock)/environ | grep -E '^(TERM|WINDOWID)='`
+devuelve `TERM=xterm-256color` y `WINDOWID=0`. Va en `Terminal=false` (arreglado 2026-08-20).
+
 Los accesorios se reinician distinto y sin riesgo de dejar la pantalla pelada: cada uno sale
 por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu` / `org.kdock.ControlManager`, método
 `quit`) y vuelve a levantarse solo — el de previews al prender su casilla, los otros dos en el
@@ -640,10 +648,11 @@ alcanza), simulando la carrera a mano: escribir el valor oscuro en el `kdeglobal
 paso y paso. El control positivo —sacar la guarda, recompilar, correr— pasa de `PASS` a
 `prev=DarkTest` en una corrida.
 
-### Probar el Modo QT (paleta de LXQt) sin repintarle la sesión al usuario
+### Probar el Modo QT (apariencia de LXQt) sin re-tematizarle la sesión al usuario
 
-`QtCompat` traduce el `kdeglobals` vivo al grupo `[Palette]` de `~/.config/lxqt/lxqt.conf`, y el
-tema de plataforma de LXQt vigila ese archivo: escribirlo **repinta todas las apps Qt abiertas**.
+`QtCompat` traduce el `kdeglobals` vivo al grupo `[Palette]`, a `icon_theme` y a `[Qt] font` de
+`~/.config/lxqt/lxqt.conf`, y el tema de plataforma de LXQt vigila ese archivo: escribirlo
+**re-tematiza todas las apps Qt abiertas**.
 O sea que no hay caja de arena posible salvo una: **lo que aísla es `XDG_CONFIG_HOME`, no
 `XDG_DATA_HOME`** — `lxqt.conf` sale de `QSettings::UserScope`. Una sonda que solo aísle
 `XDG_DATA_HOME` le cambia los colores a la sesión de verdad.
@@ -673,8 +682,13 @@ Tres cosas que costaron una corrida cada una:
   `QFile` (que es como llega la de otro programa, mientras que una hecha con `QSettings` le
   actualiza el caché al propio proceso y no prueba nada).
 - **Ni el arnés ni CI ejercitan los dos `sync()` de `qtcompat.cpp`.** Están como guarda contra lo
-  de arriba, no como arreglo de nada observado: sacarlos deja las diez pruebas en verde. El
+  de arriba, no como arreglo de nada observado: sacarlos deja las pruebas en verde. El
   comentario del código lo dice; no los "verifiques" a partir de un test que pasa igual.
+- **`lxqt.conf` es la SALIDA, no un ajuste de kdock**, así que un test o una sonda tiene que
+  vaciarlo entre casos además del grupo `[QtCompat]` del `kdock.conf`. Si no, cualquier
+  aserción de la forma "esta parte está apagada, así que su clave está vacía" ve lo que dejó la
+  corrida anterior y **falla señalando al producto** (pasó con las tres casillas, 2026-08-20).
+  `QSettings::clear()` y no borrar el archivo: así el caché del propio proceso queda coherente.
 
 ### Arnés de `kdock-weather`
 

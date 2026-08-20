@@ -166,7 +166,13 @@ private:
     // (QtCompat). Next to ColorAuto because it is the third feature that
     // rewrites the desktop's appearance. Not per-dock.
     QWidget *createQtCompatTab();
-    // Repaint the ten translated swatches. No-op when the tab isn't built.
+    // One font row of that tab (general / monospace): a button that opens
+    // QFontDialog plus a reset that hands the font back to LXQt. `kind` is a
+    // QtCompat::FontKind, taken as int so the header does not have to include
+    // qtcompat.h just for the enum.
+    void addQtCompatFontRow(QFormLayout *form, QWidget *parent, int kind, const QString &title);
+    // Repaint the ten translated swatches and the icon-set line. No-op when the
+    // tab isn't built.
     void reloadQtCompatTranslation();
     QWidget *createLayoutTab();
     QWidget *createRelanzadoresTab();
@@ -426,7 +432,9 @@ private:
     // is toggled (enabling is what captures those defaults).
     QLabel *m_colorAutoDefaults = nullptr;
 
-    // Modo QT tab: the form that lists the ten translated colors, refilled on
-    // every Theme::changed (i.e. whenever the KDE scheme moves).
+    // Modo QT tab: the form that lists the ten translated colors and the line
+    // with the icon set that would be written, both refilled on every
+    // Theme::changed (i.e. whenever the KDE appearance moves).
     QFormLayout *m_qtCompatForm = nullptr;
+    QLabel *m_qtCompatIcons = nullptr;
 };

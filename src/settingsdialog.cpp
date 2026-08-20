@@ -41,6 +41,7 @@
 #include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFontDialog>
 #include <QFormLayout>
 #include <QFont>
 #include <QGroupBox>
@@ -342,10 +343,12 @@ void SettingsDialog::buildTabs()
         m_colorAutoTabIndex = m_tabWidget->count() - 1;
     }
     // Third of the tabs that rewrite the desktop's appearance, hence next to
-    // the other two: the KDE color scheme translated onto the LXQt session
-    // palette. The form is a member, so reset it before the tab is rebuilt —
-    // a language change deletes every widget the old one owned.
+    // the other two: the KDE color scheme and icon set translated onto the LXQt
+    // session appearance, plus its font. Both widget members are reset before
+    // the tab is rebuilt — a language change deletes every widget the old one
+    // owned.
     m_qtCompatForm = nullptr;
+    m_qtCompatIcons = nullptr;
     if (m_manager && m_manager->qtCompat())
         addTab(createQtCompatTab(), tr("Modo QT"));
     m_audioTabIndex = -1;
@@ -4222,6 +4225,70 @@ QWidget *SettingsDialog::createColorAutoTab()
     return tab;
 }
 
+// One font row of the Modo QT tab: a button that opens QFontDialog and shows
+// what is stored, plus a reset that hands the font back to LXQt.
+//
+// The value travels as QFont::toString() from end to end — that is the very
+// encoding lxqt.conf uses, so nothing is parsed and re-serialised on the way and
+// a font kdock never heard of (a weight, a style name) survives a round trip.
+void SettingsDialog::addQtCompatFontRow(QFormLayout *form, QWidget *parent,
+                                        int kind, const QString &title)
+{
+    const auto fontKind = static_cast<QtCompat::FontKind>(kind);
+    auto *button = new QPushButton(parent);
+    auto *reset = new QPushButton(tr("Seguir la de LXQt"), parent);
+    // Kept so the "(sin definir)" state can go back to the dialog's own font
+    // instead of to whatever the last preview left on the button.
+    const QFont plainFont = button->font();
+
+    const auto refresh = [button, reset, fontKind, plainFont] {
+        const QString stored = QtCompat::font(fontKind);
+        const QString shown = QtCompat::fontFor(fontKind);
+        QFont f;
+        if (!shown.isEmpty() && f.fromString(shown)) {
+            button->setText(QStringLiteral("%1 %2").arg(f.family()).arg(f.pointSize()));
+            // Preview in the button itself, capped so a huge desktop font does
+            // not blow the row up.
+            QFont sample = f;
+            sample.setPointSize(qBound(8, f.pointSize(), 14));
+            button->setFont(sample);
+        } else {
+            button->setText(tr("(sin definir)"));
+            button->setFont(plainFont);
+        }
+        // Nothing stored = kdock is not driving this one; the row shows LXQt's
+        // current font greyed out in meaning, and the reset has nothing to do.
+        reset->setEnabled(!stored.isEmpty());
+    };
+
+    connect(button, &QPushButton::clicked, this, [this, button, fontKind, refresh] {
+        QFont start;
+        const QString shown = QtCompat::fontFor(fontKind);
+        if (!shown.isEmpty())
+            start.fromString(shown);
+        bool ok = false;
+        // The dialog is parented to this dialog, not to the row: a QDialog with
+        // no parent is never deleted by anyone (see CLAUDE-TRAMPS.md).
+        const QFont picked = QFontDialog::getFont(&ok, start, this, tr("Fuente"));
+        if (!ok)
+            return;
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setFont(fontKind, picked.toString());
+        refresh();
+    });
+    connect(reset, &QPushButton::clicked, this, [this, refresh, fontKind] {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setFont(fontKind, QString());
+        refresh();
+    });
+
+    auto *row = new QHBoxLayout;
+    row->addWidget(button, 1);
+    row->addWidget(reset);
+    form->addRow(title, row);
+    refresh();
+}
+
 // One row of the translation table: the lxqt.conf key, a swatch and the hex.
 // The swatch is drawn here and not through themePreviewPixmap(): that one draws
 // the three-color preview of a whole scheme, this is one color per row.
@@ -4235,6 +4302,13 @@ void SettingsDialog::reloadQtCompatTranslation()
 
     while (m_qtCompatForm->rowCount() > 0)
         m_qtCompatForm->removeRow(0);
+
+    if (m_qtCompatIcons) {
+        const QString icons = compat->iconTheme();
+        m_qtCompatIcons->setText(icons.isEmpty()
+                                     ? tr("(KDE no tiene iconset definido — no se escribe nada)")
+                                     : icons);
+    }
 
     QWidget *parent = m_qtCompatForm->parentWidget();
     const QVariantList rows = compat->translation();
@@ -4284,21 +4358,23 @@ QWidget *SettingsDialog::createQtCompatTab()
     QtCompat *compat = m_manager ? m_manager->qtCompat() : nullptr;
 
     auto *intro = new QLabel(
-        tr("Bajo LXQt las apps Qt no leen el esquema de color de KDE: su paleta sale del "
-           "grupo <b>[Palette]</b> de <tt>lxqt.conf</tt>. Esto traduce el esquema que ya "
-           "elegís en kdock a esas diez claves y las escribe ahí, así que <b>las apps que "
-           "ya están abiertas se repintan solas</b> — el tema de plataforma de LXQt vigila "
-           "ese archivo.<br><br>"
-           "El esquema no se guarda acá: es siempre el que está puesto en KDE, así que "
-           "cambiarlo desde cualquier otro selector de kdock (el widget del dock, la solapa "
-           "Colores, ColorAuto, el modo oscuro) también llega a LXQt."), tab);
+        tr("Bajo LXQt las apps Qt no leen la apariencia de KDE: la paleta sale del grupo "
+           "<b>[Palette]</b> de <tt>lxqt.conf</tt>, el iconset de <tt>icon_theme</tt> y la "
+           "fuente de <tt>[Qt] font</tt>. Esto traduce a esas claves lo que ya elegís en "
+           "kdock y las escribe ahí, así que <b>las apps que ya están abiertas se re-tematizan "
+           "solas</b> — el tema de plataforma de LXQt vigila ese archivo.<br><br>"
+           "Ni el esquema ni el iconset se guardan acá: son siempre los que están puestos en "
+           "KDE, así que cambiarlos desde cualquier otro selector de kdock (el widget del "
+           "dock, la solapa Colores, ColorAuto, el modo oscuro) también llega a LXQt. La "
+           "fuente sí es un ajuste propio: kdock no tenía ninguno que copiar."), tab);
     intro->setWordWrap(true);
     layout->addWidget(intro);
 
-    auto *enabled = new QCheckBox(tr("Aplicar el esquema de color a las apps Qt/LXQt"), tab);
-    enabled->setToolTip(tr("Al destildarlo kdock deja de aplicar, pero NO devuelve la paleta "
-                           "anterior: la última que escribió queda puesta, para manejarla "
-                           "con lxqt-config-appearance."));
+    auto *enabled = new QCheckBox(tr("Aplicar la apariencia a las apps Qt/LXQt"), tab);
+    enabled->setToolTip(tr("Interruptor maestro de las tres partes de abajo. Al destildarlo "
+                           "kdock deja de aplicar, pero NO devuelve lo anterior: lo último "
+                           "que escribió queda puesto, para manejarlo con "
+                           "lxqt-config-appearance."));
     enabled->setChecked(QtCompat::enabled());
     connect(enabled, &QCheckBox::toggled, this, [this](bool on) {
         if (m_manager && m_manager->qtCompat())
@@ -4312,6 +4388,13 @@ QWidget *SettingsDialog::createQtCompatTab()
     // QtCompat follows through Theme::changed.
     auto *schemeBox = new QGroupBox(tr("Esquema de color"), tab);
     auto *schemeForm = new QFormLayout(schemeBox);
+    auto *colorsOn = new QCheckBox(tr("Aplicar el esquema de color"), schemeBox);
+    colorsOn->setChecked(QtCompat::colorsEnabled());
+    connect(colorsOn, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setColorsEnabled(on);
+    });
+    schemeForm->addRow(colorsOn);
     if (m_appearance) {
         auto *pick = new ThemePickerButton(m_appearance, QStringLiteral("colors"),
                                            ThemePickerPopup::ApplyToDesktop, schemeBox);
@@ -4324,6 +4407,51 @@ QWidget *SettingsDialog::createQtCompatTab()
     }
     layout->addWidget(schemeBox);
 
+    // --- Icon set, same mirror idiom ---------------------------------------
+    auto *iconsBox = new QGroupBox(tr("Iconset"), tab);
+    auto *iconsForm = new QFormLayout(iconsBox);
+    auto *iconsOn = new QCheckBox(tr("Aplicar el iconset"), iconsBox);
+    iconsOn->setToolTip(tr("Copia <tt>Icons/Theme</tt> de kdeglobals a <tt>icon_theme</tt> de "
+                           "lxqt.conf. El plugin de LXQt recarga el tema de íconos de todas "
+                           "las apps abiertas."));
+    iconsOn->setChecked(QtCompat::iconsEnabled());
+    connect(iconsOn, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setIconsEnabled(on);
+    });
+    iconsForm->addRow(iconsOn);
+    if (m_appearance) {
+        auto *pickIcons = new ThemePickerButton(m_appearance, QStringLiteral("icons"),
+                                                ThemePickerPopup::ApplyToDesktop, iconsBox);
+        pickIcons->setToolTip(tr("La misma lista que el selector de KDE. Ojo: el dock puede "
+                                 "tener su propio override de iconset (solapa General), que "
+                                 "le gana a este para sus propios íconos."));
+        iconsForm->addRow(tr("Iconset:"), pickIcons);
+    }
+    // What would actually land in the file, which is not always what the picker
+    // shows: the dock's own override does not travel, and KDE may have none.
+    m_qtCompatIcons = new QLabel(iconsBox);
+    m_qtCompatIcons->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    iconsForm->addRow(tr("· icon_theme:"), m_qtCompatIcons);
+    layout->addWidget(iconsBox);
+
+    // --- Fonts: the one part with a value of its own ------------------------
+    auto *fontsBox = new QGroupBox(tr("Fuentes de las aplicaciones"), tab);
+    auto *fontsForm = new QFormLayout(fontsBox);
+    auto *fontsOn = new QCheckBox(tr("Aplicar las fuentes"), fontsBox);
+    fontsOn->setToolTip(tr("Escribe <tt>[Qt] font</tt> y <tt>fixedFont</tt> de lxqt.conf. "
+                           "Vale para todo el escritorio LXQt <b>y para kdock</b>: su texto "
+                           "usa la fuente de la aplicación, que sale del mismo lugar."));
+    fontsOn->setChecked(QtCompat::fontsEnabled());
+    connect(fontsOn, &QCheckBox::toggled, this, [this](bool on) {
+        if (m_manager && m_manager->qtCompat())
+            m_manager->qtCompat()->setFontsEnabled(on);
+    });
+    fontsForm->addRow(fontsOn);
+    addQtCompatFontRow(fontsForm, fontsBox, QtCompat::GeneralFont, tr("General:"));
+    addQtCompatFontRow(fontsForm, fontsBox, QtCompat::FixedFont, tr("Monoespaciada:"));
+    layout->addWidget(fontsBox);
+
     // --- What would be written ---------------------------------------------
     auto *transBox = new QGroupBox(tr("Traducción a la paleta de LXQt"), tab);
     auto *transOuter = new QVBoxLayout(transBox);
@@ -4334,8 +4462,8 @@ QWidget *SettingsDialog::createQtCompatTab()
     reloadQtCompatTranslation();
 
     auto *applyNow = new QPushButton(tr("Aplicar ahora"), tab);
-    applyNow->setToolTip(tr("Reescribe las diez claves aunque nada haya cambiado en KDE. "
-                            "Sirve cuando la paleta de lxqt.conf se fue de sincro por "
+    applyNow->setToolTip(tr("Reescribe las claves aunque nada haya cambiado en KDE. "
+                            "Sirve cuando lxqt.conf se fue de sincro por "
                             "afuera (lxqt-config-appearance, por ejemplo)."));
     connect(applyNow, &QPushButton::clicked, this, [this] {
         if (m_manager && m_manager->qtCompat())

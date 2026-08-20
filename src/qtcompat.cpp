@@ -13,10 +13,27 @@
 namespace {
 
 const char *kEnabledKey = "QtCompat/enabled";
+const char *kColorsKey = "QtCompat/colors";
+const char *kIconsKey = "QtCompat/icons";
+const char *kFontsKey = "QtCompat/fonts";
+const char *kFontKey = "QtCompat/font";
+const char *kFixedFontKey = "QtCompat/fixedFont";
 
 QSettings shared()
 {
     return QSettings(DockConfig::settingsFilePath(), QSettings::IniFormat);
+}
+
+// The lxqt.conf keys, in QSettings form. `icon_theme` is deliberately bare:
+// QSettings maps the top level onto the file's [General] section, which is
+// where the plugin reads it from.
+const char *kLxqtIconThemeKey = "icon_theme";
+const char *kLxqtFontKey = "Qt/font";
+const char *kLxqtFixedFontKey = "Qt/fixedFont";
+
+QSettings lxqtSettings()
+{
+    return QSettings(QSettings::UserScope, QStringLiteral("lxqt"), QStringLiteral("lxqt"));
 }
 
 // "r,g,b[,a]" — the format kdeglobals uses. QSettings hands a value with commas
@@ -99,6 +116,78 @@ void QtCompat::setEnabled(bool on)
     emit changed();
 }
 
+bool QtCompat::colorsEnabled()
+{
+    return shared().value(QLatin1String(kColorsKey), true).toBool();
+}
+
+void QtCompat::setColorsEnabled(bool on)
+{
+    QSettings s = shared();
+    s.setValue(QLatin1String(kColorsKey), on);
+    s.sync();
+    applyNow();
+    emit changed();
+}
+
+bool QtCompat::iconsEnabled()
+{
+    return shared().value(QLatin1String(kIconsKey), true).toBool();
+}
+
+void QtCompat::setIconsEnabled(bool on)
+{
+    QSettings s = shared();
+    s.setValue(QLatin1String(kIconsKey), on);
+    s.sync();
+    applyNow();
+    emit changed();
+}
+
+bool QtCompat::fontsEnabled()
+{
+    return shared().value(QLatin1String(kFontsKey), false).toBool();
+}
+
+void QtCompat::setFontsEnabled(bool on)
+{
+    QSettings s = shared();
+    s.setValue(QLatin1String(kFontsKey), on);
+    s.sync();
+    applyNow();
+    emit changed();
+}
+
+QString QtCompat::font(FontKind kind)
+{
+    return shared()
+        .value(QLatin1String(kind == FixedFont ? kFixedFontKey : kFontKey))
+        .toString();
+}
+
+void QtCompat::setFont(FontKind kind, const QString &value)
+{
+    QSettings s = shared();
+    s.setValue(QLatin1String(kind == FixedFont ? kFixedFontKey : kFontKey), value);
+    s.sync();
+    applyNow();
+    emit changed();
+}
+
+QString QtCompat::fontFor(FontKind kind)
+{
+    const QString stored = font(kind);
+    if (!stored.isEmpty())
+        return stored;
+    // Nothing chosen yet: show what LXQt has, so the picker opens on the font
+    // the user is actually looking at. Opening it on the Qt default would make
+    // the first OK change the desktop's font to something never chosen.
+    QSettings lxqt = lxqtSettings();
+    lxqt.sync();
+    return lxqt.value(QLatin1String(kind == FixedFont ? kLxqtFixedFontKey : kLxqtFontKey))
+        .toString();
+}
+
 QString QtCompat::lxqtConfPath()
 {
     // Built exactly the way the plugin builds it (QSettings::UserScope with
@@ -166,6 +255,49 @@ QVariantList QtCompat::translation() const
     return out;
 }
 
+QString QtCompat::iconTheme() const
+{
+    const QString path =
+        QStandardPaths::locate(QStandardPaths::GenericConfigLocation, QStringLiteral("kdeglobals"));
+    if (path.isEmpty())
+        return {};
+    QSettings kde(path, QSettings::IniFormat);
+    kde.sync(); // same guard as buildPalette()
+    // "Icons/Theme", addressed normally — it is not the [General] section, so
+    // none of the top-level mapping that bites ColorScheme applies here.
+    return kde.value(QStringLiteral("Icons/Theme")).toString();
+}
+
+QList<QtCompat::Pending> QtCompat::pendingWrites() const
+{
+    QList<Pending> out;
+
+    if (colorsEnabled()) {
+        for (const auto &p : buildPalette())
+            out.append({QStringLiteral("Palette/") + p.first, p.second});
+    }
+    if (iconsEnabled()) {
+        // Only when KDE actually has one: an empty value would blank the key and
+        // drop the desktop to the plugin's "oxygen" default, which is not what
+        // "the icon set could not be read" should do.
+        const QString icons = iconTheme();
+        if (!icons.isEmpty())
+            out.append({QString::fromLatin1(kLxqtIconThemeKey), icons});
+    }
+    if (fontsEnabled()) {
+        // Each font is independent, and an empty one means "leave LXQt's alone"
+        // rather than "clear it": the user may want to set the general font and
+        // keep the monospace one the desktop came with.
+        const QString general = font(GeneralFont);
+        if (!general.isEmpty())
+            out.append({QString::fromLatin1(kLxqtFontKey), general});
+        const QString fixed = font(FixedFont);
+        if (!fixed.isEmpty())
+            out.append({QString::fromLatin1(kLxqtFixedFontKey), fixed});
+    }
+    return out;
+}
+
 void QtCompat::applyNow()
 {
     m_debounce.stop();
@@ -176,38 +308,35 @@ void QtCompat::apply()
 {
     if (!enabled())
         return;
-    const auto pairs = buildPalette();
-    if (pairs.isEmpty())
-        return; // no kdeglobals: nothing honest to translate
+    const auto pending = pendingWrites();
+    if (pending.isEmpty())
+        return; // every part off, or kdeglobals unreadable
 
-    QSettings lxqt(QSettings::UserScope, QStringLiteral("lxqt"), QStringLiteral("lxqt"));
+    QSettings lxqt = lxqtSettings();
     // Same guard as in buildPalette(). It matters a little more here because
     // lxqt.conf is written by *another program* too (lxqt-config-appearance):
     // a cached copy from before that edit would make the dirty check below say
     // "nothing to do", which is exactly the case the tab's "Aplicar ahora"
     // button exists for.
     lxqt.sync();
-    lxqt.beginGroup(QStringLiteral("Palette"));
 
     // Write only if at least one value actually differs. The platform theme
-    // rebuilds its palette only when one of the ten changed (paletteChanged_),
-    // so an identical rewrite repaints nothing — and it would still churn the
-    // file every time anything touched kdeglobals.
+    // reacts per part and only when that part moved (paletteChanged_ for the
+    // colors, an old/new comparison for the icon theme and the fonts), so an
+    // identical rewrite re-themes nothing — and it would still churn the file
+    // every time anything touched kdeglobals.
     bool dirty = false;
-    for (const auto &p : pairs) {
-        if (lxqt.value(p.first).toString().compare(p.second, Qt::CaseInsensitive) != 0) {
+    for (const Pending &p : pending) {
+        if (lxqt.value(p.key).toString().compare(p.value, Qt::CaseInsensitive) != 0) {
             dirty = true;
             break;
         }
     }
-    if (!dirty) {
-        lxqt.endGroup();
+    if (!dirty)
         return;
-    }
 
-    for (const auto &p : pairs)
-        lxqt.setValue(p.first, p.second);
-    lxqt.endGroup();
+    for (const Pending &p : pending)
+        lxqt.setValue(p.key, p.value);
     lxqt.sync();
 
     emit changed();

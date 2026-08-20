@@ -29,6 +29,7 @@
 
 #include <QFile>
 #include <QFileInfo>
+#include <QFont>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
@@ -64,6 +65,8 @@ void writeKdeglobals(const QString &windowBg = QStringLiteral("17,18,19"))
         << "\n[Colors:Tooltip]\n"
         << "BackgroundNormal=71,72,73\n"
         << "ForegroundNormal=231,232,233\n"
+        << "\n[Icons]\n"
+        << "Theme=TestIcons\n"
         << "\n[General]\n"
         << "ColorScheme=TestScheme\n";
 }
@@ -79,6 +82,14 @@ QString paletteValue(const QString &key)
     // que en disco ya está bien.
     lxqt.sync();
     lxqt.beginGroup(QStringLiteral("Palette"));
+    return lxqt.value(key).toString();
+}
+
+// Una clave suelta de lxqt.conf, con el mismo sync() y por la misma razón.
+QString lxqtValue(const QString &key)
+{
+    QSettings lxqt(QSettings::UserScope, QStringLiteral("lxqt"), QStringLiteral("lxqt"));
+    lxqt.sync();
     return lxqt.value(key).toString();
 }
 
@@ -100,6 +111,18 @@ private slots:
         QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
         s.remove(QStringLiteral("QtCompat"));
         s.sync();
+
+        // Y **lxqt.conf también hay que vaciarlo**, que es lo que no era obvio:
+        // es el archivo de salida, no un ajuste nuestro, así que lo que escribió
+        // la prueba anterior sigue ahí. Cualquier aserción de la forma "esta
+        // parte está apagada, así que su clave tiene que estar vacía" ve el
+        // valor que dejó la corrida de al lado y falla señalando al producto.
+        // clear() y no borrar el archivo: así el caché de QSettings del propio
+        // proceso queda coherente sin depender de la revalidación por (mtime,
+        // tamaño).
+        QSettings lxqt(QSettings::UserScope, QStringLiteral("lxqt"), QStringLiteral("lxqt"));
+        lxqt.clear();
+        lxqt.sync();
     }
 
     // La tabla de la feature: cada clave de lxqt.conf contra su grupo de
@@ -250,6 +273,100 @@ private slots:
 
         compat.applyNow();
         QCOMPARE(paletteValue(QStringLiteral("window_color")), QStringLiteral("#111213"));
+    }
+
+    // ---- Iconset -----------------------------------------------------------
+    // Espejo de `Icons/Theme`, con la misma lógica que los colores. La clave del
+    // lado de LXQt va **al nivel raíz** de QSettings a propósito: eso es la
+    // sección [General] del archivo, que es de donde la lee el plugin.
+    void iconThemeIsMirrored()
+    {
+        QtCompat compat;
+        QCOMPARE(compat.iconTheme(), QStringLiteral("TestIcons"));
+        compat.setEnabled(true);
+        QCOMPARE(lxqtValue(QStringLiteral("icon_theme")), QStringLiteral("TestIcons"));
+    }
+
+    // Cada parte se apaga sola sin arrastrar a las otras.
+    void iconsCanBeTurnedOffOnTheirOwn()
+    {
+        QtCompat compat;
+        compat.setIconsEnabled(false);
+        compat.setEnabled(true);
+        QVERIFY(lxqtValue(QStringLiteral("icon_theme")).isEmpty());
+        QCOMPARE(paletteValue(QStringLiteral("window_color")), QStringLiteral("#111213"));
+    }
+
+    void colorsCanBeTurnedOffOnTheirOwn()
+    {
+        QtCompat compat;
+        compat.setColorsEnabled(false);
+        compat.setEnabled(true);
+        QVERIFY(paletteValue(QStringLiteral("window_color")).isEmpty());
+        QCOMPARE(lxqtValue(QStringLiteral("icon_theme")), QStringLiteral("TestIcons"));
+    }
+
+    // Un kdeglobals sin iconset **no** escribe la clave. Escribirla vacía la
+    // llevaría al "oxygen" por defecto del plugin, que no es lo que "no se pudo
+    // leer el iconset" tiene que hacer.
+    void anAbsentIconThemeIsNotWritten()
+    {
+        {
+            QFile f(kdeglobalsPath());
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+            QTextStream out(&f);
+            out << "[Colors:Window]\nBackgroundNormal=17,18,19\n";
+        }
+        QtCompat compat;
+        QVERIFY(compat.iconTheme().isEmpty());
+        compat.setEnabled(true);
+        QVERIFY(lxqtValue(QStringLiteral("icon_theme")).isEmpty());
+    }
+
+    // ---- Fuentes -----------------------------------------------------------
+    // La única parte con valor propio: kdock no tiene ninguna fuente de
+    // aplicación que copiar, así que no hay espejo posible.
+    void fontsAreOffAndEmptyByDefault()
+    {
+        QVERIFY(!QtCompat::fontsEnabled());
+        QVERIFY(QtCompat::font(QtCompat::GeneralFont).isEmpty());
+        QtCompat compat;
+        compat.setEnabled(true);
+        QVERIFY(lxqtValue(QStringLiteral("Qt/font")).isEmpty());
+    }
+
+    void aFontIsWrittenVerbatim()
+    {
+        QFont f(QStringLiteral("Test Sans"), 13);
+        const QString encoded = f.toString();
+
+        QtCompat compat;
+        compat.setFont(QtCompat::GeneralFont, encoded);
+        compat.setFontsEnabled(true);
+        compat.setEnabled(true);
+
+        // Verbatim: el valor viaja como QFont::toString() de punta a punta, que
+        // es la codificación que usa lxqt.conf. Re-serializarlo por el camino
+        // perdería lo que kdock no entienda (un peso, un nombre de estilo).
+        QCOMPARE(lxqtValue(QStringLiteral("Qt/font")), encoded);
+        // Y la monoespaciada, que no se tocó, queda sin escribir: vacío es
+        // "dejale la suya a LXQt", no "borrala".
+        QVERIFY(lxqtValue(QStringLiteral("Qt/fixedFont")).isEmpty());
+    }
+
+    // Con nada guardado, la solapa muestra la fuente que LXQt ya tiene. Sin eso
+    // el selector abriría en la fuente por omisión de Qt y el primer OK le
+    // cambiaría la fuente al escritorio a uno que el usuario nunca eligió.
+    void fontForFallsBackToWhatLxqtHas()
+    {
+        {
+            QSettings lxqt(QSettings::UserScope, QStringLiteral("lxqt"), QStringLiteral("lxqt"));
+            lxqt.setValue(QStringLiteral("Qt/font"), QStringLiteral("Preexisting,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"));
+            lxqt.sync();
+        }
+        QVERIFY(QtCompat::font(QtCompat::GeneralFont).isEmpty());
+        QCOMPARE(QtCompat::fontFor(QtCompat::GeneralFont),
+                 QStringLiteral("Preexisting,11,-1,5,400,0,0,0,0,0,0,0,0,0,0,1"));
     }
 
     // El resto del archivo es del usuario: escribir la paleta no puede llevarse
