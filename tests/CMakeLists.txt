@@ -54,6 +54,23 @@ kdock_add_unit_test(tst_apppreview)
 kdock_add_unit_test(tst_settingsdialog)
 kdock_add_unit_test(tst_audiocontrol)
 
+# tst_cmslider is registered by hand instead of through kdock_add_unit_test: it
+# runs once per QQC2 style, because QQuickStyle::setStyle() only takes effect
+# once per process and the bug it freezes (a Slider 0 px tall, see the file)
+# only showed up under the styles that leave `padding` at 0. It also needs the
+# repo path in the environment — the .qml it measures lives in the
+# kdock-controlmanager target, which the unit tier does not link.
+qt_add_executable(tst_cmslider ${CMAKE_CURRENT_SOURCE_DIR}/unit/tst_cmslider.cpp)
+target_link_libraries(tst_cmslider PRIVATE kdock_core Qt6::Test)
+target_include_directories(tst_cmslider PRIVATE ${KDOCK_TESTS_DIR}/unit)
+foreach(style Basic Fusion Material Universal)
+    add_test(NAME tst_cmslider.${style} COMMAND tst_cmslider)
+    set_tests_properties(tst_cmslider.${style} PROPERTIES
+        LABELS "unit"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;KDOCK_REPO=${KDOCK_REPO_DIR};KDOCK_TEST_QQC2_STYLE=${style}"
+        SKIP_RETURN_CODE 77)
+endforeach()
+
 # The fake tools have to exist before any test runs, so they are generated at
 # build time by a target every unit test depends on.
 #

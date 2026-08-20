@@ -69,6 +69,12 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
 4. **Solo los nombres QQC2 conocidos** (`Basic`, `Fusion`, `Material`, `Universal`,
    `Imagine`) se pasan a `setStyle`; cualquier otro (Breeze, Oxygen, Windows…) cae a
    Fusion, o kdock no arranca.
+5. **Y el estilo también decide el *layout* de los controles a los que les reemplazamos los
+   delegates**, no solo su apariencia. Los sliders del panel se quedaron sin área de clic al
+   pasar de Basic a Fusion (paso 3) y nadie lo vio hasta el 2026-08-20: ver *Un control de
+   QQC2 al que le reemplazás TODOS los delegates…* en `CLAUDE-TRAMPS.md`. Si volvés a tocar
+   el estilo por omisión, medí `height()` de cada control custom, no alcanza con que el QML
+   cargue.
 
 **Son seis binarios**, los seis los compila el mismo `cmake --build build`:
 
@@ -1180,6 +1186,7 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **Un popup del dock con el que se pueda INTERACTUAR va con `Qt.ToolTip`, nunca con `Qt.Popup`** — y no puede cerrarse por *leave*.
 - **QML no concatena literales adyacentes como C++.**
 - **Un `Menu` de QtQuick.Controls no se dimensiona solo a su ítem más largo.**
+- **Un control de QQC2 al que le reemplazás TODOS los delegates puede quedar de 0 px de alto, y sigue dibujándose.**
 - **Un `Menu` o un `ToolTip` declarados dentro del delegate se instancian por fila.**
 - **`showMaximized()` no hace nada sin gestor de ventanas.**
 - **Un auto-placement que prueba cada celda contra la lista de lo ya puesto es O(n³).**

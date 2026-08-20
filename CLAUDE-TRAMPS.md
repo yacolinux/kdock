@@ -826,6 +826,30 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   *checkable* (que reservan una columna para el tilde) con `IconMenuItem` (que dibuja su
   propio ícono). El arreglo es una línea por menú:
   `width: Math.max(implicitWidth + 16, <mínimo>)`. Vale también para los submenús.
+- **Un control de QQC2 al que le reemplazás TODOS los delegates puede quedar de 0 px de alto,
+  y sigue dibujándose.** El `implicitHeight` de un `Slider` es
+  `max(implicitBackgroundHeight, implicitHandleHeight + topPadding + bottomPadding)`, y un
+  `Rectangle` que ponés como `handle`/`background` con `width`/`height` **no** tiene
+  `implicitWidth`/`implicitHeight` (siguen en 0). O sea que la altura del control la termina
+  decidiendo el `padding` del **estilo**: `Basic`, `Material` y `Universal` ponen 6; **`Fusion`
+  no pone ninguno**, que es justo el que quedó por omisión desde que los imports dejaron de
+  forzar Basic (`import QtQuick.Controls` a secas, RELEASE 0.1.12). Bajo Fusion el `Slider` de
+  `CmSlider` medía **0 px**: los hijos no se recortan y los dos delegates se centran sobre
+  `availableHeight`, así que **se veía idéntico a uno sano** y no recibía un solo evento — ni
+  clic, ni arrastre, ni rueda. Se lee como un problema de foco, de Wayland o del `Flickable`
+  que roba el grab (la trampa de al lado), y es geometría. Mordió en la sección Audio del panel
+  (2026-08-20); las filas de brillo se salvaron **de casualidad**, porque habían pasado a
+  `CmSpinBox`, cuyo `contentItem` sí trae implícito.
+  - **Un cambio de estilo global es un cambio de layout en cada control custom del árbol.** Si
+    tocás `QQuickStyle::setStyle`, medí; no alcanza con que el QML cargue sin errores.
+  - La medición son diez líneas y no necesita ni ventana ni captura: un `QQmlComponent` sobre
+    el `.qml` suelto con las context properties como `QVariantMap` (QML lee `theme.foreground`
+    de un mapa igual que de un `QObject`), y un `qInfo()` con `height()`/`implicitHeight` por
+    cada estilo — `QQuickStyle::setStyle` solo surte efecto **una vez por proceso**, así que es
+    una corrida por estilo. Congelado en `tests/unit/tst_cmslider.cpp`, registrado cuatro veces
+    en `tests/CMakeLists.txt` por la misma razón.
+  - El arreglo es no depender del estilo: `padding` propio y `implicitWidth`/`implicitHeight`
+    declarados en los delegates, con el tamaño que realmente dibujan.
 - **Un `Menu` o un `ToolTip` declarados dentro del delegate se instancian por fila.** En el
   menú de mosaicos eso eran ~450 `Menu` (cada uno con su `Instantiator` de colores) y ~450
   `ToolTip` para "Todas las aplicaciones": **783 MB de RSS y 3,5 s** para abrir la sección,

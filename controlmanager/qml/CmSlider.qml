@@ -132,6 +132,25 @@ Item {
         enabled: row.enabled
         value: row.value
 
+        // The control's own implicitHeight is
+        //   max(implicitBackgroundHeight, implicitHandleHeight + vertical padding)
+        // and both delegates below are sized with width/height, which does NOT
+        // set implicitWidth/implicitHeight. So the whole thing rides on the
+        // style's padding: Basic (and Material, and Universal) set 6, Fusion
+        // sets none — and Fusion is what QQuickStyle::setStyle() gets by
+        // default since the imports stopped forcing Basic. Under Fusion the
+        // Slider ended up 0 px tall: it still *drew* (children are not clipped,
+        // and both delegates centre themselves on availableHeight) so the row
+        // looked perfectly normal and simply never answered a press, a drag or
+        // the wheel. Reported 2026-08-20 on the panel's audio rows, which are
+        // the last ones still on a Slider — the brightness ones moved to
+        // CmSpinBox and that is why they kept working.
+        //
+        // Pinned here instead of left to the style: the padding is 0 and the
+        // two delegates declare the implicit size they actually draw, so the
+        // hit area is the same 14 px under every style.
+        padding: 0
+
         // Re-assert the backend's value the moment the drag ends: the plain
         // `value:` binding above is broken by the user's own interaction.
         Binding on value {
@@ -146,6 +165,7 @@ Item {
             x: slider.leftPadding
             y: slider.topPadding + slider.availableHeight / 2 - height / 2
             width: slider.availableWidth
+            implicitHeight: 4
             height: 4
             radius: 2
             color: Qt.rgba(row.fg.r, row.fg.g, row.fg.b, 0.18)
@@ -160,6 +180,8 @@ Item {
         handle: Rectangle {
             x: slider.leftPadding + slider.visualPosition * (slider.availableWidth - width)
             y: slider.topPadding + slider.availableHeight / 2 - height / 2
+            implicitWidth: 14
+            implicitHeight: 14
             width: 14
             height: 14
             radius: 7
