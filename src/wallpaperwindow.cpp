@@ -47,6 +47,10 @@ WallpaperWindow::WallpaperWindow(const QString &screenName, QWindow *parent)
 
     // Scenery, not UI: an empty mask leaves the surface with an empty input
     // region, so clicks land on whatever is below instead of being swallowed.
+    // Set now and again after every show() (see setImage/updateScreen): a mask
+    // set before the handle exists or after a destroy()/show() cycle may be
+    // lost on some Qt versions, leaving a fullscreen transparent surface that
+    // blocks all input for a few seconds after a restart (reported 2026-08-20).
     setMask(QRegion());
 }
 
@@ -95,8 +99,11 @@ void WallpaperWindow::updateScreen()
     }
     setScreen(target);
     setGeometry(target->geometry());
-    if (wasVisible)
+    if (wasVisible) {
         show();
+        // Re-apply after recreation: destroy()/show() resets the input region.
+        setMask(QRegion());
+    }
 }
 
 void WallpaperWindow::setImage(const QString &path, int fillMode)
@@ -122,5 +129,8 @@ void WallpaperWindow::setImage(const QString &path, int fillMode)
     if (!isVisible()) {
         updateScreen();
         show();
+        // Must follow show(): a mask set before the handle exists is not
+        // reliably applied, and the surface would block input fullscreen.
+        setMask(QRegion());
     }
 }

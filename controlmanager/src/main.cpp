@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QQuickStyle>
 #include <QTextStream>
+#include <QTimer>
 #include <QtPlugin>
 
 #include "appearancecontrol.h"
@@ -297,15 +298,29 @@ int main(int argc, char *argv[])
     QObject::connect(&dockLink, &DockLink::changed, &wallpaper,
                      [&wallpaper] { wallpaper.refreshAvailability(); });
     // Local fallback renderer only when kdock is not providing it.
-    QObject::connect(&dockLink, &DockLink::changed, &app, [&lxqt, &dockLink] {
+    // During a kdock restart the service disappears for ~2s (restartAll waits
+    // kQuitWaitMs=2000). Starting a local renderer immediately would create a
+    // fullscreen transparent layer-shell surface that, if its input mask is not
+    // yet applied, blocks all input for a few seconds (reported 2026-08-20).
+    // Debounce the fallback: wait 3.5s before taking over, and cancel if kdock
+    // reappears in the meantime.
+    QTimer fallbackTimer;
+    fallbackTimer.setSingleShot(true);
+    fallbackTimer.setInterval(3500);
+    QObject::connect(&fallbackTimer, &QTimer::timeout, [&lxqt] {
+        if (Session::isLxqt() && !lxqt.active() && LxqtWallpapers::enabled())
+            lxqt.start();
+    });
+    QObject::connect(&dockLink, &DockLink::changed, &app, [&lxqt, &dockLink, &fallbackTimer] {
         if (!Session::isLxqt())
             return;
         if (dockLink.available()) {
+            fallbackTimer.stop();
             if (lxqt.active())
                 lxqt.stop();
         } else {
-            if (!lxqt.active() && LxqtWallpapers::enabled())
-                lxqt.start();
+            if (!lxqt.active() && LxqtWallpapers::enabled() && !fallbackTimer.isActive())
+                fallbackTimer.start();
         }
     });
     PowerControl power;
@@ -341,7 +356,7 @@ int main(int argc, char *argv[])
     // does. aboutToQuit restores PCManFM if we suppressed it.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &lxqt, &LxqtWallpapers::quit);
     if (Session::isLxqt() && !dockLink.available() && LxqtWallpapers::enabled())
-        lxqt.start();
+        fallbackTimer.start();
 
     if (!sectionArg.isEmpty() && CmSections::exists(sectionArg))
         window.setCurrentTab(sectionArg);
