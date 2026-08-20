@@ -8,7 +8,7 @@ MonitorControl::MonitorControl(QObject *parent)
     // Available whenever we're on KWin, mirroring the overview / move-to-desktop
     // widgets. (It used to also require >1 connected monitor, which hid the
     // button on single-monitor states even when the user enabled it.)
-    m_available = KWinShortcut::sessionIsKde();
+    m_available = KWinShortcut::available();
 }
 
 void MonitorControl::moveToNextScreen()

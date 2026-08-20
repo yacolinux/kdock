@@ -3,8 +3,9 @@
 
 #pragma once
 
-#include <QDBusContext>
+#include <QDBusAbstractAdaptor>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusServiceWatcher>
 #include <QObject>
 #include <QPixmap>
@@ -71,7 +72,7 @@ private:
     DBusMenuClient *m_menu = nullptr;
 };
 
-class SystrayHost : public QObject, protected QDBusContext
+class SystrayHost : public QObject
 {
     Q_OBJECT
 public:
@@ -79,6 +80,10 @@ public:
     ~SystrayHost() override;
 
     bool active() const { return m_active; }
+    // We are the StatusNotifierWatcher of this session, i.e. nobody else was
+    // holding the bus name when we started. True under LXQt and on bare
+    // wlroots; false under Plasma.
+    bool isWatcher() const { return m_isWatcher; }
     QList<SystrayItem *> items() const { return m_items; }
     SystrayItem *itemAt(int index) const;
     // Raw IconPixmap of the item with the given service (for the systray image
@@ -94,22 +99,29 @@ public:
 
     Q_INVOKABLE void refreshItem(int index);
 
+    // ---- the watcher side, called by the two adaptors ---------------------
+    // An item registering itself. `serviceOrPath` is either a bus name or an
+    // object path; in the second case `caller` (the sender of the D-Bus call)
+    // supplies the service.
+    void registerItem(const QString &serviceOrPath, const QString &caller);
+    // A host registering itself. Only the broadcast matters to us: we are our
+    // own host and other hosts are welcome to coexist.
+    void registerHost(const QString &service);
+    // "service+path" of every known item, which is the id form the spec (and
+    // every real watcher) uses. Returning the bare service made a host that
+    // re-read this list look for /StatusNotifierItem on an item that lives
+    // somewhere else.
+    QStringList registeredItemIds() const;
+
 signals:
     void itemAdded(int index);
     void itemRemoved(int index);
     void itemChanged(int index);
 
-protected:
-    // org.freedesktop.DBus.Introspectable
-    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.StatusNotifierWatcher")
-
-public slots:
-    // Called by items registering themselves
-    Q_SCRIPTABLE void RegisterStatusNotifierItem(const QString &serviceOrPath);
-    Q_SCRIPTABLE void RegisterStatusNotifierHost(const QString &service);
-    Q_SCRIPTABLE QStringList RegisteredStatusNotifierItems() const;
-    Q_SCRIPTABLE bool IsStatusNotifierHostRegistered() const;
-    Q_SCRIPTABLE uint ProtocolVersion() const { return 0; }
+    // Relayed onto both watcher interfaces by the adaptors.
+    void watcherItemRegistered(const QString &id);
+    void watcherItemUnregistered(const QString &id);
+    void watcherHostRegistered(const QString &service);
 
 private:
     void ensureWatcher();
@@ -120,14 +132,85 @@ private:
     int indexOfService(const QString &service) const;
 
     bool m_active = false;
+    bool m_isWatcher = false;
     QDBusServiceWatcher m_watcher;
     QList<SystrayItem *> m_items;
     QString m_hostService;
     // The watcher bus name we actually talk to (org.kde.* on KDE; the one we
     // registered ourselves otherwise). Its interface name equals the service.
     QString m_watcherService;
+    // Parent of the two watcher adaptors and the object registered at
+    // /StatusNotifierWatcher. Deliberately NOT SystrayHost itself: adaptors
+    // belong to an object, not to a path, so hanging them off the host would
+    // also export the watcher interfaces at /StatusNotifierHost, which is the
+    // same object registered at a second path.
+    QObject m_watcherObject;
 
 private slots:
     void onItemRegistered(const QString &service);
     void onItemUnregistered(const QString &service);
+};
+
+// One StatusNotifierWatcher interface, forwarding to SystrayHost.
+//
+// There are two of these because the interface name is baked into the class by
+// Q_CLASSINFO and a single object cannot answer to two of them — which is
+// exactly the bug this fixes: kdock exported only the freedesktop name while
+// calling *itself* with the org.kde one, so becoming the watcher (LXQt, bare
+// wlroots) ended in "No such interface … at /StatusNotifierWatcher" and the
+// tray never registered a single item.
+//
+// Everything the spec declares as a property is a property here. It reads like
+// pedantry and is not: Qt's own QDBusTrayIcon (so every Qt application using
+// QSystemTrayIcon) reads IsStatusNotifierHostRegistered as a property, and when
+// that read fails it falls back to X11's XEmbed — which on Wayland means no
+// tray icon at all.
+class SniWatcherAdaptor : public QDBusAbstractAdaptor
+{
+    Q_OBJECT
+    Q_PROPERTY(QStringList RegisteredStatusNotifierItems READ registeredItems)
+    Q_PROPERTY(bool IsStatusNotifierHostRegistered READ hostRegistered)
+    Q_PROPERTY(int ProtocolVersion READ protocolVersion)
+
+public:
+    SniWatcherAdaptor(SystrayHost *host, QObject *parent);
+
+    QStringList registeredItems() const;
+    bool hostRegistered() const;
+    int protocolVersion() const { return 0; }
+
+public slots:
+    // The trailing QDBusMessage is Qt's documented way of learning who called
+    // without QDBusContext (which only works for the registered object, not for
+    // its adaptors). It is stripped from the exported signature.
+    void RegisterStatusNotifierItem(const QString &serviceOrPath, const QDBusMessage &msg);
+    void RegisterStatusNotifierHost(const QString &service);
+    // Not in any watcher of this codebase before, yet SystrayHost's destructor
+    // has always called it: without it, every shutdown logged an error.
+    void UnregisterStatusNotifierHost(const QString &service);
+
+signals:
+    void StatusNotifierItemRegistered(const QString &id);
+    void StatusNotifierItemUnregistered(const QString &id);
+    void StatusNotifierHostRegistered();
+    void StatusNotifierHostUnregistered();
+
+protected:
+    SystrayHost *m_host = nullptr;
+};
+
+class SniWatcherKdeAdaptor : public SniWatcherAdaptor
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.kde.StatusNotifierWatcher")
+public:
+    using SniWatcherAdaptor::SniWatcherAdaptor;
+};
+
+class SniWatcherFdoAdaptor : public SniWatcherAdaptor
+{
+    Q_OBJECT
+    Q_CLASSINFO("D-Bus Interface", "org.freedesktop.StatusNotifierWatcher")
+public:
+    using SniWatcherAdaptor::SniWatcherAdaptor;
 };

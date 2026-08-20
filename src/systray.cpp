@@ -300,7 +300,9 @@ SystrayHost::SystrayHost(QObject *parent)
 
 SystrayHost::~SystrayHost()
 {
-    if (!m_hostService.isEmpty() && !m_watcherService.isEmpty()) {
+    // Only worth saying to a *foreign* watcher: when we are the watcher, the
+    // bus name goes away with us anyway.
+    if (!m_isWatcher && !m_hostService.isEmpty() && !m_watcherService.isEmpty()) {
         QDBusMessage msg = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
             m_watcherService, QStringLiteral("UnregisterStatusNotifierHost"));
         msg.setArguments({m_hostService});
@@ -323,21 +325,43 @@ void SystrayHost::ensureWatcher()
     } else if (fdoExists) {
         m_watcherService = FDO_WATCHER_SERVICE;
     } else {
-        // No watcher present (e.g. bare wlroots): become one ourselves, under
-        // both bus names so KDE- and freedesktop-style clients both find us.
-        bus.registerObject(WATCHER_PATH, this, QDBusConnection::ExportAllSlots);
+        // No watcher present (LXQt, bare wlroots): become one ourselves, under
+        // both bus names AND both interface names. Exporting only one interface
+        // while talking to ourselves through the other is what used to break
+        // the whole tray here — see SniWatcherAdaptor.
+        new SniWatcherKdeAdaptor(this, &m_watcherObject);
+        new SniWatcherFdoAdaptor(this, &m_watcherObject);
+        bus.registerObject(WATCHER_PATH, &m_watcherObject, QDBusConnection::ExportAdaptors);
         bus.registerService(KDE_WATCHER_SERVICE);
         bus.registerService(FDO_WATCHER_SERVICE);
         m_watcherService = KDE_WATCHER_SERVICE;
+        m_isWatcher = true;
     }
     qInfo() << "kdock: systray using watcher" << m_watcherService
-            << "(kde:" << kdeExists << "fdo:" << fdoExists << ")";
+            << "(kde:" << kdeExists << "fdo:" << fdoExists
+            << "ours:" << m_isWatcher << ")";
 
     m_hostService = QStringLiteral("org.kde.StatusNotifierHost-%1")
                         .arg(QCoreApplication::applicationPid());
     bus.registerService(m_hostService);
     bus.registerObject(QStringLiteral("/StatusNotifierHost"), this,
                         QDBusConnection::ExportAdaptors);
+
+    if (m_isWatcher) {
+        // Registering with ourselves over the bus would be a round trip whose
+        // only possible outcomes are "it worked" and "the tray is dead": there
+        // is nothing asynchronous to wait for, and a failure here (which is
+        // exactly what happened) leaves m_active false and the watcher signals
+        // unconnected, so no item is ever picked up. Take the short path.
+        //
+        // No connectWatcherSignals() either: those signals would be our own,
+        // and items reach us directly through registerItem(). Nor is there an
+        // initial list to read — we have just come up, so there is none.
+        m_active = true;
+        emit watcherHostRegistered(m_hostService);
+        qInfo() << "kdock: systray host registered (we are the watcher)";
+        return;
+    }
 
     QDBusMessage msg = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
         m_watcherService, QStringLiteral("RegisterStatusNotifierHost"));
@@ -413,55 +437,90 @@ void SystrayHost::onItemUnregistered(const QString &id)
 }
 
 
-void SystrayHost::RegisterStatusNotifierItem(const QString &serviceOrPath)
+void SystrayHost::registerItem(const QString &serviceOrPath, const QString &caller)
 {
     QString svc = serviceOrPath;
     QString pth = QStringLiteral("/StatusNotifierItem");
     if (serviceOrPath.startsWith(QLatin1Char('/'))) {
         pth = serviceOrPath;
-        if (const QDBusContext *ctx = dynamic_cast<const QDBusContext *>(this))
-            svc = message().service();
+        svc = caller;
     }
     if (svc.isEmpty())
         return;
     addItem(svc, pth);
-    // Broadcast to other hosts the concatenated "service+path" id, as real
-    // watchers do (KDE-style clients expect this form).
-    QDBusMessage sig = QDBusMessage::createSignal(WATCHER_PATH, KDE_WATCHER_SERVICE,
-        QStringLiteral("StatusNotifierItemRegistered"));
-    sig.setArguments({svc + pth});
-    QDBusConnection::sessionBus().send(sig);
+    // Broadcast the concatenated "service+path" id, as real watchers do, so
+    // another host on this session sees the item too.
+    emit watcherItemRegistered(svc + pth);
 }
 
-void SystrayHost::RegisterStatusNotifierHost(const QString &service)
+void SystrayHost::registerHost(const QString &service)
 {
-    QDBusMessage sig = QDBusMessage::createSignal(WATCHER_PATH, KDE_WATCHER_SERVICE,
-        QStringLiteral("StatusNotifierHostRegistered"));
-    sig.setArguments({service});
-    QDBusConnection::sessionBus().send(sig);
+    emit watcherHostRegistered(service);
 }
 
-QStringList SystrayHost::RegisteredStatusNotifierItems() const
+QStringList SystrayHost::registeredItemIds() const
 {
     QStringList ids;
+    ids.reserve(m_items.size());
     for (const SystrayItem *item : m_items)
-        ids.append(item->service);
+        ids.append(item->service + item->path);
     return ids;
 }
 
-bool SystrayHost::IsStatusNotifierHostRegistered() const
+// ---- the two watcher interfaces -------------------------------------------
+
+SniWatcherAdaptor::SniWatcherAdaptor(SystrayHost *host, QObject *parent)
+    : QDBusAbstractAdaptor(parent)
+    , m_host(host)
 {
-    return !m_hostService.isEmpty();
+    setAutoRelaySignals(false);
+    connect(host, &SystrayHost::watcherItemRegistered,
+            this, &SniWatcherAdaptor::StatusNotifierItemRegistered);
+    connect(host, &SystrayHost::watcherItemUnregistered,
+            this, &SniWatcherAdaptor::StatusNotifierItemUnregistered);
+    connect(host, &SystrayHost::watcherHostRegistered,
+            this, [this](const QString &) { emit StatusNotifierHostRegistered(); });
+}
+
+QStringList SniWatcherAdaptor::registeredItems() const
+{
+    return m_host ? m_host->registeredItemIds() : QStringList();
+}
+
+bool SniWatcherAdaptor::hostRegistered() const
+{
+    return m_host && m_host->active();
+}
+
+void SniWatcherAdaptor::RegisterStatusNotifierItem(const QString &serviceOrPath,
+                                                   const QDBusMessage &msg)
+{
+    if (m_host)
+        m_host->registerItem(serviceOrPath, msg.service());
+}
+
+void SniWatcherAdaptor::RegisterStatusNotifierHost(const QString &service)
+{
+    if (m_host)
+        m_host->registerHost(service);
+}
+
+void SniWatcherAdaptor::UnregisterStatusNotifierHost(const QString &service)
+{
+    Q_UNUSED(service);
+    // We are the only host we know of, and we go away with the process. Exists
+    // so that a well-behaved host (including our own destructor) does not get
+    // an error back for saying goodbye.
 }
 
 void SystrayHost::addItem(const QString &service, const QString &path)
 {
-    QString svc = service;
-    QString pth = path;
-    if (svc.isEmpty() && pth.startsWith(QLatin1Char('/'))) {
-        if (const QDBusContext *ctx = dynamic_cast<const QDBusContext *>(this))
-            svc = message().service();
-    }
+    const QString svc = service;
+    const QString pth = path;
+    // The caller resolves the service now (registerItem() takes it from the
+    // D-Bus message): this used to reach for QDBusContext::message() here, which
+    // is only valid while a call is being dispatched to *this* object and is
+    // not, now that the two watcher interfaces live on adaptors.
     if (svc.isEmpty()) {
         qWarning() << "kdock: systray addItem rejected: empty service";
         return;
@@ -489,9 +548,16 @@ void SystrayHost::removeItem(const QString &service)
         return;
     }
     m_watcher.removeWatchedService(service);
-    m_items.takeAt(idx)->deleteLater();
+    SystrayItem *item = m_items.takeAt(idx);
+    const QString id = item->service + item->path;
+    item->deleteLater();
     qInfo() << "kdock: systray item removed:" << service << "index=" << idx;
     emit itemRemoved(idx);
+    // Tell the session the item is gone. Only meaningful while we are the
+    // watcher; with a foreign one this is its job and the signal goes nowhere,
+    // because nothing is connected to the adaptors that were never created.
+    if (m_isWatcher)
+        emit watcherItemUnregistered(id);
 }
 
 int SystrayHost::indexOfService(const QString &service) const

@@ -53,6 +53,8 @@ kdock_add_unit_test(tst_appswidget)
 kdock_add_unit_test(tst_apppreview)
 kdock_add_unit_test(tst_settingsdialog)
 kdock_add_unit_test(tst_audiocontrol)
+kdock_add_unit_test(tst_session)
+kdock_add_unit_test(tst_lxqtwallpapers)
 
 # tst_cmslider is registered by hand instead of through kdock_add_unit_test: it
 # runs once per QQC2 style, because QQuickStyle::setStyle() only takes effect

@@ -1,22 +1,15 @@
 #include "kwinshortcut.h"
 
+#include "session.h"
+
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QProcessEnvironment>
 
 namespace KWinShortcut {
 
-bool sessionIsKde()
+bool available()
 {
-    static const bool kde = [] {
-        const auto env = QProcessEnvironment::systemEnvironment();
-        const QString desktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-        const QString session = env.value(QStringLiteral("XDG_SESSION_DESKTOP"));
-        return desktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive)
-            || session.contains(QStringLiteral("KDE"), Qt::CaseInsensitive)
-            || session.contains(QStringLiteral("plasma"), Qt::CaseInsensitive);
-    }();
-    return kde;
+    return Session::hasKWin();
 }
 
 void invoke(const QString &name)

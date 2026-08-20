@@ -1,20 +1,17 @@
 #include "wallpapercontrol.h"
 
 #include "plasmascript.h"
+#include "session.h"
+#include "wallpaperfolder.h"
 
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QDir>
-#include <QDirIterator>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QProcessEnvironment>
 #include <QScreen>
 #include <QUrl>
-
-#include <algorithm>
 
 namespace {
 
@@ -42,19 +39,49 @@ WallpaperControl::WallpaperControl(QObject *parent)
 
 void WallpaperControl::checkAvailability()
 {
-    const auto env = QProcessEnvironment::systemEnvironment();
-    const QString desktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-    const QString session = env.value(QStringLiteral("XDG_SESSION_DESKTOP"));
+    // Everything below is Plasma's scripting API, so this is the one gate that
+    // really is about plasmashell and not about KWin (see Session). Under LXQt
+    // the widget is still useful: the alternate engine takes over below.
+    m_available = Session::hasPlasmaShell();
+}
 
-    if (desktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("plasma"), Qt::CaseInsensitive)) {
-        m_available = true;
-    }
+void WallpaperControl::setAlternateEngine(std::function<bool()> live,
+                                          std::function<void(const QString &)> advance)
+{
+    m_altLive = std::move(live);
+    m_altAdvance = std::move(advance);
+}
+
+void WallpaperControl::refreshAvailability()
+{
+    const bool now = available();
+    if (now == m_lastAvailable)
+        return;
+    m_lastAvailable = now;
+    emit availableChanged();
+}
+
+bool WallpaperControl::alternateLive() const
+{
+    return m_altLive && m_altAdvance && m_altLive();
+}
+
+bool WallpaperControl::available() const
+{
+    // The widget is worth showing when *someone* can advance a wallpaper: the
+    // Plasma path or kdock's own LXQt engine.
+    return m_available || alternateLive();
 }
 
 void WallpaperControl::nextWallpaper(const QString &screenName)
 {
+    // Under LXQt kdock draws the wallpapers itself, so "next" is ours to do and
+    // there is no containment to talk to.
+    if (alternateLive()) {
+        m_altAdvance(screenName);
+        emit wallpaperAdvanced(screenName);
+        return;
+    }
     if (!m_available)
         return;
 
@@ -83,6 +110,14 @@ void WallpaperControl::nextWallpaper(const QString &screenName)
 
 void WallpaperControl::nextWallpaperAll()
 {
+    if (alternateLive()) {
+        const auto screens = QGuiApplication::screens();
+        for (QScreen *s : screens) {
+            m_altAdvance(s->name());
+            emit wallpaperAdvanced(s->name());
+        }
+        return;
+    }
     if (!m_available)
         return;
     // By geometry, not by name: that is what the containments are matched on
@@ -156,7 +191,8 @@ void WallpaperControl::advanceForGeometry(int x, int y, const QString &screenNam
         const QString currentPath = QUrl(parts.value(1)).toLocalFile();
         if (currentPath.isEmpty())
             return;
-        const QString next = nextImage({QFileInfo(currentPath).absolutePath()}, currentPath);
+        const QString next = WallpaperFolder::next({QFileInfo(currentPath).absolutePath()},
+                                                   currentPath);
         if (next.isEmpty() || next == currentPath)
             return;
 
@@ -172,35 +208,6 @@ void WallpaperControl::advanceForGeometry(int x, int y, const QString &screenNam
     });
 }
 
-QString WallpaperControl::nextImage(const QStringList &folders, const QString &currentPath)
-{
-    static const QStringList kFilters = {
-        QStringLiteral("*.jpg"),  QStringLiteral("*.jpeg"), QStringLiteral("*.png"),
-        QStringLiteral("*.webp"), QStringLiteral("*.bmp"),  QStringLiteral("*.gif"),
-        QStringLiteral("*.svg"),  QStringLiteral("*.svgz")};
-
-    QStringList files;
-    for (const QString &folder : folders) {
-        // Not recursive: "the next image of this folder" is what someone
-        // looking at a static wallpaper expects, and a folder of folders would
-        // make the order impossible to predict.
-        QDirIterator it(folder, kFilters, QDir::Files);
-        while (it.hasNext())
-            files << it.next();
-    }
-    files.removeDuplicates();
-    if (files.isEmpty())
-        return {};
-
-    // Stable order so "next" is deterministic regardless of Plasma's mode.
-    std::sort(files.begin(), files.end(), [](const QString &a, const QString &b) {
-        return a.compare(b, Qt::CaseInsensitive) < 0;
-    });
-
-    const int idx = files.indexOf(currentPath);
-    // idx < 0 (current not in the set) → start at the first image.
-    return files.at((idx + 1) % files.size());
-}
 
 void WallpaperControl::invokeGlobalShortcut()
 {

@@ -1,8 +1,9 @@
 #include "overviewcontrol.h"
 
+#include "session.h"
+
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QProcessEnvironment>
 
 OverviewControl::OverviewControl(QObject *parent)
     : QObject(parent)
@@ -12,15 +13,10 @@ OverviewControl::OverviewControl(QObject *parent)
 
 void OverviewControl::checkAvailability()
 {
-    const auto env = QProcessEnvironment::systemEnvironment();
-    const QString desktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-    const QString session = env.value(QStringLiteral("XDG_SESSION_DESKTOP"));
-
-    if (desktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("plasma"), Qt::CaseInsensitive)) {
-        m_available = true;
-    }
+    // KWin's own effect, invoked through KWin's own shortcut: what this needs
+    // is KWin, not Plasma. Gating it on "the session is KDE" left the widget
+    // dead in the LXQt+kwin_wayland session. See Session.
+    m_available = Session::hasKWin();
 }
 
 void OverviewControl::toggle()

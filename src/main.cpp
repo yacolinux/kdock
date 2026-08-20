@@ -39,6 +39,8 @@
 #include "monitorcontrol.h"
 #include "wallpapercontrol.h"
 #include "desktopwallpapers.h"
+#include "lxqtwallpapers.h"
+#include "session.h"
 #include "powercontrol.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
@@ -374,6 +376,20 @@ int main(int argc, char *argv[])
     ActiveWindowControl activeWindow(monitor, &virtualDesktops);
     WallpaperControl wallpaperControl;
     DesktopWallpapers desktopWallpapers(&virtualDesktops);
+    // The LXQt half of the same feature. Constructed always and started only
+    // under LXQt (below): while it has not been started it owns no surfaces and
+    // has touched nothing.
+    LxqtWallpapers lxqtWallpapers(&virtualDesktops);
+    // active(), not enabled(): the key is shared with the Plasma engine, so
+    // asking it would make the "next wallpaper" widget hand the job to an
+    // engine that is not running — under Plasma, with the per-desktop feature
+    // on, the button would silently do nothing.
+    wallpaperControl.setAlternateEngine([&lxqtWallpapers] { return lxqtWallpapers.active(); },
+                                        [&lxqtWallpapers](const QString &s) {
+                                            lxqtWallpapers.advance(s);
+                                        });
+    QObject::connect(&lxqtWallpapers, &LxqtWallpapers::activeChanged, &wallpaperControl,
+                     [&wallpaperControl] { wallpaperControl.refreshAvailability(); });
     PowerControl power;
     SystrayHost systray;
     RelanzadoresManager relanzadores(&apps);
@@ -386,6 +402,18 @@ int main(int argc, char *argv[])
     // the schemes every picker of kdock already applies also reach the rest of
     // the desktop's Qt applications. Off by default and inert while off.
     QtCompat qtCompat(&theme);
+    // …except in the session it was written for, where leaving it off means
+    // every color scheme kdock applies stops at kdock's own window. Switched on
+    // once, the first time kdock runs under LXQt, and never again: `configured()`
+    // is false only while nobody has decided, so turning it off afterwards
+    // sticks.
+    //
+    // This lives in main() and NOT in QtCompat's constructor on purpose. The
+    // class writes ~/.config/lxqt/lxqt.conf, which no XDG_DATA_HOME sandbox
+    // isolates (see qtcompat.h), so a probe linking kdock_core with a throwaway
+    // data dir would count as a first run and re-theme the developer's desktop.
+    if (Session::isLxqt() && !QtCompat::configured())
+        qtCompat.setEnabled(true);
     // The weather widget draws from the same backend the mini-app and the
     // control panel use; its own config file is watched, so a city picked in
     // kdock-weather reaches the dock without a restart.
@@ -425,6 +453,7 @@ int main(int argc, char *argv[])
     shared.qtCompat = &qtCompat;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
+    shared.lxqtWallpapers = &lxqtWallpapers;
     shared.appPreviews = &appPreviews;
 
     // ColorAuto: the color scheme (and optionally the docks' own colors)
@@ -442,15 +471,28 @@ int main(int argc, char *argv[])
     // Wallpapers per virtual desktop. start() re-applies the current desktop's
     // set (or puts desktop 1 back if a previous run died with ours up), and the
     // quit hook always leaves KDE's own wallpaper behind.
+    //
+    // Under LXQt the other engine runs instead (see LxqtWallpapers): there is
+    // no plasmashell to rewrite, so kdock paints the wallpapers itself. Exactly
+    // one of the two is ever live, but BOTH quit hooks are installed — they are
+    // no-ops for the engine that never started, and the LXQt one has to run on
+    // the signal path too or a logout leaves the session with no desktop
+    // manager at all.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &desktopWallpapers,
                      &DesktopWallpapers::quit);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &lxqtWallpapers,
+                     &LxqtWallpapers::quit);
     // On a signal (logout, `kill`) put KDE's wallpaper back and then leave the
     // same way we used to: immediately, without unwinding. See the helper.
-    installQuitSignalHandler(&app, [&desktopWallpapers] {
+    installQuitSignalHandler(&app, [&desktopWallpapers, &lxqtWallpapers] {
         desktopWallpapers.quit();
+        lxqtWallpapers.quit();
         ::_exit(0);
     });
-    desktopWallpapers.start();
+    if (Session::isLxqt())
+        lxqtWallpapers.start();
+    else
+        desktopWallpapers.start();
 
     // The wallpaper triggers kdock can see for itself. They are not enough on
     // their own — the usual way to change a wallpaper never goes through kdock
@@ -458,6 +500,8 @@ int main(int argc, char *argv[])
     QObject::connect(&wallpaperControl, &WallpaperControl::wallpaperAdvanced, &autoColors,
                      [&autoColors](const QString &) { autoColors.refresh(); });
     QObject::connect(&desktopWallpapers, &DesktopWallpapers::wallpapersApplied, &autoColors,
+                     [&autoColors](int) { autoColors.refresh(); });
+    QObject::connect(&lxqtWallpapers, &LxqtWallpapers::wallpapersApplied, &autoColors,
                      [&autoColors](int) { autoColors.refresh(); });
 
     // Optional system-wide side effects of dark mode (KDE color scheme / icon

@@ -27,6 +27,7 @@ qt_add_executable(kdock-tilemenu
     ${KDOCK_SHARED_SRC}/iconprovider.cpp     ${KDOCK_SHARED_SRC}/iconprovider.h
     ${KDOCK_SHARED_SRC}/theme.cpp            ${KDOCK_SHARED_SRC}/theme.h
     ${KDOCK_SHARED_SRC}/powercontrol.cpp     ${KDOCK_SHARED_SRC}/powercontrol.h
+    ${KDOCK_SHARED_SRC}/session.cpp          ${KDOCK_SHARED_SRC}/session.h
     ${KDOCK_SHARED_SRC}/iconpickerdialog.cpp ${KDOCK_SHARED_SRC}/iconpickerdialog.h
     # DockConfig comes along for two reasons: Theme asks it where the shared
     # settings file lives (icon-theme override), and AppMenu takes one for the

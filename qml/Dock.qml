@@ -1102,6 +1102,7 @@ Item {
         case "maxmin": return config.showMaxMin && maxmin && maxmin.available
         case "closewindow": return config.showCloseWindow && activeWindow && activeWindow.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
+        case "nextwallpaperqt": return config.showNextWallpaperQt && wallpaperControl && wallpaperControl.available
         case "darkmode": return config.showDarkMode
         case "pager": return config.showPager && virtualDesktops && virtualDesktops.count > 0
         // Shown whenever the flag is on, even with ColorAuto switched off: the
@@ -1162,6 +1163,7 @@ Item {
         case "maxmin": return maxMinComp
         case "closewindow": return closeWindowComp
         case "nextwallpaper": return nextWallpaperComp
+        case "nextwallpaperqt": return nextWallpaperQtComp
         case "darkmode": return darkModeComp
         case "pager": return pagerComp
         case "colorauto": return colorAutoComp
@@ -1214,6 +1216,7 @@ Item {
         case "maxmin": return qsTr("Maximize window (right-click: minimize)")
         case "closewindow": return qsTr("Close window (right-click: send to next desktop, staying here)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
+        case "nextwallpaperqt": return qsTr("Next wallpaper: click this monitor, right-click every monitor")
         case "darkmode": return qsTr("Modo normal (clic derecho: modo oscuro)")
         case "colorauto": return qsTr("Generar color del fondo (clic derecho: configurar)")
         case "iconthemes": return qsTr("Iconset de KDE")
@@ -1243,6 +1246,7 @@ Item {
         else if (token === "maxmin" && maxmin) maxmin.maximize()
         else if (token === "closewindow" && activeWindow) activeWindow.closeActive()
         else if (token === "nextwallpaper" && wallpaperControl) wallpaperControl.nextWallpaper(config.screenName)
+        else if (token === "nextwallpaperqt" && wallpaperControl) wallpaperControl.nextWallpaper(config.screenName)
         else if (token === "darkmode") config.setDarkModeActive(false)
         else if (token === "autohide") config.autohide = !config.autohide
         else if (token === "showdesktop" && showdesktop) showdesktop.minimizeAllWindows()
@@ -1259,6 +1263,7 @@ Item {
                || token === "maxmin"
                || token === "closewindow" || token === "darkmode"
                || token === "colorauto"
+               || token === "nextwallpaperqt"
     }
 
     function sectionAltClick(token) {
@@ -1271,6 +1276,9 @@ Item {
         else if (token === "closewindow" && activeWindow) activeWindow.sendActiveToNextDesktop()
         else if (token === "darkmode") config.setDarkModeActive(true)
         else if (token === "colorauto") dockWindow.openColorAutoSettings()
+        // Right click = every connected monitor, still only on the current
+        // virtual desktop (LxqtWallpapers::advance).
+        else if (token === "nextwallpaperqt" && wallpaperControl) wallpaperControl.nextWallpaperAll()
     }
 
     function sectionWheel(token, dy) {
@@ -4184,6 +4192,36 @@ Item {
                 width: root.widgetIconPx
                 height: width
                 source: "image://icon/preferences-desktop-wallpaper" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: parent.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    // "Avanzar Wallpaper QT": steps the wallpaper kdock itself draws under LXQt
+    // (LxqtWallpapers). Left click = this dock's monitor, right click = every
+    // connected monitor — and either way **only the current virtual desktop**,
+    // so the others keep their pictures and their history.
+    Component {
+        id: nextWallpaperQtComp
+        Item {
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                // Distinct from the `nextwallpaper` widget's plain wallpaper
+                // icon: the two can be on the same dock and would otherwise be
+                // indistinguishable. "shuffle" also says what the step does
+                // now that it picks at random. (`slideshow` would read better
+                // but is not in breeze, which is the set the dock's widgets
+                // draw from — see the widget iconset note in AGENTS.md.)
+                source: "image://icon/media-playlist-shuffle" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
                 opacity: 0.85

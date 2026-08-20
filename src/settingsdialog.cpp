@@ -14,6 +14,8 @@
 #include "dockmanager.h"
 #include "dockmodel.h"
 #include "desktopwallpapers.h"
+#include "lxqtwallpapers.h"
+#include "session.h"
 #include "iconcolorprovider.h"
 #include "relanzadorconfig.h"
 #include "relanzadoresmanager.h"
@@ -2112,7 +2114,20 @@ QWidget *SettingsDialog::createWidgetsTab()
 
     // NOTE: the "Next wallpaper" checkbox was removed from Settings to save
     // space. The widget itself is left intact but is no longer UI-reachable
-    // (dormant) — see AGENTS.md "Dormant / UI-unreachable code".
+    // (dormant) — see AGENTS.md "Dormant / UI-unreachable code". Its LXQt
+    // successor below *is* reachable: it drives kdock's own wallpaper engine,
+    // which is the only one there is under LXQt.
+
+    auto *showNextWallpaperQt = new QCheckBox(tr("Show \"Avanzar Wallpaper QT\" button"), tab);
+    showNextWallpaperQt->setChecked(m_config->showNextWallpaperQt());
+    showNextWallpaperQt->setToolTip(
+        tr("Advances the wallpaper kdock draws (Wallpapers tab). Left-click moves "
+           "this dock's monitor, right-click every connected monitor — always on "
+           "the current virtual desktop only, so the others keep their images. "
+           "Shift+right-click opens the widget menu."));
+    connect(showNextWallpaperQt, &QCheckBox::toggled, m_config,
+            &DockConfig::setShowNextWallpaperQt);
+    form->addRow(tr("Avanzar Wallpaper QT:"), showNextWallpaperQt);
 
     auto *showDarkMode = new QCheckBox(tr("Show dark-mode button"), tab);
     showDarkMode->setChecked(m_config->showDarkMode());
@@ -4508,9 +4523,21 @@ QWidget *SettingsDialog::createQtCompatTab()
     diag->setWordWrap(true);
     diag->setTextInteractionFlags(Qt::TextSelectableByMouse);
     const QString platform = qEnvironmentVariable("QT_QPA_PLATFORMTHEME");
-    QString text = tr("Archivo: <tt>%1</tt><br>QT_QPA_PLATFORMTHEME: <b>%2</b>")
-                       .arg(QtCompat::lxqtConfPath(),
+    QString text = tr("Sesión detectada: <b>%1</b>%2<br>Archivo: <tt>%3</tt><br>"
+                      "QT_QPA_PLATFORMTHEME: <b>%4</b>")
+                       .arg(Session::isLxqt()   ? tr("LXQt")
+                            : Session::isKde()  ? tr("KDE / Plasma")
+                                                : tr("otra"),
+                            // The one that surprises: this session runs KWin
+                            // *under* LXQt, and half of kdock's features depend
+                            // on KWin rather than on the desktop.
+                            Session::hasKWin() ? tr(" (con KWin)") : QString(),
+                            QtCompat::lxqtConfPath(),
                             platform.isEmpty() ? tr("(sin definir)") : platform);
+    if (Session::isLxqt()) {
+        text += tr("<br><i>Al detectarse LXQt, este modo se enciende solo la primera vez. "
+                   "Apagarlo acá es definitivo: no se vuelve a encender.</i>");
+    }
     if (!QtCompat::lxqtPlatformTheme()) {
         text += tr("<br><i>Esta sesión no usa el tema de plataforma «lxqt»: las claves se "
                    "escriben igual, pero no va a repintarse nada.</i>");
@@ -6139,18 +6166,33 @@ QWidget *SettingsDialog::createWallpapersTab()
     auto *tab = new QWidget;
     auto *layout = new QVBoxLayout(tab);
     DesktopWallpapers *wallpapers = m_manager ? m_manager->desktopWallpapers() : nullptr;
+    LxqtWallpapers *lxqtWallpapers = m_manager ? m_manager->lxqtWallpapers() : nullptr;
 
+    // The two engines are configured from this one tab, and the difference is
+    // worth explaining because it decides what the tab can offer: under Plasma
+    // kdock rewrites somebody else's wallpaper (so desktop 1 is off limits),
+    // under LXQt it paints them itself (so every desktop is fair game).
+    const bool lxqt = Session::isLxqt();
     auto *info = new QLabel(
-        tr("Plasma no tiene un fondo por escritorio virtual: el fondo es de la pantalla, "
-           "no del escritorio. kdock lo consigue reescribiéndolo en el momento del cambio. "
-           "El Escritorio 1 es de KDE y no se toca desde acá: su configuración se guarda "
-           "sola y vuelve cada vez que regresás a él (y cuando kdock se cierra)."),
+        lxqt ? tr("Ni LXQt ni PCManFM-Qt tienen fondos distintos por monitor —y menos por "
+                  "escritorio virtual—, así que acá los dibuja kdock, con una superficie "
+                  "propia por monitor. Cada escritorio tiene su juego de imágenes; un monitor "
+                  "sin nada configurado no se toca.<br><br>"
+                  "<b>Mientras esto esté encendido, el escritorio de PCManFM queda apagado</b> "
+                  "(sin íconos ni menú del escritorio): las dos capas no pueden convivir. "
+                  "Vuelve solo al apagar esta casilla y al cerrar kdock.")
+             : tr("Plasma no tiene un fondo por escritorio virtual: el fondo es de la pantalla, "
+                  "no del escritorio. kdock lo consigue reescribiéndolo en el momento del cambio. "
+                  "El Escritorio 1 es de KDE y no se toca desde acá: su configuración se guarda "
+                  "sola y vuelve cada vez que regresás a él (y cuando kdock se cierra)."),
         tab);
     info->setWordWrap(true);
+    info->setTextFormat(Qt::RichText);
     layout->addWidget(info);
 
     auto *enable = new QCheckBox(
-        tr("Cambiar el fondo al cambiar de escritorio virtual"), tab);
+        lxqt ? tr("Dibujar los fondos de pantalla desde kdock")
+             : tr("Cambiar el fondo al cambiar de escritorio virtual"), tab);
     enable->setChecked(DesktopWallpapers::enabled());
     layout->addWidget(enable);
 
@@ -6171,7 +6213,12 @@ QWidget *SettingsDialog::createWallpapersTab()
     layout->addLayout(fillRow);
 
     // ---- Desktop 1: read-only view of what KDE has --------------------------
+    //
+    // Plasma only. Under LXQt nothing of this exists: there is no containment
+    // to snapshot and nothing of anybody's to restore, so the group would be an
+    // empty list and two buttons that cannot do anything.
     auto *kdeGroup = new QGroupBox(tr("Escritorio 1 — configuración de KDE (se conserva siempre)"), tab);
+    kdeGroup->setVisible(!lxqt);
     auto *kdeLayout = new QVBoxLayout(kdeGroup);
     m_wallpaperSnapshotList = new QListWidget(kdeGroup);
     m_wallpaperSnapshotList->setMaximumHeight(90);
@@ -6311,7 +6358,10 @@ QWidget *SettingsDialog::createWallpapersTab()
         return row;
     };
 
-    for (int desktop = 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
+    // Under LXQt desktop 1 is a desktop like any other — kdock owns the picture
+    // there too, so leaving it out would mean "the first desktop is the only one
+    // you cannot configure" for no reason the user can see.
+    for (int desktop = lxqt ? 1 : 2; desktop <= DockConfig::kMaxDesktops; ++desktop) {
         const QString name = desktop <= desktopNames.size()
                                  ? desktopNames.at(desktop - 1)
                                  : tr("Escritorio %1").arg(desktop);
@@ -6402,7 +6452,9 @@ QWidget *SettingsDialog::createWallpapersTab()
     auto *applyNow = new QPushButton(QIcon::fromTheme(QStringLiteral("dialog-ok-apply")),
                                      tr("Aplicar ahora"), tab);
     applyNow->setToolTip(tr("Pone el juego del escritorio actual sin tener que salir y volver."));
-    applyNow->setEnabled(wallpapers && currentDesktop >= 2);
+    // Under LXQt every desktop is ours, so there is no "only from desktop 2 on".
+    applyNow->setEnabled(lxqt ? lxqtWallpapers != nullptr
+                              : (wallpapers && currentDesktop >= 2));
     applyRow->addWidget(applyNow);
     applyRow->addStretch();
     layout->addLayout(applyRow);
@@ -6410,8 +6462,19 @@ QWidget *SettingsDialog::createWallpapersTab()
     layout->addStretch();
 
     // ---- Wiring -------------------------------------------------------------
-    connect(enable, &QCheckBox::toggled, this, [wallpapers](bool on) {
+    connect(enable, &QCheckBox::toggled, this, [wallpapers, lxqtWallpapers, lxqt](bool on) {
         DesktopWallpapers::setEnabled(on);
+        if (lxqt) {
+            if (!lxqtWallpapers)
+                return;
+            // Turning it off has to take the surfaces down and hand the desktop
+            // back to PCManFM right away — the user is looking at the screen.
+            if (on)
+                lxqtWallpapers->start();
+            else
+                lxqtWallpapers->stop();
+            return;
+        }
         // Turning it on should not wait for the next desktop switch.
         if (on && wallpapers)
             wallpapers->start();
@@ -6427,8 +6490,15 @@ QWidget *SettingsDialog::createWallpapersTab()
         if (wallpapers)
             wallpapers->restore();
     });
-    connect(applyNow, &QPushButton::clicked, this, [this, wallpapers] {
-        if (wallpapers && m_manager)
+    connect(applyNow, &QPushButton::clicked, this, [this, wallpapers, lxqtWallpapers, lxqt] {
+        if (!m_manager)
+            return;
+        if (lxqt) {
+            if (lxqtWallpapers)
+                lxqtWallpapers->apply(qMax(1, m_manager->currentDesktop()));
+            return;
+        }
+        if (wallpapers)
             wallpapers->apply(m_manager->currentDesktop());
     });
     if (wallpapers) {

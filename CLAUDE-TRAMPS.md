@@ -1059,3 +1059,94 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   justo lo que borra el estado podrido) y revisar si `dockHoverStale` en algún momento llegó a
   `true` sin que el dock volviera a aparecer — eso descartaría a `dockHover` como la causa y
   apuntaría a otro lado (p. ej. `windowsOverlap` en sí, o `revealed`/la animación).
+
+- **Un `QDBusAbstractAdaptor` fija el nombre de interfaz con `Q_CLASSINFO`, así que un objeto no
+  puede contestar por dos — y los adaptores pertenecen al OBJETO, no a la ruta.**
+  Las dos mitades muerden por separado.
+  La primera fue el bug que dejó la bandeja muerta bajo LXQt: `SystrayHost` exportaba sólo
+  `org.freedesktop.StatusNotifierWatcher` y se llamaba a sí mismo con `org.kde.…`, así que al
+  convertirse en el watcher (LXQt, wlroots pelado) la auto-registración fallaba con
+  *"No such interface 'org.kde.StatusNotifierWatcher' at object path '/StatusNotifierWatcher'"*,
+  `m_active` se quedaba en false y **no se recogía un solo ítem**. Bajo Plasma no se veía nunca:
+  ahí el watcher es de KDE y ese camino no se ejecuta. Dos nombres = dos adaptores.
+  La segunda es la que muerde al arreglar la primera: `registerObject(ruta, objeto, ExportAdaptors)`
+  exporta **todos** los adaptores del objeto, y `SystrayHost` está registrado en **dos** rutas
+  (`/StatusNotifierWatcher` y `/StatusNotifierHost`). Colgar los adaptores del host le habría
+  puesto las interfaces del watcher también a la ruta del host. Van en un `QObject` aparte.
+  Corolario del mismo arreglo: **lo que la spec declara propiedad va como `Q_PROPERTY`, no como
+  slot**. `QDBusTrayIcon` de Qt —o sea toda app Qt con `QSystemTrayIcon`— lee
+  `IsStatusNotifierHostRegistered` como propiedad, y si falla se va al XEmbed de X11: bajo
+  Wayland, ningún ícono. Un `busctl introspect` que muestre `method` donde debería decir
+  `property` es el síntoma.
+
+- **Apagarle el gestor de escritorio a PCManFM-Qt lo mata.** LXQt lo arranca sin
+  `--daemon-mode`, así que `org.pcmanfm.Application.desktopManager(false)` borra su última
+  ventana y el proceso sale, llevándose su nombre del bus. O sea que el camino de "volver a
+  prender" **no puede ser sólo una llamada D-Bus**: hay que relanzarlo, y leyendo el `Exec=` de
+  `/etc/xdg/autostart/lxqt-desktop.desktop` (de ahí sale también el `--profile=`) en vez de
+  adivinar el comando. Y como ni siquiera eso cubre un SIGKILL, la supresión se anota en disco
+  (`[Wallpapers] lxqtDesktopSuppressed`, con `sync()` inmediato) y el arranque siguiente la
+  deshace. Sin las tres cosas, un cuelgue de kdock deja al usuario sin íconos ni menú de
+  escritorio, **y eso no se repara solo**.
+
+- **Un interruptor compartido entre dos motores no dice cuál de los dos está corriendo.**
+  `[Wallpapers] enabled` lo escriben la solapa de Plasma y la de LXQt por igual, así que una
+  config traída de Plasma llega con la feature **encendida** y, como allá el escritorio 1 era de
+  KDE (se fotografiaba en vez de configurarse), **sin ninguna clave para el escritorio 1**.
+  Leerlo como "andá" hacía que el motor LXQt le quitara el escritorio a PCManFM para no dibujar
+  nada: pantalla negra y sin íconos justo donde el usuario entra. Dos reglas que salieron de
+  ahí: el efecto irreversible se dispara cuando **ya hay algo dibujado** (en `apply()`, no en
+  `start()`), y "sin configurar" cae al fondo del propio PCManFM en vez de a negro. El reflejo
+  del mismo problema está en el widget *siguiente fondo*: su hook preguntaba
+  `LxqtWallpapers::enabled()` —la clave— cuando lo que necesita saber es `active()` —el motor—,
+  y bajo Plasma con la feature encendida el botón se habría quedado mudo.
+
+- **Un `Q_PROPERTY(... CONSTANT)` que en realidad depende del orden de arranque deja el widget
+  invisible para siempre, sin un solo mensaje.**
+  `WallpaperControl::available` era CONSTANT porque bajo Plasma lo es: se decide en el
+  constructor y no cambia. Bajo LXQt pasó a depender de que el motor propio de fondos esté
+  corriendo — y ese motor **arranca después que los docks** (`main()` lo construye, después crea
+  el `DockManager`, y recién al final lo inicia). QML leyó `false` una vez, al construir el dock,
+  y como la propiedad es constante no volvió a mirar: los widgets de wallpaper no aparecían
+  **por más que la config dijera que sí**, y `sectionVisible` no imprime nada cuando devuelve
+  false. Se destapó recién al probar el widget nuevo bajo Xvfb (el dock salía 176 px de ancho en
+  vez de 230).
+  La regla: si el valor de una propiedad depende de algo que ocurre en otro punto del arranque,
+  no es CONSTANT aunque hoy nadie lo cambie. Con `NOTIFY` además se gana que el widget aparezca y
+  desaparezca al tocar la casilla, en vez de pedir un reinicio.
+
+- **El arnés de Xvfb del dock NO sirve para clickear widgets si el motor de fondos está encendido.**
+  Bajo X no hay layer-shell, así que la superficie del fondo es una ventana X normal — creada
+  *después* del dock, o sea **encima** —, tapa el dock entero y se come todos los clics. Los
+  `xdotool click` "no hacen nada" y el `console.log` del handler no imprime, que se lee igual que
+  "el widget está mal cableado". El `import -window <dock>` no lo delata porque captura la ventana
+  directo, no la pantalla: hay que mirar `import -window root`. La salida es un
+  `xdotool windowraise <dock>` antes de clickear (2026-08-20).
+
+- **El *scope* de una superficie layer-shell es lo único que mira KWin para decidir su
+  `WindowType`, y kdock lo tenía hardcodeado en `"dock"` para todas.**
+  `scopeToType()` (`kwin/src/layershellv1window.cpp`) mapea el namespace directo a un tipo:
+  `"desktop"` → `Desktop`, `"dock"` → `Dock`, cualquier otra cosa → `Normal`. Se fija **al crear**
+  la superficie y no se puede cambiar después.
+  La superficie de wallpaper heredó ese `"dock"` y de ahí salieron **dos** síntomas que parecían
+  no tener nada que ver entre sí (reportados 2026-08-20, `overview-error.jpg`):
+  **el fondo del Overview en negro**, porque los dos `DesktopBackground` del efecto
+  (`overview/qml/Main.qml:297` y `:564`) resuelven su ventana buscando `client->isDesktop()` y con
+  PCManFM apagado no quedaba ningún candidato; y **un flicker a pantalla completa**, porque
+  `Main.qml:813-832` dibuja *cada* ventana `Dock` como un `WindowThumbnail` encima del efecto con
+  `opacity: 1 - (gridVal + overviewVal)` — o sea que un "panel" del tamaño de la pantalla se
+  desvanece sobre todo el Overview.
+  Lo que despistaba: las miniaturas de escritorio de la barra superior **sí** mostraban el
+  wallpaper, porque `DesktopView.qml` dibuja todas las ventanas sin filtrar por tipo.
+  La comprobación es una línea de scripting de KWin:
+  `workspace.windowList().forEach(w => print(w.caption, w.desktopWindow, w.dock))`.
+  Y la contraparte a copiar está en PCManFM-Qt, que hace `setScope("desktop")` a propósito
+  (`pcmanfm/desktopwindow.cpp:216`).
+
+- **Medir un "flicker" comparando dos capturas de pantalla mide el contenido vivo de las ventanas.**
+  Dos capturas del Overview separadas por un segundo diferían en un 19 % — y ese número no se movió
+  con el arreglo, porque venía de una miniatura de X con un video adentro, no del bug. Los mismos
+  recuadros elegidos sobre **fondo puro** (los márgenes laterales, sin miniaturas encima) dieron
+  la respuesta real: 100 % de píxeles casi negros antes, 0 % después, y 0 % de variación entre
+  capturas en los dos casos. Elegí la zona mirando la captura primero; un recuadro "razonable" a
+  ojo cae encima de contenido que cambia solo.

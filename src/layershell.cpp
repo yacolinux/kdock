@@ -85,8 +85,22 @@ LayerSurface::LayerSurface(LayerShellIntegration *shell, QWaylandWindow *window)
             output = screen->output();
     }
 
-    init(shell->get_layer_surface(window->wlSurface(), output, m_layer,
-                                  QStringLiteral("dock")));
+    // The namespace ("scope") is fixed here for the life of the surface — the
+    // protocol takes it as a creation argument and offers no way to change it,
+    // which is why it is read alongside the layer and the output rather than
+    // through applyProperty().
+    //
+    // It is also the only thing KWin looks at to decide the window type, so a
+    // surface that gets this wrong is misclassified in ways that have nothing
+    // to do with layer-shell: the wallpaper surface used to inherit "dock" and
+    // KWin's Overview then (a) found no desktop window and painted its
+    // background black, and (b) drew the full-screen wallpaper as a *panel*
+    // overlay that faded in and out over the whole effect. See layershell.h.
+    QString scope = w->property("kdock.scope").toString();
+    if (scope.isEmpty())
+        scope = QStringLiteral("dock");
+
+    init(shell->get_layer_surface(window->wlSurface(), output, m_layer, scope));
 
     applyProperty("kdock.anchors");
     applyProperty("kdock.exclusiveZone");

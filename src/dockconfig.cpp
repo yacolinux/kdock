@@ -969,6 +969,7 @@ void DockConfig::load()
     m_showMaxMin = m_settings.value(QStringLiteral("showMaxMin"), false).toBool();
     m_showCloseWindow = m_settings.value(QStringLiteral("showCloseWindow"), false).toBool();
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
+    m_showNextWallpaperQt = m_settings.value(QStringLiteral("showNextWallpaperQt"), false).toBool();
     m_showDarkMode = m_settings.value(QStringLiteral("showDarkMode"), false).toBool();
     m_showPager = m_settings.value(QStringLiteral("showPager"), false).toBool();
     m_showColorAuto = m_settings.value(QStringLiteral("showColorAuto"), false).toBool();
@@ -1034,7 +1035,8 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("overview"),    QStringLiteral("movetodesktop"),
             QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
             QStringLiteral("closewindow"),
-            QStringLiteral("nextwallpaper"), QStringLiteral("darkmode"),
+            QStringLiteral("nextwallpaper"), QStringLiteral("nextwallpaperqt"),
+            QStringLiteral("darkmode"),
             QStringLiteral("pager"),       QStringLiteral("colorauto"),
             QStringLiteral("autohide"),
             QStringLiteral("showdesktop"), QStringLiteral("systray"),
@@ -1967,6 +1969,15 @@ void DockConfig::setShowNextWallpaper(bool show)
     emit showNextWallpaperChanged();
 }
 
+void DockConfig::setShowNextWallpaperQt(bool show)
+{
+    if (m_showNextWallpaperQt == show)
+        return;
+    m_showNextWallpaperQt = show;
+    m_settings.setValue(QStringLiteral("showNextWallpaperQt"), show);
+    emit showNextWallpaperQtChanged();
+}
+
 void DockConfig::setShowDarkMode(bool show)
 {
     if (m_showDarkMode == show)
@@ -2411,6 +2422,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("maxmin"),        QStringLiteral("MaxMin")},
         {QStringLiteral("closewindow"),   QStringLiteral("Close window")},
         {QStringLiteral("nextwallpaper"), QStringLiteral("Next wallpaper")},
+        {QStringLiteral("nextwallpaperqt"), QStringLiteral("Avanzar Wallpaper QT")},
         {QStringLiteral("darkmode"),      QStringLiteral("Modo oscuro")},
         {QStringLiteral("pager"),         QStringLiteral("Escritorios")},
         {QStringLiteral("colorauto"),     QStringLiteral("Generar Color")},

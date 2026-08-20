@@ -129,6 +129,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showMaxMin READ showMaxMin WRITE setShowMaxMin NOTIFY showMaxMinChanged)
     Q_PROPERTY(bool showCloseWindow READ showCloseWindow WRITE setShowCloseWindow NOTIFY showCloseWindowChanged)
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
+    Q_PROPERTY(bool showNextWallpaperQt READ showNextWallpaperQt WRITE setShowNextWallpaperQt NOTIFY showNextWallpaperQtChanged)
     Q_PROPERTY(bool showDarkMode READ showDarkMode WRITE setShowDarkMode NOTIFY showDarkModeChanged)
     Q_PROPERTY(bool showPager READ showPager WRITE setShowPager NOTIFY showPagerChanged)
     Q_PROPERTY(bool showColorAuto READ showColorAuto WRITE setShowColorAuto NOTIFY showColorAutoChanged)
@@ -725,6 +726,7 @@ public:
     bool showMaxMin() const { return m_showMaxMin; }
     bool showCloseWindow() const { return m_showCloseWindow; }
     bool showNextWallpaper() const { return m_showNextWallpaper; }
+    bool showNextWallpaperQt() const { return m_showNextWallpaperQt; }
     bool showDarkMode() const { return m_showDarkMode; }
     // Virtual-desktop pager (token "pager"): the numbers of KWin's desktops,
     // click to switch.
@@ -883,6 +885,7 @@ public:
     void setShowMaxMin(bool show);
     void setShowCloseWindow(bool show);
     void setShowNextWallpaper(bool show);
+    void setShowNextWallpaperQt(bool show);
     void setShowDarkMode(bool show);
     void setShowPager(bool show);
     void setShowColorAuto(bool show);
@@ -1130,6 +1133,7 @@ signals:
     void showMaxMinChanged();
     void showCloseWindowChanged();
     void showNextWallpaperChanged();
+    void showNextWallpaperQtChanged();
     void showDarkModeChanged();
     void showPagerChanged();
     void showColorAutoChanged();
@@ -1283,6 +1287,7 @@ private:
     bool m_showMaxMin = false;
     bool m_showCloseWindow = false;
     bool m_showNextWallpaper = false;
+    bool m_showNextWallpaperQt = false;
     bool m_showDarkMode = false;
     bool m_showPager = false;
     bool m_showColorAuto = false;

@@ -61,7 +61,11 @@ add_library(kdock_core OBJECT
     src/activewindowcontrol.cpp src/activewindowcontrol.h
     src/kwinshortcut.cpp      src/kwinshortcut.h
     src/wallpapercontrol.cpp  src/wallpapercontrol.h
+    src/wallpaperfolder.cpp   src/wallpaperfolder.h
     src/desktopwallpapers.cpp src/desktopwallpapers.h
+    src/lxqtwallpapers.cpp    src/lxqtwallpapers.h
+    src/wallpaperwindow.cpp   src/wallpaperwindow.h
+    src/session.cpp           src/session.h
     src/wallpapercolors.cpp   src/wallpapercolors.h
     src/autocolorscheme.cpp   src/autocolorscheme.h
     src/desktopmaximize.cpp   src/desktopmaximize.h
@@ -117,7 +121,7 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
 
 qt_add_resources(kdock_core "qml"
     PREFIX "/"
-    FILES qml/Dock.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
 
 # Shipped translation layers. They are copied to

@@ -13,6 +13,16 @@
 //   kdock.layer                 uint   0 background, 1 bottom, 2 top, 3 overlay
 //   kdock.margins               QMargins
 //   kdock.keyboardInteractivity uint   0 none, 1 exclusive, 2 on-demand
+//   kdock.scope                 QString layer-shell namespace; "" = "dock"
+//
+// **kdock.scope is not cosmetic and cannot be changed after creation.** The
+// namespace is how a compositor decides what *kind* of surface this is: KWin
+// maps it straight onto a window type (`scopeToType` in layershellv1window.cpp)
+// — "desktop" → Desktop, "dock" → Dock, anything else → Normal — and that
+// decides whether the Overview effect uses the surface as the desktop
+// background or draws it as a panel overlay on top of itself. See
+// WallpaperWindow, which is the one surface here that is a desktop and not a
+// panel; everything else leaves it at the default.
 
 #pragma once
 

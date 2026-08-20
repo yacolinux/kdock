@@ -714,6 +714,70 @@ Tres cosas que costaron una corrida cada una:
   corrida anterior y **falla señalando al producto** (pasó con las tres casillas, 2026-08-20).
   `QSettings::clear()` y no borrar el archivo: así el caché del propio proceso queda coherente.
 
+### Probar la capa de compatibilidad con LXQt (sesión, systray, fondos)
+
+Las tres cosas se prueban distinto, y sólo una de las tres entra en el arnés de Xvfb.
+
+**Sesión (`PowerControl`) — una sonda, y el `PATH` falso no es opcional.** `resolvedCommand()`
+existe justo para esto: dice *qué* se lanzaría sin lanzarlo, porque lanzarlo cierra la sesión.
+Aun así, corré con `lxqt-leave` falso en `/tmp/fakebin`, porque un dedo torcido en la sonda
+apaga la máquina. Se linkean los `.o` de `kdock_core.dir` como siempre:
+
+```bash
+env KDOCK_TEST_SESSION=lxqt PATH=/tmp/fakebin:$PATH QT_QPA_PLATFORM=offscreen ./sonda
+# session kind: Lxqt   available: true   logout -> "lxqt-leave --logout"  …
+```
+
+**`KDOCK_TEST_SESSION=kde|lxqt|other`** es la costura, y **manda que la variable esté puesta**:
+un valor desconocido es `Other`, o sea "un escritorio que kdock no conoce". Como
+`Session::kind()` se cachea por proceso, un test que quiera varios casos necesita **un proceso
+hijo por caso** — que es exactamente lo que hace `tests/unit/tst_session.cpp`.
+
+**Systray — se prueba entero sin GUI, y con un cliente de verdad.** Bajo `dbus-run-session` no
+hay ningún watcher, así que kdock se convierte en uno: justo el camino que estaba roto. Un
+`QSystemTrayIcon` de veinte líneas es el control positivo que ninguna introspección reemplaza,
+porque lo que se rompía era la lectura de propiedad que hace Qt:
+
+```bash
+xvfb-run -a -s "-screen 0 1920x1080x24" dbus-run-session -- bash -c '
+  env -u WAYLAND_DISPLAY XDG_DATA_HOME=/tmp/kd-sni QT_QPA_PLATFORM=xcb \
+      QT_QUICK_BACKEND=software PATH=/tmp/fakebin:$PATH ./build/kdock & sleep 6
+  busctl --user introspect org.kde.StatusNotifierWatcher /StatusNotifierWatcher   # las DOS interfaces
+  ./tray & sleep 5                                                                # el cliente Qt
+  busctl --user get-property org.kde.StatusNotifierWatcher /StatusNotifierWatcher \
+         org.kde.StatusNotifierWatcher RegisteredStatusNotifierItems'              # as 1 ":1.18/StatusNotifierItem"
+```
+
+Lo que hay que leer: las dos interfaces presentes, las tres claves como **`property`** (`b`,
+`as`, `i`) y no como `method`, y en el log del dock `systray host registered (we are the
+watcher)` en vez de `failed to register systray host: "No such interface …"`.
+
+**Fondos — el arnés de Xvfb NO sirve, y hay que decirlo fuerte**: bajo X no hay layer-shell, así
+que la ventana sería una X normal y no probaría ni la capa, ni el anclaje, ni la región de
+entrada vacía. Silencio ahí no prueba nada de la feature. Se prueba con una segunda instancia
+aislada en la sesión Wayland real (`enabledScreens=VIRT-9` para que no arme ningún dock) y se
+**mide en píxeles**: imágenes de color sólido generadas con PIL, una distinta por monitor y por
+escritorio, y después contar cuánto de cada monitor quedó de ese color exacto. Acá dio 94–97 %
+en el escritorio vacío. Cinco cosas:
+
+- **Sembrá `[QtCompat] enabled=false` en el `.conf` de prueba.** Si no, la migración de
+  auto-activación de Modo QT ve un `XDG_DATA_HOME` descartable, lo cuenta como primer arranque y
+  **le re-tematiza la sesión al usuario** — `lxqt.conf` vive en `XDG_CONFIG_HOME`, que este arnés
+  no aísla.
+- **NO pongas un `pcmanfm-qt` falso en `/tmp/fakebin`.** Es el mismo directorio que hace falta
+  por el brillo, y ahí el falso **se come el relanzamiento del gestor de escritorio**: la corrida
+  termina "bien", el `calls.log` dice `pcmanfm-qt <- --desktop --profile=lxqt`, y el usuario se
+  queda sin escritorio. Pasó (2026-08-20). Comprobalo siempre al terminar:
+  `busctl --user get-property org.pcmanfm.PCManFM /Application org.pcmanfm.Application desktopManagerEnabled`
+  tiene que dar `b true`; si no, `setsid pcmanfm-qt --desktop --profile=lxqt &`.
+- **Matá la instancia con SIGTERM**, no con SIGKILL: es el camino que devuelve el escritorio, y
+  probarlo es la mitad de la feature.
+- **Una captura del escritorio 1 puede no mostrar nada**: si las ventanas del usuario lo tapan,
+  el conteo de píxeles mide sus ventanas. El escritorio virtual **vacío** es donde se mide; para
+  el resto, la sonda de `imageForTesting(desktop, screen)` dice qué archivo eligió cada monitor,
+  que es más preciso que contar píxeles a través de una terminal.
+- **Devolvé el escritorio virtual original** (anotá el uuid antes).
+
 ### Arnés de `kdock-weather`
 
 El más barato de los seis: la ventana es un toplevel común, así que se corre desde `build/`, se
@@ -1208,6 +1272,13 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **`kdock-previews` necesita DOS privilegios de KWin**
 - **Correr `./build/previews/kdock-previews` no está autorizado.**
 - **Un `HoverHandler` sobre la superficie del dock se puede quedar pegado en `hovered=true` para siempre, y con eso muere el auto-hide entero.**
+- **Un `QDBusAbstractAdaptor` fija el nombre de interfaz con `Q_CLASSINFO`**, y los adaptores pertenecen al OBJETO, no a la ruta.
+- **Apagarle el gestor de escritorio a PCManFM-Qt lo mata**, así que volver a prenderlo no puede ser sólo una llamada D-Bus.
+- **Un interruptor compartido entre dos motores no dice cuál de los dos está corriendo.**
+- **Un `Q_PROPERTY(... CONSTANT)` que depende del orden de arranque deja el widget invisible para siempre**, sin un solo mensaje.
+- **El arnés de Xvfb del dock no sirve para clickear widgets con el motor de fondos encendido**: la superficie del fondo tapa el dock y se come los clics.
+- **El *scope* de una superficie layer-shell decide su `WindowType` en KWin**, y kdock lo tenía hardcodeado en `"dock"` para todas.
+- **Medir un "flicker" comparando dos capturas mide el contenido vivo de las ventanas**, no el bug.
 
 ## Depurar agrupación de ventanas
 

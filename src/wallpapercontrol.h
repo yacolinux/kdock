@@ -25,15 +25,36 @@
 #include <QString>
 #include <QStringList>
 
+#include <functional>
+
 class WallpaperControl : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(bool available READ available CONSTANT)
+    // NOT constant, and it is worth saying why: under LXQt this is true because
+    // kdock's own engine is running, and that engine starts **after** the docks
+    // are built (main() creates it, then the DockManager, then starts it). With
+    // CONSTANT — as it was until 2026-08-20 — QML read `false` once, at dock
+    // construction, and the wallpaper widgets never appeared no matter what the
+    // config said. It also lets them come and go with the Wallpapers checkbox
+    // instead of needing a restart.
+    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
 
 public:
     explicit WallpaperControl(QObject *parent = nullptr);
 
-    bool available() const { return m_available; }
+    bool available() const;
+    // Re-check and notify. Called when the alternate engine starts or stops.
+    void refreshAvailability();
+
+    // Under LXQt there is no containment to drive: kdock paints the wallpapers
+    // itself (LxqtWallpapers), so "next" means stepping *our* slideshow.
+    //
+    // Two std::functions rather than a pointer to the engine, because this file
+    // is also compiled into kdock-controlmanager, which has no business linking
+    // a QQuickView-based wallpaper renderer to show one card. main() installs
+    // them; unset (or `live()` false) keeps the Plasma behaviour below.
+    void setAlternateEngine(std::function<bool()> live,
+                            std::function<void(const QString &)> advance);
 
     // Advance the wallpaper on the given monitor (by connector name, e.g.
     // "DP-1"). Empty name falls back to the primary-only global shortcut.
@@ -51,6 +72,8 @@ signals:
     // there is no way to know which screen KDE moved.
     void wallpaperAdvanced(const QString &screenName);
 
+    void availableChanged();
+
 private:
     void checkAvailability();
     // Primary-only fallback: invoke the KDE global shortcut.
@@ -59,8 +82,14 @@ private:
     // a slideshow, write the next file of the folder for a static image. No-op
     // for any other wallpaper plugin.
     void advanceForGeometry(int x, int y, const QString &screenName);
-    // Pick the image after `currentPath` (sorted, wrapping) from `folders`.
-    static QString nextImage(const QStringList &folders, const QString &currentPath);
+
+    // True while the alternate (LXQt) engine is the one drawing.
+    bool alternateLive() const;
 
     bool m_available = false;
+    // Last value handed to QML, so refreshAvailability() only signals on a real
+    // change.
+    mutable bool m_lastAvailable = false;
+    std::function<bool()> m_altLive;
+    std::function<void(const QString &)> m_altAdvance;
 };

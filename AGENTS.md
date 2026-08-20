@@ -1003,16 +1003,21 @@ tres diálogos vive.
 
 ### KWin-shortcut widgets (overview / move-to-desktop / move-to-monitor / maxmin)
 - **`src/kwinshortcut.{h,cpp}`** centraliza las dos únicas cosas que estos widgets comparten:
-  `KWinShortcut::sessionIsKde()` (chequeo de `XDG_CURRENT_DESKTOP`/`XDG_SESSION_DESKTOP`,
-  cacheado en un static) y `KWinShortcut::invoke(name)` (la llamada D-Bus). `MonitorControl` y
-  `MaxMinControl` lo usan; `OverviewControl`/`DesktopControl` todavía traen su copia propia del
-  bloque (no se tocaron para no ampliar el diff — migrarlas es trivial si se las edita).
+  `KWinShortcut::available()` y `KWinShortcut::invoke(name)` (la llamada D-Bus). Los cuatro
+  (`MonitorControl`, `MaxMinControl`, `OverviewControl`, `DesktopControl`) lo usan; las copias
+  propias del bloque que tenían los dos últimos se unificaron el 2026-08-20.
+- **La disponibilidad es «¿está KWin?», no «¿es KDE?»** (`Session::hasKWin()`, ver *Detección de
+  sesión*). Hasta el 2026-08-20 era un chequeo de `XDG_CURRENT_DESKTOP` buscando "KDE", y en la
+  sesión LXQt de esta máquina esa variable vale `LXQt:kwin_wayland`: **los cuatro widgets
+  estaban muertos con KWin corriendo y contestando**. Medido: `org.kde.KWin` y
+  `org.kde.kglobalaccel` en el bus, con los atajos `Overview` y `Window to Next Desktop`
+  registrados.
 - Cuatro widgets KDE-only son `QObject`s finos que disparan un **atajo global** de KWin por D-Bus (`org.kde.kglobalaccel /component/kwin invokeShortcut <name>`), en vez de reimplementar protocolos del compositor:
   - `OverviewControl::toggle()` → `"Overview"`. **Note**: `org.kde.kwin.Effects.toggleEffect "overview"` does *not* work in Plasma 6 (it loads/unloads the plugin, not the screen); the shortcut is the correct path. `active` is tracked optimistically per click.
   - `DesktopControl::moveToNextDesktop()` → `"Window to Next Desktop"` (token `movetodesktop`, icon `go-next`).
   - `MonitorControl::moveToNextScreen()` → `"Window to Next Screen"` (token `movetoscreen`, icon `video-display`). Its `available` is just the KDE-session check (like overview/move-to-desktop), so the button shows whenever the user enables it. (It previously also required `QGuiApplication::screens().size() > 1`, which hid the button on single-monitor states even when enabled — removed.) El **clic derecho** llama a `moveToPreviousScreen()` → `"Window to Previous Screen"`; con dos monitores las dos direcciones caen en la misma pantalla, recién se distinguen desde tres.
   - `MaxMinControl` (token `maxmin`, ícono `window-maximize`, etiqueta por defecto *MaxMin*): `maximize()` → `"Window Maximize"` en el clic izquierdo, `minimize()` → `"Window Minimize"` en el derecho. Actúa sobre la ventana **activa**, que sigue siendo la del usuario porque la superficie del dock pide `keyboard_interactivity: none` y un clic no le roba el foco. El ícono es **estático a propósito**: `"Window Maximize"` es un toggle del lado de KWin (también restaura) y el `WindowMonitor` del dock reporta `activated`/`minimized` pero **no** `maximized`, así que no hay estado que espejar sin agregar protocolo.
-- Availability of overview/move-to-desktop is a static KDE-session check (`XDG_CURRENT_DESKTOP`/`XDG_SESSION_DESKTOP`). Each has a matching `show*` flag in `DockConfig` and a checkbox in Settings → Widgets.
+- Availability of all four is `Session::hasKWin()` (see above). Each has a matching `show*` flag in `DockConfig` and a checkbox in Settings → Widgets.
 
 ### Widget "Close window" (`closewindow`, `ActiveWindowControl`)
 - **Clic izquierdo**: cierra la ventana activa. Va por `AbstractWindow::requestClose()`, o sea
@@ -1155,6 +1160,181 @@ tres diálogos vive.
 - **Solo el diálogo lo alcanza** (`DockManager::Shared::qtCompat` → `SettingsDialog::createQtCompatTab()`); ningún dock ni QML lo usa, así que no hay nada del checklist de siete archivos de un widget.
 - Probado por `tests/unit/tst_qtcompat.cpp` (17 casos): el mapeo de las diez claves, el espejo del iconset (y que uno ausente no se escriba), que cada parte se apague sola sin arrastrar a las otras, que la fuente viaje verbatim y que `fontFor()` caiga a la de LXQt, que apagado no escriba, que la reescritura idéntica no toque el archivo (medido por mtime+tamaño), que apagar no restaure, que el resto del `lxqt.conf` sobreviva, que una edición externa se pise con *Aplicar ahora*, y la propagación de punta a punta `kdeglobals` → `Theme::changed` → `lxqt.conf`.
   - **Trampa de ese test: `lxqt.conf` es la SALIDA, no un ajuste de kdock, así que `init()` tiene que vaciarlo además del grupo `[QtCompat]`.** Sin eso, toda aserción de la forma "esta parte está apagada, así que su clave está vacía" ve lo que escribió la prueba anterior y falla señalando al producto (pasó con las tres casillas, 2026-08-20). Va con `QSettings::clear()` y no borrando el archivo, para que el caché del propio proceso quede coherente sin depender de la revalidación por (mtime, tamaño).
+
+### Detección de sesión (`src/session.{h,cpp}`, 2026-08-20)
+
+Un único lugar que responde **cuatro preguntas distintas**, y la distinción es el arreglo, no
+un refactor cosmético:
+
+| | qué contesta | quién la usa |
+|---|---|---|
+| `Session::kind()` → `Kde` / `Lxqt` / `Other` | quién manda en la sesión: apariencia, diálogos de salida, fondo del escritorio | `PowerControl`, `LxqtWallpapers`, la solapa Wallpapers, la auto-activación de Modo QT |
+| `Session::hasKWin()` | `org.kde.KWin` está en el bus | Overview, mover-a-escritorio, mover-a-monitor, MaxMin, `KWinShortcut` |
+| `Session::hasPlasmaShell()` | `org.kde.plasmashell` está en el bus | `WallpaperControl` (el scripting API de Plasma) |
+
+**El bug que lo motivó**: hasta el 2026-08-20 cinco clases traían cada una su copia de un
+chequeo de `XDG_CURRENT_DESKTOP` buscando `"KDE"`, y todas lo llamaban "¿es KDE?". En la sesión
+LXQt de esta máquina esa variable vale **`LXQt:kwin_wayland`** — o sea que menciona al gestor de
+ventanas — y ninguna matcheaba. Resultado: cuatro widgets apagados con KWin vivo, y la única
+cosa que de verdad necesita Plasma (`WallpaperControl`) sin manera de distinguir "acá no hay
+Plasma" de "acá no hay KWin".
+
+`kind()` se decide una vez por proceso desde `XDG_CURRENT_DESKTOP` / `XDG_SESSION_DESKTOP` /
+`QT_QPA_PLATFORMTHEME`, **preguntando por LXQt primero** (la cadena de esta sesión contiene las
+dos palabras). Costura de test: **`KDOCK_TEST_SESSION=kde|lxqt|other`**, y manda que la variable
+esté puesta; un valor desconocido es `Other`, que es como un test pide "un escritorio que kdock
+no conoce". `hasKWin()`/`hasPlasmaShell()` se cachean también: un compositor no va y viene bajo
+un dock corriendo. Cubierto por `tests/unit/tst_session.cpp`, que corre **cada caso en un
+proceso hijo** porque el valor es un static.
+
+**Modo QT se enciende solo bajo LXQt, una vez.** La migración está en `main.cpp` —no en el
+constructor de `QtCompat`— y se apoya en `QtCompat::configured()`, que distingue "el usuario lo
+apagó" de "nadie decidió todavía". Va en `main()` a propósito: `qtcompat.cpp` escribe
+`~/.config/lxqt/lxqt.conf`, que **`XDG_DATA_HOME` no aísla**, así que una sonda que linkee
+`kdock_core` con un data-dir descartable contaría como primer arranque y le re-tematizaría el
+escritorio a quien la corriera.
+
+### Acciones de sesión bajo LXQt (`src/powercontrol.{h,cpp}`, 2026-08-20)
+
+`PowerControl` tiene ahora un backend por tipo de sesión, elegido por `Session`:
+
+- **KDE**: `org.kde.LogoutPrompt` para logout/reboot/shutdown (que es lo que pone el diálogo de
+  confirmación de KDE en pantalla).
+- **LXQt**: los `.desktop` de la propia sesión —`lxqt-{logout,reboot,shutdown,suspend,lockscreen}.desktop`,
+  todos `Exec=lxqt-leave --<acción>`— resueltos con `QStandardPaths::locate` y lanzados con
+  **`DesktopEntryIndex::fromFile()` + `launch()`**. Ir por el `.desktop` y no por el comando
+  hardcodeado hace que ande en un LXQt que instale sus herramientas en otro lado; y `lxqt-leave`
+  trae su propio diálogo de confirmación, así que los dos backends se comportan igual: **un clic
+  distraído en el dock no apaga la máquina**. Respaldo si falta el archivo: `lxqt-leave --<acción>`.
+- **`lock()` y `suspend()` prueban primero el nombre freedesktop** (`org.freedesktop.ScreenSaver`,
+  `org.freedesktop.PowerManagement`) y sólo caen al `.desktop` si nadie lo tiene. Vale la pena
+  saber cómo quedó acá: **`ScreenSaver` lo tiene KWin** (así que bloquear va por D-Bus incluso
+  bajo LXQt) y **`PowerManagement` no lo tiene nadie**, así que suspender sí usa `lxqt-leave`.
+
+**Ningún QML cambió.** Los cuatro lugares que dibujan botones de sesión —el widget *Session* de
+`qml/Dock.qml`, el pie de `qml/AppMenuPopup.qml`, el de `tilemenu/qml/TileMenu.qml` y la tarjeta
+*Sistema* de `controlmanager/qml/cards/SystemCard.qml`— ya gateaban por `power.available`, que
+era false bajo LXQt y los ocultaba a los cuatro. Se mantienen las cinco acciones.
+
+`PowerControl::resolvedCommand(action)` existe para las sondas: un arnés tiene que poder
+preguntar *qué correría* sin correrlo, porque correrlo cierra la sesión.
+
+### Wallpapers bajo LXQt: los dibuja kdock (`src/lxqtwallpapers.{h,cpp}` + `src/wallpaperwindow.{h,cpp}` + `qml/Wallpaper.qml`, 2026-08-20)
+
+**Por qué no se puede delegar.** Bajo LXQt el escritorio lo dibuja `pcmanfm-qt --desktop`, y no
+puede hacer esto: su propia fuente lleva `// FIXME: support different wallpapers on different
+screen` (`pcmanfm/application.cpp`, el `setWallpaper` de D-Bus recorre **todas** las ventanas de
+escritorio) y bajo Wayland fuerza `perScreenWallpaper = false` (`pcmanfm/desktopwindow.cpp`).
+De escritorios virtuales no sabe nada. Así que kdock los dibuja: **una superficie layer-shell
+por monitor**, en la capa *background*, anclada a los cuatro bordes, `exclusiveZone = -1` y —
+esto importa— **sin región de entrada** (`setMask(QRegion())`): es decorado, todo clic tiene que
+pasar de largo.
+
+**La asimetría con el motor de Plasma es total, y viene de la restricción opuesta**:
+
+| | Plasma (`DesktopWallpapers`) | LXQt (`LxqtWallpapers`) |
+|---|---|---|
+| quién dibuja | plasmashell | kdock |
+| qué hace kdock | reescribe la config ajena | pinta |
+| escritorio 1 | **de KDE**: se fotografía y se restaura | uno más, configurable |
+| snapshot / capture / restore | el corazón de la clase | **no existen**: no hay nada de nadie que preservar |
+
+**La config es la misma** (los accesores estáticos de `DesktopWallpapers`), así que una sesión
+que se mueve entre los dos escritorios conserva sus fondos, y la solapa Wallpapers es una sola
+con dos ramas (`Session::isLxqt()`): bajo LXQt el grupo "Escritorio 1 — configuración de KDE"
+se oculta y el bucle de escritorios arranca en 1 en vez de en 2.
+
+**PCManFM pierde el escritorio mientras esto dibuja**, y no hay forma de evitarlo: las dos
+superficies estarían en la capa *background*, y dentro de una capa KWin apila por orden de
+creación (`kwin/src/layershellv1window.cpp`: `BackgroundLayer → DesktopLayer`), o sea que kdock
+—que arranca después que la sesión— siempre quedaría **encima**, tapando los íconos sin
+quitarlos. En vez de eso se le pide a PCManFM que se corra
+(`org.pcmanfm.Application.desktopManager(false)`). El precio, dicho en la solapa: **mientras la
+feature esté encendida no hay íconos ni menú del escritorio.**
+
+Cuatro cosas de esa coordinación, las cuatro medidas:
+
+- **PCManFM se muere al apagarle el escritorio.** LXQt lo arranca sin `--daemon-mode`, así que
+  borrar su última ventana lo hace salir y su nombre del bus se va con él. Por eso el camino de
+  "prender" no es una llamada D-Bus sino: llamada si el nombre sigue ahí, y si no, relanzarlo
+  **leyendo el `Exec=` de `/etc/xdg/autostart/lxqt-desktop.desktop`** (de donde sale también el
+  `--profile=`), no adivinando el comando.
+- **Restaurar está en los dos caminos de salida**: `aboutToQuit` y el `installQuitSignalHandler`
+  de `main.cpp`. Un logout que dejara al usuario sin íconos y sin menú de escritorio no se
+  repara solo.
+- **Y para lo que ni siquiera eso cubre** (SIGKILL, un cuelgue, un corte de luz) está la clave
+  `[Wallpapers] lxqtDesktopSuppressed`, escrita con `sync()` inmediato: si en el próximo
+  arranque está puesta y el motor **no** es el que dibuja, kdock le devuelve el escritorio a
+  PCManFM.
+- **Sólo se le quita el escritorio cuando ya hay algo nuestro encima** (`apply()`, no `start()`).
+  El interruptor maestro es compartido con el motor de Plasma, así que una config que viene de
+  Plasma llega con él **ya encendido** y — como allá el escritorio 1 era de KDE — probablemente
+  sin ninguna clave para el escritorio 1. Suprimir por la sola fuerza del flag dejaría la
+  pantalla negra y sin íconos justo en el escritorio en el que se entra.
+
+**La superficie pide el scope `"desktop"`, no el `"dock"` que kdock usa para todo lo demás**
+(`kdock.scope`, ver `src/layershell.h`). No es cosmético: KWin deduce el `WindowType` de una
+superficie layer-shell **sólo** de ese namespace, y con `"dock"` el efecto Overview quedaba con el
+fondo negro (sus dos `DesktopBackground` buscan una ventana con `isDesktop()` y no había ninguna,
+porque PCManFM está apagado) y encima dibujaba el wallpaper a pantalla completa como si fuera un
+panel, desvaneciéndolo sobre el propio efecto — el flicker que reportó el usuario. Es el mismo
+scope que PCManFM-Qt pide a propósito para su escritorio.
+
+**El avance por cambio de escritorio tiene un rebote de 700 ms** (`kAdvanceDelayMs`). Al cambiar de
+escritorio se aplica su imagen **en el acto y sin avanzar** —dejar la del escritorio anterior sería
+un retardo visible en el caso común— y el paso del slideshow se dispara recién si el usuario se
+queda. Sin eso, navegar por las miniaturas del Overview dispara un `currentChanged` por clic y cada
+uno elegiría foto nueva, animaría un crossfade bajo el efecto y quemaría el historial de un
+escritorio por el que sólo se pasó. El widget y el timer de 5 minutos **no** se rebotan: un clic es
+explícito.
+
+**Un monitor sin nada configurado cae al fondo del propio PCManFM** (su clave `[Desktop]
+Wallpaper`, con el perfil sacado del autostart), no a negro — misma razón que el punto de
+arriba, y es lo que hace que la migración desde Plasma se vea igual que antes.
+
+**Cómo avanza el slideshow** (reescrito el 2026-08-20, era un bug reportado):
+
+- **Cada cambio de escritorio virtual es un paso**, no una re-aplicación. `onDesktopChanged` llama
+  `apply(desktop, advance=true)`. Antes `apply()` sólo *elegía* imagen cuando no tenía ninguna
+  guardada, así que cada par (escritorio, monitor) se quedaba con su primera elección para toda la
+  sesión: ir y volver entre escritorios mostraba siempre las mismas dos o tres fotos, y encima la
+  primera elección era el primer archivo por orden alfabético, o sea que dos escritorios con la
+  misma carpeta arrancaban idénticos. Se veía como "el slideshow está trabado".
+- **La elección es aleatoria y no repite las últimas `kHistory` (3)**:
+  `WallpaperFolder::randomOther(carpetas, recientes)`. Aleatorio porque recorrer la carpeta por
+  nombre muestra el mismo puñado de fotos en cada sesión; y "ninguna de las tres últimas" porque
+  con memoria de una sola el ojo sigue viendo un ping-pong. Degrada en vez de fallar: va soltando
+  la restricción **más vieja** primero (la última mostrada es la que más importa no repetir), y una
+  carpeta de una imagen devuelve esa imagen.
+- **El historial es por (escritorio, monitor)**, no por monitor: dos escritorios apuntando a la
+  misma carpeta no se pisan el historial.
+- **Sólo se toca el escritorio actual.** Los demás quedan con sus imágenes: no están en pantalla,
+  así que moverlos sería trabajo que nadie ve y les quemaría el historial al pedo.
+
+### Widget «Avanzar Wallpaper QT» (token `nextwallpaperqt`, 2026-08-20)
+
+Clic izquierdo = el monitor de *este* dock (`wallpaperControl.nextWallpaper(config.screenName)`),
+clic derecho = todos los monitores conectados (`nextWallpaperAll()`), y en los dos casos sólo el
+escritorio virtual actual. Su backend es `WallpaperControl`, que ya es context property, así que
+se salta cuatro de los siete archivos de un widget nuevo (no hay backend que instanciar ni nada
+que pasar por `Shared`) — quedan `DockConfig` (con su `knownWidgetTokens()`), `Dock.qml` y el
+checkbox del diálogo.
+
+Es el sucesor del viejo `nextwallpaper`, que sigue existiendo pero está **dormant** (sin checkbox
+y oculto de la solapa Layout). El ícono es `media-playlist-shuffle` y no `slideshow`: éste último
+no está en breeze, que es el set del que dibujan los widgets del dock.
+
+Lo demás: `QGuiApplication::screenAdded/Removed` crea y destruye superficies, un `QTimer` corre el
+slideshow del escritorio actual, y el paso al siguiente archivo sale de
+**`WallpaperFolder::randomOther()`** (`src/wallpaperfolder.{h,cpp}`), que vive ahí —junto con el
+`next()` secuencial que usa el motor de Plasma— para que haya una sola idea de "las imágenes de
+esta carpeta".
+`qml/Wallpaper.qml` es autocontenido (dos `Image` con crossfade; sin context properties) y el
+`fillMode` es el mismo número de Plasma que ya guardaba la solapa: mapea 1:1 a `Image.fillMode`.
+El widget *siguiente fondo* llega por `WallpaperControl::setAlternateEngine()`, dos
+`std::function` en vez de un puntero **porque `wallpapercontrol.cpp` también lo compila
+`kdock-controlmanager`**, que no tiene por qué linkear un renderer con `QQuickView` para dibujar
+una tarjeta.
 
 ### Clic derecho de un widget: acción vs. menú de sección
 - El clic derecho sobre un widget abre por defecto el **menú de sección** (agregar separador, color de fondo, etiquetas, renombrar, Configuración). Algunos widgets se lo gastan en una segunda acción, y eso se declara en **un solo lugar** de `Dock.qml`: `sectionHasAltClick(token)` dice cuáles, y `sectionAltClick(token)` hace qué. Hoy: `volume` → mezclador (solapa Audio), `brightness` → solapa VideoEnergía, `movetoscreen` → monitor anterior, `maxmin` → minimizar, `closewindow` → mandar la ventana al escritorio siguiente sin seguirla, `darkmode` → modo oscuro (el clic izquierdo pone el modo normal).
@@ -2284,6 +2464,11 @@ still render and work; they just can't be toggled from the UI anymore).
 3. **Autohide + input mask** — Dock thickness now has a **single source of truth in C++**: `DockConfig::dockThickness()` (= `qMax(iconSize, appCellThickness()) + padding`). `DockWindow::thickness()` returns it (layer-shell exclusive zone) and `Dock.qml`’s `thickness` binds to `config.dockThickness`, so the two can no longer drift. Any new setting that changes the dock’s cross-axis size must be folded into `appCellThickness()` and must emit `dockThicknessChanged()` (`DockWindow` re-applies its layer properties on that signal). One input of that formula is *measured in QML*, not configured — `config.effectiveLabelWidth`, fed by `setMeasuredLabelWidth()` (see the widest-name bullet under **App-icon labels**). That is the only QML→C++ feedback into the thickness, and it is safe because a label's natural width does not depend on the thickness; do not add a remeasure hook on `dockThicknessChanged`.
 4. **Window geometry in panel mode** — When `panelMode` is true and `dockLength` is 0, the compositor dictates the stretched dimension (layer-shell size = 0 in that dimension). `Dock.qml` uses `config.panelMode` to decide whether to follow `Window.width/height` or content size. When `dockLength` > 0, the dock has a fixed length (percentage of the screen edge) regardless of `panelMode`; the layer-shell anchors only one side corner (not both) so the compositor respects the explicit `set_size`.
 5. **KWin privilege** — If the window list stops working on KWin during development, verify the `.desktop` file is installed with the correct `X-KDE-Wayland-Interfaces` and `Exec=` path.
+6b. **Dos `.qml` del árbol del dock NO reciben ninguna context property, a propósito**:
+    `qml/AppPreviewWindow.qml` y `qml/Wallpaper.qml`. Todo entra por properties, lo que los hace
+    instanciables sueltos en una sonda (`QQmlComponent` + `setProperty`) y probables con
+    `xdotool` bajo Xvfb. Si tocás uno, mantené esa propiedad: es lo que hace baratos sus arneses.
+
 6. **QML context properties** — `DockWindow` (`dockwindow.cpp`) injects `config`, `theme`, `dockModel`, `dockWindow`, `volume`, `clock`, `clock2`, `brightness`, `overview`, `desktopControl`, `monitorControl`, `maxmin`, `activeWindow`, `wallpaperControl`, `power`, `systray`, `relanzadores`, `scriptRunners`, `clipboardHistory`, `battery`, `disks`, `network`, `dockIsPrimary`, `apps`, `showdesktop`, `appMenu`, `iconColors` as context properties. Any new C++ object exposed to QML should be added there. `systray` is injected in every dock (the guard `systray && …` in QML is kept for the legacy single-dock path); `relanzadores` is passed to every dock but filtered per-dock (see the relanzadores note under DockManager) with `dockIsPrimary` selecting the default. Note: inside `RelanzadorWidget`/`RelanzadorPopup`/`ScriptRunnerWidget`/`AppMenuPopup`, alias context properties (`_config`, `_theme`, …) before passing them to same-named component properties to avoid self-shadowing.
 7. **Multi-screen** — Changing screens recreates the platform window (`hide(); destroy(); setScreen(); show()`) because `wl_output` is fixed at layer-surface creation. The `wl_output` is resolved from `QWindow::screen()->handle()` (cast to `QWaylandScreen*`) rather than `window->waylandScreen()` because the latter may not have picked up the target screen yet after the destroy/set/show cycle. Falls back to `waylandScreen()` if the cast fails.
 8. **Window detection on startup** — At construction time, Wayland protocol events from the compositor (e.g. `window_with_uuid` from KWin) are still queued in the socket buffer. `DockModel::rebuild()` sees an empty `monitor->windows` list. A deferred `syncWindows()` call (200 ms via `QTimer::singleShot` in `DockWindow` constructor) iterates all tracked windows after the event loop starts and places any that were missed.
@@ -2309,7 +2494,11 @@ still render and work; they just can't be toggled from the UI anymore).
 11. **Autohide toggle** — A dock widget button that toggles `config.autohide`. Uses `window-pin`/`window-unpin` icons.
 12. **Systray DBus (SNI)** — `SystrayHost` implements the StatusNotifierItem protocol using the **`org.kde.*`** bus names, which is what the ecosystem actually implements (KDE, libappindicator, Qt/GTK trays); the `org.freedesktop.*` names are only registered as extra aliases when kdock has to *become* the watcher (bare wlroots, no existing watcher). Key points (see `src/systray.cpp`):
     - **Watcher discovery**: prefer an existing `org.kde.StatusNotifierWatcher`, else `org.freedesktop.StatusNotifierWatcher`, else register both ourselves. The chosen name is `m_watcherService` (used for host registration, the item list and the `StatusNotifierItemRegistered/Unregistered` signal subscriptions).
-    - **`RegisteredStatusNotifierItems` is a D-Bus *property*** of the real watcher (not a method), read via `org.freedesktop.DBus.Properties.Get`. (Our own scriptable method form only applied when kdock was the watcher.)
+    - **Cuando el watcher somos nosotros (LXQt, wlroots pelado), se exportan las DOS interfaces**, cada una en su propio `QDBusAbstractAdaptor` (`SniWatcherKdeAdaptor` / `SniWatcherFdoAdaptor`, con un `SniWatcherAdaptor` común): el nombre de interfaz lo fija `Q_CLASSINFO` y un objeto no puede contestar por dos. Los adaptores cuelgan de un `QObject` aparte (`m_watcherObject`) y **no de `SystrayHost`**, porque un adaptor pertenece al objeto y no a la ruta: colgándolos del host, `/StatusNotifierHost` —que es el mismo objeto registrado en otra ruta— también exportaría las interfaces del watcher.
+        - **Ese era el bug que dejaba la bandeja muerta bajo LXQt** (arreglado 2026-08-20). Se exportaba sólo `org.freedesktop.StatusNotifierWatcher` mientras `m_watcherService` era `org.kde.…`, así que la auto-registración del host fallaba con `No such interface 'org.kde.StatusNotifierWatcher' at object path '/StatusNotifierWatcher'`, `m_active` se quedaba en false, `connectWatcherSignals()` no corría nunca y la lista inicial no se leía. Con Plasma no se veía: ahí el watcher es de KDE y este camino no se toca.
+        - **Y siendo el watcher no hay viaje de ida y vuelta**: `m_active = true` y listo. Una llamada D-Bus a uno mismo cuyos únicos desenlaces son "funcionó" y "la bandeja está muerta" no tiene nada de asincrónico que esperar.
+    - **`RegisteredStatusNotifierItems`, `IsStatusNotifierHostRegistered` y `ProtocolVersion` son *propiedades*** (`as`, `b`, `i`), no métodos — en el watcher ajeno y en el nuestro. No es pedantería: `QDBusTrayIcon` de Qt (o sea **toda app Qt con `QSystemTrayIcon`**) lee `IsStatusNotifierHostRegistered` como propiedad, y si esa lectura falla se va al XEmbed de X11, que bajo Wayland significa **ningún ícono**. Verificado con un cliente `QSystemTrayIcon` de verdad: `isSystemTrayAvailable: true` y el ítem aparece en la lista.
+    - **La lista devuelve `service+path`**, no el service pelado (lo devolvía así hasta 2026-08-20): es la forma que espera un host que relee la lista, y la misma que parsea `splitItemId`.
     - **Item id parsing** (`splitItemId`): the watcher returns items as `service+path` concatenated (e.g. `:1.67/org/blueman/sni`); split at the first `/` (no `/` ⇒ path `/StatusNotifierItem`).
     - **Item properties/signals** use `org.kde.StatusNotifierItem`. Live updates come from the SNI signals `NewIcon`/`NewOverlayIcon`/`NewAttentionIcon`/`NewToolTip`/`NewTitle`/`NewStatus` (items do **not** emit `PropertiesChanged`); each re-runs `readProperties()`. `readProperties()` is a **private slot** so the string-based `SLOT()` connection resolves.
     - **Pixmap fallback**: items without a themed `IconName` expose only `IconPixmap` (`a(iiay)` = array of `(w, h, ARGB32-big-endian bytes)`). **These wire types MUST be registered with `qDBusRegisterMetaType` (KDbusImageStruct/KDbusImageVector, done in the SystrayHost ctor)** — otherwise `QDBusInterface::property()` returns empty and manual `QDBusArgument` demarshalling desyncs and **libdbus aborts** (`type struct not a basic type`). `SystrayItem::readPixmapProperty()` reads the property into `KDbusImageVector`, picks the largest frame and converts big-endian ARGB32 → native (`qFromBigEndian`). `SystrayImageProvider` (`image://systray/<service>`) serves it; on no icon it returns a transparent 1×1 (renders nothing, no QML warning). `SystrayModel` adds an `iconSerial` role (bumped every `readProperties()`) so the QML `Image` busts its cache on change. `Dock.qml` uses `image://icon/<name>` when `iconName` is set, else `image://systray/<service>@<iconSerial>`. Registered per `DockWindow` engine when `systrayHost` is non-null (i.e. in every dock).

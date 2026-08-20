@@ -5,7 +5,7 @@
 MaxMinControl::MaxMinControl(QObject *parent)
     : QObject(parent)
 {
-    m_available = KWinShortcut::sessionIsKde();
+    m_available = KWinShortcut::available();
 }
 
 void MaxMinControl::maximize()

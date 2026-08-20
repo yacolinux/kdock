@@ -72,6 +72,11 @@ public:
     // meantime).
     static bool enabled();
     void setEnabled(bool on);
+    // Whether the master switch has ever been written. Distinguishes "the user
+    // turned this off" from "nobody has decided yet", which is what lets an
+    // LXQt session switch the feature on once without overriding a decision —
+    // see the migration in main().
+    static bool configured();
 
     // Colors and icons default to on: with the master switch on, they are what
     // "Modo QT" means. The font defaults to off because it needs a value first

@@ -1,8 +1,9 @@
 #include "desktopcontrol.h"
 
+#include "session.h"
+
 #include <QDBusConnection>
 #include <QDBusMessage>
-#include <QProcessEnvironment>
 
 DesktopControl::DesktopControl(QObject *parent)
     : QObject(parent)
@@ -12,15 +13,9 @@ DesktopControl::DesktopControl(QObject *parent)
 
 void DesktopControl::checkAvailability()
 {
-    const auto env = QProcessEnvironment::systemEnvironment();
-    const QString desktop = env.value(QStringLiteral("XDG_CURRENT_DESKTOP"));
-    const QString session = env.value(QStringLiteral("XDG_SESSION_DESKTOP"));
-
-    if (desktop.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("KDE"), Qt::CaseInsensitive) ||
-        session.contains(QStringLiteral("plasma"), Qt::CaseInsensitive)) {
-        m_available = true;
-    }
+    // Virtual desktops and the shortcuts that move a window between them are
+    // KWin's, not Plasma's — see Session for why the two are asked separately.
+    m_available = Session::hasKWin();
 }
 
 void DesktopControl::moveToNextDesktop()

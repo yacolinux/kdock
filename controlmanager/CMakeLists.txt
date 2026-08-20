@@ -35,6 +35,7 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/iconprovider.cpp     ${KDOCK_SHARED_SRC}/iconprovider.h
     ${KDOCK_SHARED_SRC}/desktopentry.cpp     ${KDOCK_SHARED_SRC}/desktopentry.h
     ${KDOCK_SHARED_SRC}/powercontrol.cpp     ${KDOCK_SHARED_SRC}/powercontrol.h
+    ${KDOCK_SHARED_SRC}/session.cpp          ${KDOCK_SHARED_SRC}/session.h
     ${KDOCK_SHARED_SRC}/audiocontrol.cpp     ${KDOCK_SHARED_SRC}/audiocontrol.h
     ${KDOCK_SHARED_SRC}/batterycontrol.cpp   ${KDOCK_SHARED_SRC}/batterycontrol.h
     ${KDOCK_SHARED_SRC}/brightnesscontrol.cpp ${KDOCK_SHARED_SRC}/brightnesscontrol.h
@@ -45,6 +46,7 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/weatherlauncher.cpp  ${KDOCK_SHARED_SRC}/weatherlauncher.h
     ${KDOCK_SHARED_SRC}/nmdbus.cpp           ${KDOCK_SHARED_SRC}/nmdbus.h
     ${KDOCK_SHARED_SRC}/wallpapercontrol.cpp ${KDOCK_SHARED_SRC}/wallpapercontrol.h
+    ${KDOCK_SHARED_SRC}/wallpaperfolder.cpp  ${KDOCK_SHARED_SRC}/wallpaperfolder.h
     ${KDOCK_SHARED_SRC}/iconpickerdialog.cpp ${KDOCK_SHARED_SRC}/iconpickerdialog.h
     # The icon-theme picker of the settings dialog (and AppearanceControl, the
     # theme lists + favorites it reads).

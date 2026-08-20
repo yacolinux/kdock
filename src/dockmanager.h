@@ -59,6 +59,7 @@ class WeatherControl;
 class AppearanceControl;
 class VirtualDesktops;
 class DesktopWallpapers;
+class LxqtWallpapers;
 class AutoColorScheme;
 class QtCompat;
 class AppPreviews;
@@ -96,6 +97,10 @@ public:
         AppearanceControl *appearance = nullptr;
         VirtualDesktops *desktops = nullptr;
         DesktopWallpapers *desktopWallpapers = nullptr;
+        // The LXQt engine of the same feature. Exactly one of the two is ever
+        // started (see main()), but both are handed over: the Wallpapers tab
+        // has to talk to whichever one is live.
+        LxqtWallpapers *lxqtWallpapers = nullptr;
         // Window thumbnails for the apps block's hover previews. Shared on
         // purpose: captures are serialized process-wide and two docks pointing
         // at the same window reuse the one image.
@@ -259,6 +264,7 @@ public:
     ScreenBrightness *screens() const { return m_shared.screens; }
     BatteryControl *battery() const { return m_shared.battery; }
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
+    LxqtWallpapers *lxqtWallpapers() const { return m_shared.lxqtWallpapers; }
     AutoColorScheme *autoColorScheme() const { return m_shared.autoColors; }
     void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
     QtCompat *qtCompat() const { return m_shared.qtCompat; }

@@ -105,6 +105,11 @@ bool QtCompat::enabled()
     return shared().value(QLatin1String(kEnabledKey), false).toBool();
 }
 
+bool QtCompat::configured()
+{
+    return shared().contains(QLatin1String(kEnabledKey));
+}
+
 void QtCompat::setEnabled(bool on)
 {
     if (on == enabled())
