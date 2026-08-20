@@ -153,3 +153,22 @@ void DockLink::restartDock()
                                                       QStringLiteral("restart"));
     QDBusConnection::sessionBus().asyncCall(msg);
 }
+
+void DockLink::nextWallpaper(const QString &screenName)
+{
+    if (!m_available)
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("nextWallpaper"));
+    msg.setArguments({screenName});
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
+
+void DockLink::nextWallpaperAll()
+{
+    if (!m_available)
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("nextWallpaperAll"));
+    QDBusConnection::sessionBus().asyncCall(msg);
+}

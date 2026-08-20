@@ -560,16 +560,25 @@ importa como un `.zip`.
 ### Script Runners de ejemplo (`scripts/`)
 
 El widget *Script Runner* ejecuta cualquier script shell: la colección de ejemplo vive en
-[`scripts/`](scripts/), sin datos privados ni rutas hardcodeadas. Ambos avanzan la **presentación
-de fondos de Plasma** usando la configuración que ya tiene cada monitor (no escriben carpetas):
+[`scripts/`](scripts/), sin datos privados ni rutas hardcodeadas. Los dos primeros avanzan la
+**presentación de fondos de Plasma** usando la configuración que ya tiene cada monitor (no
+escriben carpetas):
 
 - **`scripts/next2.sh`** — avanza el slideshow **solo** del monitor del dock que lo lanzó (el
   clic exporta `KDOCK_SCREEN`; resuelve el monitor por geometría vía `wayland-info`).
 - **`scripts/next-all.sh`** — avanza el slideshow de **todos** los monitores conectados.
+- **`scripts/next-qt-wall.sh`** — avanza el **slideshow de LXQt** (`pcmanfm-qt --desktop`),
+  para sesiones LXQt corriendo sobre un compositor de terceros (p. ej. KWin/Wayland). Le el
+  `WallpaperDirectory`/`WallpaperRandomize`/`LastSlide` de las preferencias de escritorio del
+  perfil activo (detecta `--profile=<name>` del proceso vivo), elige la siguiente imagen con el
+  mismo criterio que el slideshow de pcmanfm-qt (azar excluyendo el último, u orden alfabético
+  con wrap), la aplica por D-Bus (`org.pcmanfm.PCManFM`) y sincroniza `LastSlide`. Aplica a
+  **todas** las pantallas a la vez — LXQt bajo Wayland usa un solo wallpaper compartido, así
+  que ignora `KDOCK_SCREEN` a propósito. No hace nada si el slideshow de LXQt no está activo.
 
-Solo actúan sobre monitores que ya están en modo *Presentación* (imagen fija no se toca).
-Wire-up: *Configuración → Script Runner* → `scriptPath` al archivo elegido. Requieren `qdbus6` y
-`wayland-info` en el runtime.
+Los dos primeros solo actúan sobre monitores que ya están en modo *Presentación* (imagen fija
+no se toca). Wire-up: *Configuración → Script Runner* → `scriptPath` al archivo elegido.
+Requieren `qdbus6` y (los de Plasma) `wayland-info` en el runtime.
 
 ## Base de rendimiento (RELEASE 0.1)
 

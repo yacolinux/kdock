@@ -64,6 +64,13 @@ public slots:
     Q_SCRIPTABLE void setDarkMode(bool on);
     Q_SCRIPTABLE void toggleDarkMode();
 
+    // LXQt wallpaper advance (Fondo de Escritorio QT): delegates to
+    // WallpaperControl/LxqtWallpapers in this process so the panel does not
+    // need its own renderer. The panel's new card uses this when kdock is
+    // running; otherwise it falls back to a local renderer.
+    Q_SCRIPTABLE void nextWallpaper(const QString &screenName);
+    Q_SCRIPTABLE void nextWallpaperAll();
+
     // Three parallel lists rather than one a(ssb): plain `as` needs no
     // qDBusRegisterMetaType on either side (see CLAUDE.md on struct properties).
     Q_SCRIPTABLE QStringList dockIds();

@@ -5,6 +5,7 @@
 #include "autocolorscheme.h"
 #include "dockmanager.h"
 #include "dockwindow.h"
+#include "wallpapercontrol.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
@@ -137,4 +138,18 @@ QStringList DockService::dockScreens()
 QString DockService::primaryDockId()
 {
     return m_manager ? m_manager->primaryDockId() : QString();
+}
+
+void DockService::nextWallpaper(const QString &screenName)
+{
+    if (!m_manager || !m_manager->sharedWallpaperControl())
+        return;
+    m_manager->sharedWallpaperControl()->nextWallpaper(screenName);
+}
+
+void DockService::nextWallpaperAll()
+{
+    if (!m_manager || !m_manager->sharedWallpaperControl())
+        return;
+    m_manager->sharedWallpaperControl()->nextWallpaperAll();
 }

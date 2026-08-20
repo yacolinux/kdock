@@ -16,8 +16,10 @@
 #include "desktopentry.h"
 #include "dockconfig.h"
 #include "docklink.h"
+#include "lxqtwallpapers.h"
 #include "mpriscontrol.h"
 #include "networkcontrol.h"
+#include "session.h"
 #include "weatherconfig.h"
 #include "weathercontrol.h"
 #include "weatherlauncher.h"
@@ -264,15 +266,53 @@ int main(int argc, char *argv[])
     WeatherConfig weatherConfig;
     WeatherControl weather(&weatherConfig);
     WeatherLauncher weatherLauncher;
+    VirtualDesktops desktops;
+    DockLink dockLink;
     WallpaperControl wallpaper;
+    LxqtWallpapers lxqt(&desktops);
+    // In LXQt, wallpapers are drawn by kdock's LxqtWallpapers (WallpaperWindow
+    // layer-shell surfaces). ControlManager reuses identical code but must not
+    // duplicate the renderer when kdock is already handling it: delegate via
+    // D-Bus when the dock is available, otherwise fall back to a local renderer.
+    wallpaper.setAlternateEngine(
+        [&lxqt, &dockLink] {
+            if (Session::isLxqt() && dockLink.available())
+                return true;
+            return lxqt.active();
+        },
+        [&lxqt, &dockLink](const QString &s) {
+            if (Session::isLxqt() && dockLink.available()) {
+                // Single screen: kdock's nextWallpaper handles per-monitor logic
+                // (slideshow vs static) identically.
+                if (s.isEmpty())
+                    dockLink.nextWallpaperAll();
+                else
+                    dockLink.nextWallpaper(s);
+                return;
+            }
+            lxqt.advance(s);
+        });
+    QObject::connect(&lxqt, &LxqtWallpapers::activeChanged, &wallpaper,
+                     [&wallpaper] { wallpaper.refreshAvailability(); });
+    QObject::connect(&dockLink, &DockLink::changed, &wallpaper,
+                     [&wallpaper] { wallpaper.refreshAvailability(); });
+    // Local fallback renderer only when kdock is not providing it.
+    QObject::connect(&dockLink, &DockLink::changed, &app, [&lxqt, &dockLink] {
+        if (!Session::isLxqt())
+            return;
+        if (dockLink.available()) {
+            if (lxqt.active())
+                lxqt.stop();
+        } else {
+            if (!lxqt.active() && LxqtWallpapers::enabled())
+                lxqt.start();
+        }
+    });
     PowerControl power;
     MprisControl mpris;
-    DockLink dockLink;
     // System-wide icon theme and colour scheme; the same class the dock's own
     // pickers use, so favourites and "keep the picker open" are shared.
     AppearanceControl appearance(&theme);
-    VirtualDesktops desktops;
-
     CmBackends backends;
     backends.apps = &apps;
     backends.audio = &audio;
@@ -295,6 +335,13 @@ int main(int argc, char *argv[])
                      [&window] { window.retranslate(); });
     CmService service(&window);
     service.registerOnBus();
+
+    // LXQt wallpaper lifecycle for the local fallback renderer. When kdock is
+    // available its own LxqtWallpapers draws the desktop; otherwise this process
+    // does. aboutToQuit restores PCManFM if we suppressed it.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &lxqt, &LxqtWallpapers::quit);
+    if (Session::isLxqt() && !dockLink.available() && LxqtWallpapers::enabled())
+        lxqt.start();
 
     if (!sectionArg.isEmpty() && CmSections::exists(sectionArg))
         window.setCurrentTab(sectionArg);

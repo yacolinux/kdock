@@ -265,6 +265,7 @@ public:
     BatteryControl *battery() const { return m_shared.battery; }
     DesktopWallpapers *desktopWallpapers() const { return m_shared.desktopWallpapers; }
     LxqtWallpapers *lxqtWallpapers() const { return m_shared.lxqtWallpapers; }
+    WallpaperControl *sharedWallpaperControl() const { return m_shared.wallpaperControl; }
     AutoColorScheme *autoColorScheme() const { return m_shared.autoColors; }
     void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
     QtCompat *qtCompat() const { return m_shared.qtCompat; }

@@ -24,6 +24,7 @@ const QList<CmSectionInfo> &table()
         {QStringLiteral("network"),   QStringLiteral("network-wireless"),               2, 2, 2, 1, true},
         {QStringLiteral("weather"),   QStringLiteral("weather-few-clouds"),             2, 2, 2, 1, true},
         {QStringLiteral("wallpaper"), QStringLiteral("preferences-desktop-wallpaper"),  1, 1, 1, 1, true},
+        {QStringLiteral("wallpaperqt"), QStringLiteral("media-playlist-shuffle"),       1, 1, 1, 1, true},
         {QStringLiteral("system"),    QStringLiteral("preferences-system"),             2, 2, 1, 1, true},
         {QStringLiteral("appearance"),QStringLiteral("preferences-desktop-theme"),       2, 2, 2, 1, true},
         {QStringLiteral("desktops"),  QStringLiteral("virtual-desktops"),                2, 1, 1, 1, true},
@@ -89,6 +90,8 @@ QString CmSections::label(const QString &id)
         return QCoreApplication::translate("CmSections", "Clima");
     if (id == QLatin1String("wallpaper"))
         return QCoreApplication::translate("CmSections", "Fondo de escritorio");
+    if (id == QLatin1String("wallpaperqt"))
+        return QCoreApplication::translate("CmSections", "Fondo de escritorio QT");
     if (id == QLatin1String("system"))
         return QCoreApplication::translate("CmSections", "Sistema");
     if (id == QLatin1String("appearance"))
@@ -124,6 +127,9 @@ QString CmSections::description(const QString &id)
     if (id == QLatin1String("wallpaper"))
         return QCoreApplication::translate("CmSections",
                                            "Avanzar el fondo de un monitor o de todos.");
+    if (id == QLatin1String("wallpaperqt"))
+        return QCoreApplication::translate("CmSections",
+                                           "Avanzar el fondo en LXQt (un botón por monitor y Todos).");
     if (id == QLatin1String("system"))
         return QCoreApplication::translate("CmSections",
                                            "Las cuatro configuraciones, reinicios y sesión.");

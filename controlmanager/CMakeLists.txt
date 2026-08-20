@@ -47,6 +47,10 @@ qt_add_executable(kdock-controlmanager
     ${KDOCK_SHARED_SRC}/nmdbus.cpp           ${KDOCK_SHARED_SRC}/nmdbus.h
     ${KDOCK_SHARED_SRC}/wallpapercontrol.cpp ${KDOCK_SHARED_SRC}/wallpapercontrol.h
     ${KDOCK_SHARED_SRC}/wallpaperfolder.cpp  ${KDOCK_SHARED_SRC}/wallpaperfolder.h
+    ${KDOCK_SHARED_SRC}/wallpaperwindow.cpp  ${KDOCK_SHARED_SRC}/wallpaperwindow.h
+    ${KDOCK_SHARED_SRC}/lxqtwallpapers.cpp   ${KDOCK_SHARED_SRC}/lxqtwallpapers.h
+    ${KDOCK_SHARED_SRC}/desktopwallpapers.cpp ${KDOCK_SHARED_SRC}/desktopwallpapers.h
+    ${KDOCK_SHARED_SRC}/plasmascript.h
     ${KDOCK_SHARED_SRC}/iconpickerdialog.cpp ${KDOCK_SHARED_SRC}/iconpickerdialog.h
     # The icon-theme picker of the settings dialog (and AppearanceControl, the
     # theme lists + favorites it reads).
@@ -90,10 +94,18 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/cards/NetworkCard.qml
         qml/cards/WeatherCard.qml
         qml/cards/WallpaperCard.qml
+        qml/cards/WallpaperQtCard.qml
         qml/cards/SystemCard.qml
         qml/cards/AppearanceCard.qml
         qml/cards/DesktopsCard.qml
         qml/cards/ColorAutoCard.qml
+)
+
+# WallpaperWindow's own QML (shared with kdock, qrc:/qml/Wallpaper.qml)
+qt_add_resources(kdock-controlmanager "controlmanager-wallpaper-qml"
+    PREFIX "/"
+    BASE ".."
+    FILES ../qml/Wallpaper.qml
 )
 
 # kdock's IconMenuItem, verbatim. BASE lands it on :/qml/IconMenuItem.qml, i.e.

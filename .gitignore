@@ -27,3 +27,7 @@ HISTORY.md
 # `!` quedaría fuera del repo, con lo que el segundo binario no compilaría.
 *.txt
 !CMakeLists.txt
+
+# Trabajo en curso, por ahora sin commitear: el Script Runner de LXQt. Se
+# descomenta cuando se integre de verdad.
+scripts/next-qt-wall.sh
