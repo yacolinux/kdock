@@ -373,25 +373,40 @@ que hace que los botones se puedan apretar.
   real —si el popup cayera bajo el cursor, el ícono perdería el hover, el preview se escondería,
   el cursor volvería al ícono… para siempre—, pero los botones necesitan input. El bucle se
   cierra ahora por el otro lado: el preview **no se esconde** cuando el puntero está encima
-  (`previewLastActivity`), y se ubica siempre del otro lado del borde del dock, nunca abajo del
+  (`previewIconHovered`), y se ubica siempre del otro lado del borde del dock, nunca abajo del
   ícono que lo llamó.
 - **Los íconos de los botones van con `widgetIconSuffix`**, no con `theme.revision` pelado: son
   line-art monocromo sobre un velo del color del panel, o sea el mismo problema de fondo que
   cualquier ícono de widget, con la misma cura (el tercer campo de la URL `image://icon`).
-- **Cerrar es por inactividad, en dos escalones** (`previewWatchdog`, cada 300 ms): **600 ms** sin
-  actividad como siempre, y **5 s** mientras la última actividad haya venido de la superficie del
-  preview (`previewPointerOnSurface`). El escalón largo es el que hace usable la feature: apuntar
-  a un botón de 20 px es quedarse quieto, y 600 ms de eso cerraban el preview a mitad del clic.
-  Es el mismo trade-off ya aceptado en `dockHoverStale` — un puntero **completamente** quieto 5 s
-  encima lo cierra, y a cambio un *leave* perdido se cura solo.
-- **El `onExited` del ícono ya no cierra: arranca `previewLeaveTimer` (250 ms)**. Entre el ícono y
-  el popup hay 8 px de nada, y cerrar al salir dejaba los botones inalcanzables; cualquier
-  `activity()` del preview para el timer.
+- **Se cierra por PRESENCIA, y no hay ningún timeout de inactividad** (2026-08-19; antes sí había
+  uno y era el bug, ver el bullet siguiente). La regla entera es: el preview está retenido
+  mientras `previewIconHovered || previewPointerOnSurface`; cuando las dos caen arranca
+  `previewLeaveTimer` (**150 ms**) y se baja. Las dos banderas salen de enter/leave:
+  - la del ícono la pone `queueAppPreview()` (su `onEntered`) y la saca `noteIconLeft(model, row)`,
+    que **ignora el leave si no viene del ícono del preview en curso** — ir de un ícono al de al
+    lado puede entregar el `exited` del viejo *después* del `entered` del nuevo, y actuar sobre eso
+    apaga la bandera con el puntero adentro;
+  - la de la superficie la mueven `activity()` y `pointerLeft()` de `AppPreviewWindow`, emitidas
+    por el `MouseArea` del cuerpo **y por el de cada botón**: una `MouseArea` hija le saca el hover
+    a la madre, así que sin eso el preview se leería como "no hay puntero" al llegar a un botón.
+  - los 150 ms no son un timeout sino el traspaso: **cada** cruce (ícono → hueco → popup, cuerpo →
+    botón) emite un leave antes del enter siguiente, verificado con la sonda.
+- **`onPositionChanged` del ícono re-arma el preview** si no hay ninguno a la vista
+  (`noteIconMoved`, con guarda de `hoverPreviewTimer.running` para que barrer el mouse no reinicie
+  el retardo eternamente). Con la regla de presencia no debería hacer falta nunca, y por eso está:
+  cualquier cierre espurio futuro se cura con el próximo movimiento en vez de obligar a salir del
+  ícono y volver a entrar.
+- **La cura del *leave* perdido no es un timer, es `onDockHoverPosChanged`**: cualquier movimiento
+  del puntero sobre la superficie del dock mientras hay preview y **ninguna** de las dos banderas
+  está en `true` significa que una quedó pegada, y baja el preview. No puede errarle (con el
+  puntero de verdad sobre el ícono la bandera está en `true`; los movimientos sobre el preview no
+  llegan a esta superficie) y se dispara apenas el usuario vuelve a mover el mouse sobre el dock,
+  que es lo primero que hace cualquiera ante una miniatura que no se va.
 - **`revealWanted` suma `appPreview.visible`** (*Modos de ocultamiento*): el preview es una
   superficie aparte, así que ir del ícono hacia él suelta `dockHover` y un dock que se esconde se
-  deslizaría —llevándose el popup, porque `onRevealedChanged` lo baja—. Es seguro porque
-  `previewWatchdog` garantiza que `appPreview.visible` no se queda pegado, y `dockHoverWatchdog`
-  ya se abstenía mientras hay preview.
+  deslizaría —llevándose el popup, porque `onRevealedChanged` lo baja—. El costo es que un preview
+  pegado deja además el dock revelado (`dockHoverWatchdog` se abstiene mientras hay preview); el
+  freno es el bullet anterior.
 - **La posición se calcula en coordenadas del dock y se mapea al final** (`mapToItem(root, …)`
   → `root.mapToGlobal()`). El anchor rect del popup se mide contra la superficie del dock, así
   que los dos extremos tienen que salir del mismo marco; meter `Screen.*` ahí pone el preview
@@ -412,14 +427,21 @@ que hace que los botones se puedan apretar.
   la misma familia de bug que ya se había resuelto una vez para el tooltip de ícono más viejo —
   "ni `HoverHandler` ni `MouseArea.onExited` de la superficie del popup separada disparan el
   leave de forma confiable en KWin" cuando aparece un xdg_popup pegado al ícono — pero el código
-  nuevo volvió a depender solo del leave. Fix: `previewLastActivity` (actualizado desde
-  `queueAppPreview()`, desde el `onPositionChanged` de la `MouseArea` y —desde que la superficie
-  recibe input— desde el `activity()` del propio preview) + `previewWatchdog`, un `Timer`
-  de 300 ms que corre solo mientras `appPreview.visible` y cierra por inactividad con los dos
-  umbrales de más arriba — sin tocar el camino rápido (`onExited` sigue ahí, ahora vía
-  `previewLeaveTimer`, y en el caso normal cierra antes de que el watchdog llegue a mirar). Ver
-  el bullet de `dockHover` en *Modos de ocultamiento*: el mismo problema, un piso más arriba, se
-  comió el auto-hide entero.
+  nuevo volvió a depender solo del leave. Se arregló con un watchdog de **inactividad**
+  (`previewLastActivity` + `previewWatchdog`, 600 ms sin un `onPositionChanged` fresco).
+- **Y ese watchdog era el bug siguiente** (2026-08-19, reportado por el usuario: *"aparecen, luego
+  desaparecen, hay que mover el cursor 2 veces arriba de cada ícono"*). **Un puntero quieto no
+  genera eventos**, así que "600 ms sin movimiento" es indistinguible de "el puntero se fue":
+  apoyar el mouse en un ícono y no moverlo era exactamente el caso que el watchdog cerraba. Y como
+  el único sitio que encolaba el preview era `onEntered`, una vez cerrado no había forma de
+  recuperarlo sin salir del ícono y volver a entrar — de ahí las dos pasadas. Se eliminó entero y
+  se reemplazó por la regla de presencia de más arriba, con `onDockHoverPosChanged` como cura del
+  *leave* perdido. **La lección, que vale para cualquier popup con hover**: una red por
+  inactividad puesta contra un hover no es una red, es un cierre espurio garantizado; lo que hay
+  que medir es dónde está el puntero, y desmentir la bandera pegada con evidencia (movimiento en
+  otro lado), no con un reloj. Ver el bullet de `dockHover` en *Modos de ocultamiento*: el mismo
+  problema, un piso más arriba, se comió el auto-hide entero — y ahí el watchdog sí es de
+  inactividad, pero mide la superficie que el puntero **no** está tocando.
 
 ### App-icon labels (`config.iconLabelMode` + `appsComp` in `Dock.qml`)
 - Six modes (`DockConfig::IconLabelMode`): **icon only** (0, default — pixel-identical to the pre-label dock), **name below** (1), **name at the right** (2), **name only** (3), **name above** (4), **name at the left** (5). The values are persisted, hence the non-obvious order: 4 and 5 were added later. Scope: the `apps` block only (launchers + running windows); every other section uses `widgetLabelMode` (see below).
@@ -675,7 +697,7 @@ ocultamiento"), y son cuatro:
   (dockHover.hovered && !dockHoverStale) ...`, línea ~699).
   - **Sospecha fundada, no solo intuición**: `dockHover` es un `HoverHandler` sobre `root`, la
     superficie entera del dock — el mismo tipo de construcción que ya se rompió una vez con la
-    feature de *Vista previa de ventana* (ver el bullet de `previewLastActivity` más arriba):
+    feature de *Vista previa de ventana* (ver el bullet de `previewIconHovered` más arriba):
     un xdg_popup que aparece/desaparece pegado a la superficie del dock (el preview se
     crea/destruye por cada ícono, "cambiar de ícono destruye y rehace el popup") es exactamente
     la clase de evento que KWin puede no reportarle un *leave* limpio a la superficie de abajo.

@@ -758,14 +758,30 @@ este archivo y leé la entrada correspondiente (o toda la sección).
     `plasma-window-management` no lo reporta como ventana.
   - **El leave.** Ni `HoverHandler` ni `MouseArea.onExited` de la superficie del popup separada
     disparan el *leave* de forma confiable en KWin, así que cualquier `containsMouse`/`hovered`
-    que use para decidir si sigue abierto **queda pegado en `true` para siempre**. El cierre va
-    por **inactividad**: un timestamp que actualizan el cuerpo *y cada botón*
-    (`onEntered`/`onPositionChanged`) más un `Timer` repetitivo. Y si el popup es clickeable,
-    el umbral tiene que ser largo mientras el puntero esté encima (5 s en el preview): apuntar a
-    un botón chico es quedarse quieto, y 600 ms de quietud cierran el popup a mitad del clic.
-  - **Y el corolario de layout**: entre el ícono y el popup hay un hueco, y cerrar en el
-    `onExited` del ícono deja los botones **inalcanzables** aunque todo lo demás esté bien. Va
-    con un timer de gracia (250 ms) que la actividad del popup cancela.
+    que use para decidir si sigue abierto **puede quedar pegado en `true`**.
+  - **Pero la cura NO es un watchdog de inactividad**, y equivocarse en esto cuesta la feature
+    entera (2026-08-19, reportado por el usuario). Un puntero quieto **no genera un solo evento**,
+    o sea que *"N ms sin movimiento"* es exactamente lo mismo que *"el puntero se fue"*: la
+    miniatura aparecía y se cerraba sola con el mouse apoyado encima, y como el único sitio que la
+    encolaba era el `onEntered` del ícono, había que **salir y volver a entrar** para recuperarla
+    ("hay que pasar dos veces por cada ícono"). Y no se arregla subiendo el umbral: mientras el
+    reloj sea el que decide, el caso normal —alguien mirando la miniatura— es el que pierde.
+    Lo que funciona son tres cosas juntas:
+    1. **Medir presencia, no actividad**: una bandera por superficie (el ícono, el popup), puesta
+       por `onEntered` y sacada por `onExited`, y el popup abierto mientras alguna esté en `true`.
+       El `onExited` del ícono tiene que **ignorar el leave que no venga del ícono en curso**: ir
+       de un ícono al de al lado puede entregar el `exited` del viejo *después* del `entered` del
+       nuevo.
+    2. **Un timer de gracia corto (150 ms) y nada más**, porque **cada** traspaso emite un leave
+       antes del enter siguiente — del ícono al popup hay un hueco de 8 px, y del cuerpo del popup
+       a un botón hay una `MouseArea` hija que le roba el hover a la madre. Verificado con la
+       sonda: `pointerLeft` seguido de `activity` en los tres cruces. Cerrar en el leave deja los
+       botones **inalcanzables** aunque todo lo demás esté bien.
+    3. **Desmentir la bandera pegada con evidencia, no con un reloj**: cualquier movimiento del
+       puntero sobre el dock (`dockHoverPos`) mientras el popup está abierto y **ninguna** bandera
+       dice tenerlo es prueba de que una quedó pegada. Se cura solo en cuanto el usuario mueve el
+       mouse, que es lo primero que hace ante algo que no se va, y no cierra nada mientras el
+       puntero esté donde tiene que estar.
 - **La fila que abre un submenú no la declarás vos: la construye el `delegate` del menú
   padre.** Por eso las cabeceras de submenú eran las únicas sin ícono mientras todas las hojas
   ya eran `IconMenuItem`. Se arregla con `delegate: SubMenuDelegate {}` en el menú padre, y el
@@ -989,16 +1005,22 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   C++ no tenía nada malo. La sospecha (no probada contra el estado podrido original, que ya no
   existía) es la misma familia de bug que ya había mordido una vez a un popup de ícono más viejo
   (ver la entrada de `MouseArea.onExited` en la sección de *Popups y menús*, y el bullet
-  `previewLastActivity` en `AGENTS.md` → *Vista previa de ventana*): el commit anterior al
+  `previewIconHovered` en `AGENTS.md` → *Vista previa de ventana*): el commit anterior al
   bug agregó, por primera vez, un xdg_popup (la miniatura de ventana al hoverear un ícono) que
   se crea y destruye pegado a la superficie del dock — justo la clase de evento que KWin puede
   no reportarle con un *leave* limpio a la superficie de abajo.
   **No hay forma de consultar la posición real del cursor bajo Wayland sin tener ya el foco de
   puntero** (que es justo lo que está en duda), así que no hay un chequeo "contra el terreno"
   posible — la misma limitación que ya había forzado al fix del popup viejo a usar inactividad
-  en vez de una consulta de posición. El fix acá es el mismo patrón, con un umbral más largo
-  (4 s en vez de 600 ms, y apagado mientras hay menú/arrastre/preview) porque el costo de un
-  falso positivo es mayor: esconder el dock entero en vez de una miniatura chica. Ver el bullet
+  en vez de una consulta de posición. El fix acá es un watchdog de inactividad de 4 s, apagado
+  mientras hay menú/arrastre/preview, porque el costo de un falso positivo es mayor: esconder el
+  dock entero en vez de una miniatura chica.
+  **Y acá sí corresponde inactividad, a diferencia del preview** (donde el mismo patrón fue el bug
+  del 2026-08-19, ver *Popups y menús*): lo que se mide es una superficie **grande**, sobre la que
+  quedarse 4 s sin mover un pixel es raro, y el término que se corrige es un `hovered` del que ya
+  se sospecha. Sobre un ícono chico que el usuario está mirando, en cambio, quedarse quieto es
+  justo lo que hace. La regla: un reloj puede desmentir un hover que estorba, nunca sostener uno
+  que hace falta. Ver el bullet
   de `dockHoverStale` en `AGENTS.md` → *Modos de ocultamiento* para el detalle completo y el
   trade-off aceptado (un mouse **completamente** quieto sobre el dock más de 4 s, sin menú ni
   arrastre ni preview, ahora lo esconde solo — antes eso no pasaba).

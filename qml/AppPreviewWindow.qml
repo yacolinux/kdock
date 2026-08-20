@@ -30,7 +30,7 @@
 // the preview would hide, the cursor would be back on the icon… forever. The
 // buttons need input, so the flag is gone and the loop is closed from the other
 // end — Dock.qml keeps the preview up while the pointer is on it instead of
-// hiding it (see previewLastActivity there), and the popup is always placed
+// hiding it (see previewIconHovered there), and the popup is always placed
 // across the dock's edge, never under the icon that summoned it.
 //
 // Everything about *when* it shows lives in Dock.qml (showAppPreview): this file
@@ -95,11 +95,17 @@ Window {
         return m
     }
 
-    // Any pointer activity anywhere on this surface, buttons included. Dock.qml
-    // uses it as a timestamp, **not** as a hover flag: KWin does not reliably
-    // deliver the pointer-leave of a popup surface, so a `containsMouse` here
-    // would get stuck true and the preview would never close again.
+    // Pointer entered/moved on this surface, and pointer left it — buttons
+    // included, and that is not a detail: crossing from the body onto a button
+    // emits pointerLeft() and then activity(), so Dock.qml has to treat the
+    // leave as "start the grace period", never as "close now".
+    //
+    // Two signals rather than one `hovered` property because KWin does not
+    // reliably deliver the pointer-leave of a popup surface: a flag here can
+    // stick true, and Dock.qml has a cure for that (movement over the dock)
+    // which only works if it owns the flag.
     signal activity()
+    signal pointerLeft()
     signal activateRequested()
     signal closeRequested()
     signal minimizeToggled(bool on)
@@ -141,6 +147,7 @@ Window {
             hoverEnabled: true
             onEntered: previewWindow.activity()
             onPositionChanged: previewWindow.activity()
+            onExited: previewWindow.pointerLeft()
             onClicked: previewWindow.activateRequested()
         }
 
@@ -191,12 +198,12 @@ Window {
                         id: buttonArea
                         anchors.fill: parent
                         hoverEnabled: true
-                        // Same reason as the body's MouseArea: aiming at a
-                        // button means holding the pointer still, and without
-                        // these the inactivity watchdog would close the preview
-                        // mid-aim.
+                        // A child MouseArea takes the hover away from the body,
+                        // so without these the preview would read as "pointer
+                        // gone" the instant it lands on a button.
                         onEntered: previewWindow.activity()
                         onPositionChanged: previewWindow.activity()
+                        onExited: previewWindow.pointerLeft()
                         onClicked: {
                             previewWindow.activity()
                             if (button.modelData.act === "min")

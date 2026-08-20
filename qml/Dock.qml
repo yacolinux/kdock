@@ -704,9 +704,10 @@ Item {
     // dockHover, and without this term a hiding dock would slide away — taking
     // the popup anchored to it along, since onRevealedChanged closes the
     // preview. The buttons would be unreachable in exactly the modes where the
-    // dock is used most. Safe against the stuck-flag family of bug because
-    // previewWatchdog always closes the preview on its own; and dockHoverWatchdog
-    // already stands down while a preview is up, so the two agree.
+    // dock is used most. The cost is that a preview stuck on screen also pins
+    // the dock revealed (dockHoverWatchdog stands down while one is up): the
+    // brake on that is onDockHoverPosChanged below, which takes a leftover
+    // preview down on the next pointer movement over the dock.
     readonly property bool revealWanted: !hideWanted || (dockHover.hovered && !dockHoverStale)
                                          || menuOpen || dragging || appPreview.visible
     // Starts out as a binding so the first frame is right (a dock configured to
@@ -756,20 +757,20 @@ Item {
     // also the filter for late replies: a capture that comes back for a uuid we
     // are no longer pointing at is a reply to a hover the user already left.
     property string previewUuid: ""
-    // `onExited` on the icon's MouseArea is the fast path that closes the
-    // preview, but KWin does not always deliver it once the xdg_popup has
-    // appeared next to the icon (same class of unreliable-leave bug the
-    // older icon tooltip hit and fixed with an inactivity watchdog instead
-    // of trusting the leave event — see previewWatchdog below and 2026-08-18
-    // in CLAUDE-TRAMPS.md). Fed by queueAppPreview(), by the icon's
-    // onPositionChanged **and** by the preview surface's own activity() since
-    // that surface takes input; a lost leave stops updating it, so the
-    // watchdog's elapsed-time check still catches it.
-    property real previewLastActivity: 0
-    // When that last activity came from the preview surface rather than from the
-    // icon. It is the closest thing to "the pointer is on the preview" that can
-    // be trusted here — a real hover flag would be exactly the bit KWin leaves
-    // stuck true. All it buys is the longer idle threshold in previewWatchdog.
+    // The preview is *held open* while the pointer is on the icon that summoned
+    // it or on the preview itself; when both fall, previewLeaveTimer closes it.
+    // That is the whole rule, and it is presence, not activity: an earlier
+    // version closed after 600 ms without a fresh pointer *position*, which a
+    // pointer resting on an icon does not produce — so the preview appeared and
+    // vanished under a perfectly still cursor, and only re-entering the icon
+    // brought it back (reported 2026-08-19).
+    //
+    // Both flags come from enter/leave events, and KWin does not always deliver
+    // the leave once an xdg_popup has appeared next to the icon (2026-08-18 in
+    // CLAUDE-TRAMPS.md), so either can stick true. There is deliberately **no
+    // inactivity timer** to catch that any more; what unsticks them is pointer
+    // movement over the dock — see onDockHoverPosChanged below.
+    property bool previewIconHovered: false
     property bool previewPointerOnSurface: false
     // Capture width in device pixels, kept for the refresh timer.
     property int previewCaptureW: 0
@@ -808,32 +809,66 @@ Item {
     // Called from an icon's MouseArea on hover. `token` says which block asked;
     // each one carries its own switch.
     function queueAppPreview(item, model, row, token) {
-        noteIconActivity()
+        previewIconHovered = true
+        previewPointerOnSurface = false
+        previewLeaveTimer.stop()
+        previewPendingItem = item
+        previewPendingModel = model
+        previewPendingRow = row
         if (!appPreviews || !appPreviewEnabled(token)) {
             hideAppPreview()
             return
         }
-        previewPendingItem = item
-        previewPendingModel = model
-        previewPendingRow = row
         hoverPreviewTimer.restart()
     }
 
-    // The pointer is on an icon: it left the preview surface, if it ever was
-    // there, and the short idle threshold applies again.
-    function noteIconActivity() {
-        previewLastActivity = Date.now()
-        previewPointerOnSurface = false
+    // The pointer moved *inside* an icon. Two jobs, and neither is about timing:
+    // it re-asserts the hover flag (an out-of-order exited from the icon the
+    // pointer just left would have cleared it) and it re-arms the preview if
+    // there is none on screen — so a preview closed for any reason whatsoever
+    // comes back on the next twitch, instead of forcing the user to leave the
+    // icon and come back. The hoverPreviewTimer guard is what keeps sweeping
+    // the pointer across an icon from restarting the delay forever.
+    function noteIconMoved(item, model, row, token) {
+        previewIconHovered = true
+        previewPendingModel = model
+        previewPendingRow = row
         previewLeaveTimer.stop()
+        if (!appPreview.visible && !hoverPreviewTimer.running)
+            queueAppPreview(item, model, row, token)
+    }
+
+    // The pointer left an icon. Ignored unless it is the icon this preview
+    // belongs to: moving from one icon to the next can deliver the old icon's
+    // exited *after* the new one's entered, and acting on that would drop the
+    // flag with the pointer sitting on an icon — the very bug this replaces.
+    function noteIconLeft(model, row) {
+        if (model !== previewPendingModel || row !== previewPendingRow)
+            return
+        previewIconHovered = false
+        releasePreviewIfUnheld()
     }
 
     // The pointer is on the preview surface. Cancels the grace period the icon's
     // onExited started, which is what lets the pointer cross the gap between the
     // icon and the popup without the preview closing on the way.
     function noteSurfaceActivity() {
-        previewLastActivity = Date.now()
         previewPointerOnSurface = true
         previewLeaveTimer.stop()
+    }
+
+    function noteSurfaceLeft() {
+        previewPointerOnSurface = false
+        releasePreviewIfUnheld()
+    }
+
+    // Nothing holds the preview any more: start the (short) grace period. It is
+    // a timer and not an immediate hide because every hand-over — icon to gap to
+    // popup, popup body to a button — passes through a moment where neither side
+    // claims the pointer.
+    function releasePreviewIfUnheld() {
+        if (!previewIconHovered && !previewPointerOnSurface)
+            previewLeaveTimer.restart()
     }
 
     function showAppPreview(item, model, row) {
@@ -959,6 +994,9 @@ Item {
     function hideAppPreview() {
         hoverPreviewTimer.stop()
         previewLeaveTimer.stop()
+        // The surface is going away, so nothing can be on it. previewIconHovered
+        // is left alone on purpose: it is a fact about where the pointer is, and
+        // the pointer may well still be on the icon (this runs on click, too).
         previewPointerOnSurface = false
         if (previewUuid !== "") {
             if (appPreviews)
@@ -988,42 +1026,15 @@ Item {
         onTriggered: if (appPreviews) appPreviews.request(root.previewUuid, root.previewCaptureW)
     }
 
-    // Grace period for the gap between the icon and the popup. The icon's
-    // onExited no longer closes the preview outright: there are 8 px of nothing
-    // in between, and closing on the way out would make the buttons
-    // unreachable. Any activity() from the preview surface stops this timer;
-    // if none comes, the pointer really did leave and the preview closes about
-    // as promptly as it used to.
+    // The one and only close-by-time, and it is a hand-over grace period, not a
+    // timeout: it covers the 8 px of nothing between the icon and the popup and
+    // the instant between leaving the popup's body and entering one of its
+    // buttons. Short on purpose — the pointer leaving for real should take the
+    // preview with it right away.
     Timer {
         id: previewLeaveTimer
-        interval: 250
+        interval: 150
         onTriggered: root.hideAppPreview()
-    }
-
-    // Safety net for the lost-leave case documented at previewLastActivity
-    // above: if nothing has touched that timestamp in a while, neither the
-    // icon's MouseArea nor the preview surface is receiving events, so treat it
-    // as "left" even though no exited fired. Only runs while a preview is up,
-    // and does nothing when the leave arrives normally (the grace timer has
-    // already closed it by then).
-    //
-    // Two thresholds, and the long one is the whole point of the feature:
-    // aiming at a 20 px button means holding the pointer perfectly still, and
-    // 600 ms of that would close the preview mid-click. While the last activity
-    // came from the preview surface the budget is 5 s — the same trade-off
-    // already accepted for dockHoverStale below: a pointer parked dead still on
-    // the preview for 5 s closes it, and in exchange a hover bit stuck by a
-    // dropped leave heals on its own instead of pinning the popup forever.
-    Timer {
-        id: previewWatchdog
-        interval: 300
-        repeat: true
-        running: appPreview.visible
-        onTriggered: {
-            var budget = root.previewPointerOnSurface ? 5000 : 600
-            if (Date.now() - root.previewLastActivity > budget)
-                root.hideAppPreview()
-        }
     }
 
     Connections {
@@ -1052,6 +1063,7 @@ Item {
         showButtons: config.appPreviewButtons
 
         onActivity: root.noteSurfaceActivity()
+        onPointerLeft: root.noteSurfaceLeft()
         onActivateRequested: root.previewWindowAction("activate", true)
         onCloseRequested: root.previewWindowAction("close", true)
         onMinimizeToggled: (on) => root.previewWindowAction("minimize", on)
@@ -1287,7 +1299,22 @@ Item {
     property bool dockHoverStale: false
     property real dockHoverLastActivity: 0
     property point dockHoverPos: dockHover.point.position
-    onDockHoverPosChanged: { dockHoverLastActivity = Date.now(); dockHoverStale = false }
+    onDockHoverPosChanged: {
+        dockHoverLastActivity = Date.now()
+        dockHoverStale = false
+        // This is what replaces the preview's old inactivity watchdog. The
+        // pointer is demonstrably moving over the dock's surface; if neither the
+        // preview's icon nor the preview itself claims it, one of those two
+        // flags is stuck true from a leave KWin never delivered, and the preview
+        // on screen is a leftover. It cannot misfire while the pointer really is
+        // on the icon (previewIconHovered is true then) nor while it is on the
+        // preview (those moves never reach this surface), so the cure costs no
+        // timer and no false positive: the stuck flag heals the moment the user
+        // moves the mouse over the dock again, which is the first thing anyone
+        // does when a thumbnail will not go away.
+        if (appPreview.visible && !previewIconHovered && !previewPointerOnSurface)
+            previewLeaveTimer.restart()
+    }
     Connections {
         target: dockHover
         function onHoveredChanged() {
@@ -2189,11 +2216,13 @@ Item {
                                                             appsGrid.sectionToken)
                             // Not hideAppPreview(): the pointer may be on its
                             // way to the preview's buttons, and there are 8 px
-                            // of nothing to cross first. previewLeaveTimer
-                            // closes it unless the preview says otherwise.
-                            onExited: if (appPreview.visible) previewLeaveTimer.restart()
-                                      else root.hideAppPreview()
-                            onPositionChanged: root.noteIconActivity()
+                            // of nothing to cross first. noteIconLeft() drops
+                            // the hover flag and lets previewLeaveTimer close
+                            // it unless the preview claims the pointer first.
+                            onExited: root.noteIconLeft(appsGrid.appsModel, delegateRoot.index)
+                            onPositionChanged: root.noteIconMoved(content, appsGrid.appsModel,
+                                                                  delegateRoot.index,
+                                                                  appsGrid.sectionToken)
                             onPressed: (mouse) => {
                                 root.hideAppPreview()
                                 drag.target = mouse.button === Qt.LeftButton ? content : null
