@@ -85,6 +85,45 @@ QString paletteValue(const QString &key)
     return lxqt.value(key).toString();
 }
 
+// El registro de las herramientas falsas (tests/lib/fakebin.sh), que es donde se
+// ve **la decisión**: qué argumentos recibió kwriteconfig6. El archivo vive al
+// lado del binario falso, así que sale del primer directorio del PATH que ctest
+// arma para estos tests.
+QString callsLogPath()
+{
+    const QString exe = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
+    if (exe.isEmpty())
+        return {};
+    return QFileInfo(exe).absolutePath() + QStringLiteral("/calls.log");
+}
+
+QString readCallsLog()
+{
+    QFile f(callsLogPath());
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    return QString::fromUtf8(f.readAll());
+}
+
+void clearCallsLog()
+{
+    QFile f(callsLogPath());
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.close();
+}
+
+// Vaciar el registro **después** de dejar aterrizar lo que ya estaba en vuelo.
+// Las herramientas salen por QProcess::startDetached, así que las de una prueba
+// anterior pueden escribir su línea bien después de que esa prueba terminó: un
+// clearCallsLog() a secas deja pasar esas rezagadas y la prueba siguiente las
+// cuenta como propias. Le costó dos diagnósticos a la de la casilla de colores,
+// que veía tres invocaciones que no había hecho nadie.
+void settleAndClearCallsLog()
+{
+    QTest::qWait(700);
+    clearCallsLog();
+}
+
 // Una clave suelta de lxqt.conf, con el mismo sync() y por la misma razón.
 QString lxqtValue(const QString &key)
 {
@@ -321,6 +360,64 @@ private slots:
         QVERIFY(compat.iconTheme().isEmpty());
         compat.setEnabled(true);
         QVERIFY(lxqtValue(QStringLiteral("icon_theme")).isEmpty());
+    }
+
+    // ---- La mitad que le habla a las apps de KDE ---------------------------
+    // `plasma-apply-colorscheme` escribe [General] ColorScheme y los grupos
+    // Colors:*, pero **nunca** [UiSettings] ColorScheme — y KColorSchemeManager,
+    // que construye toda app KXmlGui, lee solo esa última. Sin ella decide que
+    // no hay nada configurado y pisa la paleta que el tema de plataforma acababa
+    // de dar, con su Breeze Light compilado adentro (#eff0f1). Bajo Plasma no se
+    // notaba porque el tema de plataforma es plasma-integration; bajo LXQt es el
+    // bug entero (2026-08-20, reportado con Dolphin).
+    //
+    // Acá se prueba **la decisión**, que es lo que suele estar mal: qué
+    // argumentos recibe kwriteconfig6. La escritura de verdad no se puede
+    // afirmar —es `startDetached` contra una herramienta falsa— y tampoco haría
+    // falta: que la clave arregla a Dolphin se midió con el binario de verdad.
+    void theUiSettingsKeyIsPropagatedForKdeApps()
+    {
+        QVERIFY(!callsLogPath().isEmpty());
+        settleAndClearCallsLog();
+        // Reescribir el kdeglobals acá y no confiar en el cleanup(): la
+        // herramienta sale asíncrona, así que una corrida **fuera de ctest**
+        // —donde el PATH falso no está y kwriteconfig6 es el de verdad— puede
+        // dejar la clave escrita después de que el cleanup pasó. El test se
+        // ejecuta por ctest, pero una precondición que depende de eso se lee
+        // como un bug del producto cuando alguien corre el binario a mano.
+        writeKdeglobals();
+
+        QtCompat compat;
+        QCOMPARE(compat.kdeColorScheme(), QStringLiteral("TestScheme"));
+        QVERIFY(compat.kdeUiSettingsScheme().isEmpty());
+        compat.setEnabled(true);
+
+        // QTRY y no una lectura directa: la herramienta sale por
+        // QProcess::startDetached, o sea **asíncrona**, y leer el registro en la
+        // línea siguiente gana la carrera solo a veces (medido: pasaba una
+        // corrida sí y otra no).
+        QTRY_VERIFY_WITH_TIMEOUT(readCallsLog().contains(QStringLiteral("kwriteconfig6 <-")), 5000);
+        const QString log = readCallsLog();
+        QVERIFY2(log.contains(QStringLiteral("--group UiSettings")), qPrintable(log));
+        QVERIFY2(log.contains(QStringLiteral("--key ColorScheme TestScheme")), qPrintable(log));
+        // Y en kdeglobals, no en otro archivo.
+        QVERIFY2(log.contains(QStringLiteral("--file kdeglobals")), qPrintable(log));
+    }
+
+    // Con la casilla de colores apagada no se toca kdeglobals: la clave es parte
+    // de aplicar el esquema, no un arreglo global que kdock imponga siempre.
+    void theUiSettingsKeyFollowsTheColorsSwitch()
+    {
+        settleAndClearCallsLog();
+        QtCompat compat;
+        compat.setColorsEnabled(false);
+        compat.setEnabled(true);
+        // Espera activa por la razón contraria a la de arriba: hay que darle a
+        // la herramienta el tiempo que habría tardado en aparecer, o el "no se
+        // llamó" pasa por llegar antes.
+        QTest::qWait(600);
+        QVERIFY2(!readCallsLog().contains(QStringLiteral("UiSettings")),
+                 qPrintable(readCallsLog()));
     }
 
     // ---- Fuentes -----------------------------------------------------------

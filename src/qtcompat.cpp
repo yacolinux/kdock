@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QGuiApplication>
 #include <QPalette>
+#include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QVariantMap>
@@ -268,6 +269,59 @@ QString QtCompat::iconTheme() const
     return kde.value(QStringLiteral("Icons/Theme")).toString();
 }
 
+QString QtCompat::kdeColorScheme() const
+{
+    const QString path =
+        QStandardPaths::locate(QStandardPaths::GenericConfigLocation, QStringLiteral("kdeglobals"));
+    if (path.isEmpty())
+        return {};
+    QSettings kde(path, QSettings::IniFormat);
+    kde.sync();
+    // NOT "General/ColorScheme": QSettings maps an INI file's [General] section
+    // onto the top level, so that path silently reads nothing (the same trap
+    // AppearanceControl::readCurrent() documents).
+    return kde.value(QStringLiteral("ColorScheme")).toString();
+}
+
+QString QtCompat::kdeUiSettingsScheme() const
+{
+    const QString path =
+        QStandardPaths::locate(QStandardPaths::GenericConfigLocation, QStringLiteral("kdeglobals"));
+    if (path.isEmpty())
+        return {};
+    QSettings kde(path, QSettings::IniFormat);
+    kde.sync();
+    // [UiSettings] is a section like any other, so it *is* addressed with the
+    // group prefix — unlike the key above.
+    return kde.value(QStringLiteral("UiSettings/ColorScheme")).toString();
+}
+
+void QtCompat::syncKdeUiSettings()
+{
+    const QString wanted = kdeColorScheme();
+    if (wanted.isEmpty())
+        return; // KDE has no scheme by name; nothing to propagate
+    if (wanted == kdeUiSettingsScheme() || wanted == m_lastUiSettingsWrite)
+        return;
+
+    // kwriteconfig6 and not QSettings: kdeglobals is a KConfig file, with
+    // syntax QSettings does not know ([$Version], the [$e]/[$i] entry markers,
+    // localised keys like Name[es]=). Rewriting it with QSettings would round
+    // trip all of that through a parser that never heard of it. This is also
+    // why AppearanceControl reaches for the same tool.
+    static const QStringList dirs = {QStringLiteral("/opt/kde/bin"), QStringLiteral("/usr/bin")};
+    QString tool = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"));
+    if (tool.isEmpty())
+        tool = QStandardPaths::findExecutable(QStringLiteral("kwriteconfig6"), dirs);
+    if (tool.isEmpty())
+        return;
+
+    m_lastUiSettingsWrite = wanted;
+    QProcess::startDetached(tool, {QStringLiteral("--file"), QStringLiteral("kdeglobals"),
+                                   QStringLiteral("--group"), QStringLiteral("UiSettings"),
+                                   QStringLiteral("--key"), QStringLiteral("ColorScheme"), wanted});
+}
+
 QList<QtCompat::Pending> QtCompat::pendingWrites() const
 {
     QList<Pending> out;
@@ -308,6 +362,14 @@ void QtCompat::apply()
 {
     if (!enabled())
         return;
+
+    // Before anything about LXQt: the half of the job that is about KDE's own
+    // applications. They never look at lxqt.conf, so nothing below would ever
+    // reach them; what they need is the [UiSettings] key. Guarded inside, and
+    // gated by the colors switch because that is the scheme it propagates.
+    if (colorsEnabled())
+        syncKdeUiSettings();
+
     const auto pending = pendingWrites();
     if (pending.isEmpty())
         return; // every part off, or kdeglobals unreadable

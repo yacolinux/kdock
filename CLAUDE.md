@@ -669,6 +669,24 @@ env XDG_CONFIG_HOME=/tmp/qtc/config XDG_DATA_HOME=/tmp/qtc/data QT_QPA_PLATFORM=
 
 Tres cosas que costaron una corrida cada una:
 
+- **Una app de KDE no se prueba con el arnés de una app Qt pelada.** Toda app KXmlGui construye
+  `KColorSchemeManager`, que **pisa la paleta del tema de plataforma**; una sonda `QApplication`
+  mínima da verde sobre un escritorio donde Dolphin sigue en Breeze Light. La forma barata de ver
+  la diferencia son dos sondas de veinte líneas —una pelada y otra que llame a
+  `KColorSchemeManager::instance()`— imprimiendo `qApp->palette()` antes y después: ahí el salto
+  de `#2c3746` a `#eff0f1` se lee de una. Y la prueba final es **Dolphin de verdad bajo Xvfb**
+  (`XDG_CONFIG_HOME` descartable + `import -window root` + contar colores dominantes con PIL),
+  que es como se cerró el bug del 2026-08-20.
+- **Los tests unitarios hay que correrlos por `ctest`, no ejecutando el binario a mano.** El
+  `PATH` con las herramientas falsas lo pone `set_tests_properties`, así que
+  `./build/tests/tst_qtcompat` usa el `kwriteconfig6` **de verdad** — que además escribe en el
+  `kdeglobals` del sandbox y hace fallar la corrida siguiente por una precondición que parece un
+  bug del producto. Me pasó (2026-08-20).
+- **Las herramientas falsas escriben su línea de `calls.log` tarde.** Salen por
+  `startDetached`, así que las de una prueba pueden aterrizar **después** de que esa prueba
+  terminó: un `clear` a secas al empezar la siguiente deja pasar las rezagadas y las cuenta como
+  propias (la prueba de la casilla de colores veía tres invocaciones ajenas). Hay que esperar y
+  *después* vaciar, y afirmar sobre el log con `QTRY_VERIFY`, nunca con una lectura directa.
 - **La segunda mitad de la feature no se prueba con una aserción sobre el archivo.** Que las
   diez claves queden bien escritas **no** prueba que algo se repinte: eso depende del
   `QFileSystemWatcher` del plugin, que vive en otro proceso. Lo único que lo prueba es la sesión

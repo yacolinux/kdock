@@ -437,4 +437,5 @@ private:
     // Theme::changed (i.e. whenever the KDE appearance moves).
     QFormLayout *m_qtCompatForm = nullptr;
     QLabel *m_qtCompatIcons = nullptr;
+    QLabel *m_qtCompatUiSettings = nullptr;
 };

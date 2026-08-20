@@ -105,6 +105,14 @@ public:
     // same reason. Empty when kdeglobals has none.
     QString iconTheme() const;
 
+    // The two halves of the KDE-application fix, for the tab to show: the
+    // scheme plasma-apply-colorscheme wrote ([General] ColorScheme) and the one
+    // KColorSchemeManager actually reads ([UiSettings] ColorScheme). They have
+    // to be equal or every KDE application ignores the scheme — see
+    // syncKdeUiSettings().
+    QString kdeColorScheme() const;
+    QString kdeUiSettingsScheme() const;
+
     // Absolute path of the file the LXQt platform theme watches, for the tab's
     // diagnostics line. Built the same way the plugin builds it.
     static QString lxqtConfPath();
@@ -132,10 +140,31 @@ private:
     // key -> color, in the order of the [Palette] group. Empty when kdeglobals
     // cannot be read at all.
     QList<QPair<QString, QString>> buildPalette() const;
+    // Copy [General] ColorScheme onto [UiSettings] ColorScheme in kdeglobals.
+    //
+    // **This is what makes KDE applications follow the scheme at all**, and it
+    // is not something kdock invented: plasma-apply-colorscheme writes the
+    // first key and the Colors:* groups but never the second, while
+    // KColorSchemeManager — which every KXmlGui application constructs — reads
+    // only the second. With it missing, KColorSchemeManager decides nothing is
+    // configured and overwrites the palette the platform theme just provided
+    // with its compiled-in Breeze Light (#eff0f1). Under Plasma this never
+    // showed because plasma-integration is the platform theme; under LXQt it is
+    // the whole bug (2026-08-20, reportado por el usuario con Dolphin).
+    //
+    // Both keys hold the scheme's **file base name** ("BreezeDark", not "Breeze
+    // Dark") — measured by running the tool into a throwaway XDG_CONFIG_HOME —
+    // so the copy is verbatim.
+    void syncKdeUiSettings();
     void apply();
 
     Theme *m_theme = nullptr;
     // Coalesces the burst of Theme::changed a scheme change produces (dark mode
     // and ColorAuto write kdeglobals more than once per transition).
     QTimer m_debounce;
+    // Last value handed to kwriteconfig6 for [UiSettings] ColorScheme. That
+    // write is detached, so the next apply() — which the write itself triggers
+    // through Theme::changed — can still read the old value and fire again.
+    // Converges either way, but this stops the burst.
+    QString m_lastUiSettingsWrite;
 };

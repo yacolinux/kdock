@@ -349,6 +349,7 @@ void SettingsDialog::buildTabs()
     // owned.
     m_qtCompatForm = nullptr;
     m_qtCompatIcons = nullptr;
+    m_qtCompatUiSettings = nullptr;
     if (m_manager && m_manager->qtCompat())
         addTab(createQtCompatTab(), tr("Modo QT"));
     m_audioTabIndex = -1;
@@ -4303,6 +4304,20 @@ void SettingsDialog::reloadQtCompatTranslation()
     while (m_qtCompatForm->rowCount() > 0)
         m_qtCompatForm->removeRow(0);
 
+    if (m_qtCompatUiSettings) {
+        const QString general = compat->kdeColorScheme();
+        const QString ui = compat->kdeUiSettingsScheme();
+        if (general.isEmpty()) {
+            m_qtCompatUiSettings->setText(tr("KDE no tiene esquema definido por nombre."));
+        } else if (general == ui) {
+            m_qtCompatUiSettings->setText(tr("<b>%1</b> — al día").arg(ui));
+        } else {
+            m_qtCompatUiSettings->setText(
+                tr("<b>%1</b> → hay que copiarlo a <tt>[UiSettings]</tt> (ahora: %2)")
+                    .arg(general, ui.isEmpty() ? tr("sin definir") : ui));
+        }
+    }
+
     if (m_qtCompatIcons) {
         const QString icons = compat->iconTheme();
         m_qtCompatIcons->setText(icons.isEmpty()
@@ -4405,6 +4420,19 @@ QWidget *SettingsDialog::createQtCompatTab()
     } else {
         schemeForm->addRow(new QLabel(tr("(sin AppearanceControl)"), schemeBox));
     }
+    // La clave que hace que las apps de KDE hagan caso. Se muestra porque es
+    // invisible de otro modo y porque es exactamente lo que estaba roto: sin
+    // ella, Dolphin y compañía se pintan de Breeze Light y parece que la solapa
+    // entera no hace nada.
+    m_qtCompatUiSettings = new QLabel(schemeBox);
+    m_qtCompatUiSettings->setWordWrap(true);
+    m_qtCompatUiSettings->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_qtCompatUiSettings->setToolTip(
+        tr("plasma-apply-colorscheme escribe <tt>[General] ColorScheme</tt>, pero las apps "
+           "de KDE leen <tt>[UiSettings] ColorScheme</tt> (KColorSchemeManager). Si falta, "
+           "cada app de KDE pisa la paleta con su Breeze Light de fábrica. kdock copia la "
+           "primera sobre la segunda."));
+    schemeForm->addRow(tr("· Apps KDE:"), m_qtCompatUiSettings);
     layout->addWidget(schemeBox);
 
     // --- Icon set, same mirror idiom ---------------------------------------
