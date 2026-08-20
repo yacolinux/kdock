@@ -65,7 +65,35 @@ void readAllAsync(int fd, Fn &&done)
     auto *buffer = new QByteArray;
     auto *callback = new std::decay_t<Fn>(std::forward<Fn>(done));
 
-    const auto finish = [notifier, buffer, callback, fd](bool ok) {
+    // Declared before `finish` so the latter can stop it — which is the whole
+    // point, see below.
+    auto *watchdog = new QTimer(notifier);
+
+    // **finish() must run exactly once, and both halves of that are needed.**
+    //
+    // It tears down state the *other* path still holds a copy of (the two
+    // lambdas below capture `buffer`, `callback` and `fd` by value), so a second
+    // call is a double free — and the cleanup it does is not enough to prevent
+    // one on its own:
+    //
+    //   - `notifier->deleteLater()` is **deferred**, and the watchdog is only a
+    //     child of the notifier, so it dies with it — later. Any nested event
+    //     loop running in between still fires the timer. That is not a
+    //     hypothetical: kdock's own startup has one (GlobalShortcuts::
+    //     registerAction does a blocking QDBusConnection::call), and a clipboard
+    //     transfer in flight at that moment took the process down with
+    //     "double free or corruption" (2026-08-20).
+    //   - `setEnabled(false)` stops future activations but says nothing about an
+    //     activation already queued.
+    //
+    // So: stop the timer, and guard against re-entry anyway. The flag lives on
+    // the notifier, which is guaranteed alive for the whole window (deleteLater
+    // cannot have run yet when a stale lambda fires).
+    const auto finish = [notifier, buffer, callback, fd, watchdog](bool ok) {
+        if (notifier->property("kdock.transferDone").toBool())
+            return;
+        notifier->setProperty("kdock.transferDone", true);
+        watchdog->stop();
         notifier->setEnabled(false);
         (*callback)(ok ? *buffer : QByteArray());
         delete buffer;
@@ -74,7 +102,6 @@ void readAllAsync(int fd, Fn &&done)
         notifier->deleteLater();
     };
 
-    auto *watchdog = new QTimer(notifier);
     watchdog->setSingleShot(true);
     watchdog->setInterval(kTransferTimeoutMs);
     QObject::connect(watchdog, &QTimer::timeout, notifier, [finish] {
