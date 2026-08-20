@@ -2162,16 +2162,52 @@ QWidget *SettingsDialog::createWidgetsTab()
     auto *showSystray = new QCheckBox(tr("Mostrar la bandeja del sistema"), tab);
     showSystray->setChecked(m_config->showSystray());
     // Only docks that can be on screen at the same time collide: a dock bound
-    // to another virtual desktop may host its own tray.
+    // to another virtual desktop may host its own tray. When taken elsewhere the
+    // checkbox stays enabled but checking it asks for confirmation to move the
+    // tray here (irreversible except by re-enabling it from the other dock).
     const QString systrayOwner = m_manager ? m_manager->systrayDockIdFor(m_dockId) : QString();
     const bool takenElsewhere = !systrayOwner.isEmpty() && systrayOwner != m_dockId;
-    showSystray->setEnabled(!takenElsewhere);
-    connect(showSystray, &QCheckBox::toggled, m_config, &DockConfig::setShowSystray);
+    // Keep enabled so the user can request the move; the toggled handler will
+    // confirm before stealing the tray from the other dock.
+    showSystray->setEnabled(true);
+    if (takenElsewhere)
+        showSystray->setToolTip(tr("La bandeja ya está activa en \"%1\". Al marcarla acá se pedirá "
+                                   "confirmación para quitarla de allí y activarla aquí.")
+                                    .arg(dockLabel(systrayOwner)));
+    connect(showSystray, &QCheckBox::toggled, this, [this, showSystray](bool checked) {
+        if (!checked) {
+            m_config->setShowSystray(false);
+            return;
+        }
+        const QString owner = m_manager ? m_manager->systrayDockIdFor(m_dockId) : QString();
+        const bool taken = !owner.isEmpty() && owner != m_dockId;
+        if (taken) {
+            const auto reply = QMessageBox::question(
+                this, tr("Mover bandeja del sistema"),
+                tr("La bandeja del sistema ya está activa en \"%1\".\n\n"
+                   "¿Quitarla de allí y activarla en \"%2\"?\n"
+                   "Este cambio quitará la bandeja del otro dock y solo podrá "
+                   "revertirse volviendo a activarla desde ese dock.")
+                    .arg(dockLabel(owner), dockLabel(m_dockId)),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                if (DockConfig *other = m_manager->configFor(owner))
+                    other->setShowSystray(false);
+                m_config->setShowSystray(true);
+            } else {
+                const QSignalBlocker block(showSystray);
+                showSystray->setChecked(false);
+            }
+        } else {
+            m_config->setShowSystray(true);
+        }
+    });
     form->addRow(tr("System tray:"), showSystray);
 
     if (takenElsewhere) {
-        auto *note = new QLabel(tr("La bandeja ya está activa en \"%1\". Desmarcala ahí "
-                                   "para poder usarla acá.").arg(dockLabel(systrayOwner)),
+        auto *note = new QLabel(tr("La bandeja ya está activa en \"%1\". Al marcar la casilla se "
+                                   "pedirá confirmación para moverla aquí (se quitará del otro dock).")
+                                    .arg(dockLabel(systrayOwner)),
                                 tab);
         note->setWordWrap(true);
         note->setStyleSheet(QStringLiteral("color: gray; font-style: italic;"));
