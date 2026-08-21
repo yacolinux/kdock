@@ -125,6 +125,9 @@ public:
     // not, the write still happens (it is the session's file, not ours) but
     // nothing re-themes, which is worth saying out loud in the tab.
     static bool lxqtPlatformTheme();
+    // Push the session's QT/XDG env into systemd/dbus activation environment
+    // so GIO-launched KDE apps (magnet handlers, etc.) inherit QT_QPA_PLATFORMTHEME.
+    static void updateActivationEnvironment();
 
 signals:
     void changed();

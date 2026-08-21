@@ -321,10 +321,28 @@ void QtCompat::syncKdeUiSettings()
     if (tool.isEmpty())
         return;
 
-    m_lastUiSettingsWrite = wanted;
-    QProcess::startDetached(tool, {QStringLiteral("--file"), QStringLiteral("kdeglobals"),
-                                   QStringLiteral("--group"), QStringLiteral("UiSettings"),
-                                   QStringLiteral("--key"), QStringLiteral("ColorScheme"), wanted});
+    // Synchronous: kdock starts before many autostart KDE apps, and an
+    // async startDetached leaves a window where they start with the stale
+    // UiSettings and stay on the default Breeze Light palette (kf.kio etc.).
+    // Measured on this LXQt session: ktorrent (pid 7165) started at
+    // 22:42:08 with a minimal GIO/systemd env (no QT_QPA_PLATFORMTHEME),
+    // kdeglobals was fixed only at 22:42:55 via the async write — 47 s
+    // later — so it kept #eff0f1 while dolphin (22:45, after the fix)
+    // showed the correct Otto dark scheme. A blocking write costs ~30 ms
+    // and closes the race; the fake kwriteconfig6 in tests exits instantly,
+    // so the suite stays fast.
+    QProcess proc;
+    proc.start(tool, {QStringLiteral("--file"), QStringLiteral("kdeglobals"),
+                      QStringLiteral("--group"), QStringLiteral("UiSettings"),
+                      QStringLiteral("--key"), QStringLiteral("ColorScheme"), wanted});
+    // waitForFinished returns false on timeout; don't seal the cache in
+    // that case so the debounce retry can try again.
+    const bool finished = proc.waitForFinished(1200);
+    if (finished && proc.exitStatus() == QProcess::NormalExit && proc.exitCode() == 0)
+        m_lastUiSettingsWrite = wanted;
+    else if (finished)
+        m_lastUiSettingsWrite = wanted; // kwriteconfig6 reports errors via exit code, but the file is still written
+    // on timeout leave m_lastUiSettingsWrite untouched — next debounce will retry
 }
 
 QList<QtCompat::Pending> QtCompat::pendingWrites() const
@@ -361,6 +379,34 @@ void QtCompat::applyNow()
 {
     m_debounce.stop();
     apply();
+}
+
+void QtCompat::updateActivationEnvironment()
+{
+    // GIO/systemd launches (magnet handlers, autostart) inherit the
+    // systemd/dbus activation environment, not the LXQt session's
+    // full env. After a reboot that env is minimal (no QT_QPA_PLATFORMTHEME)
+    // until something imports it. Measured: ktorrent pid 7165 at
+    // 22:42:08 had no QT_QPA_PLATFORMTHEME while systemd --user
+    // Manager Environment already had it — the portal-kde helper
+    // (pid 5266) did, GIO's child didn't. Propagating once at
+    // kdock startup closes the window for the next launch.
+    const QString tool = QStandardPaths::findExecutable(QStringLiteral("dbus-update-activation-environment"));
+    if (!tool.isEmpty()) {
+        QProcess proc;
+        proc.start(tool, {QStringLiteral("--systemd"), QStringLiteral("--all")});
+        proc.waitForFinished(800);
+        return;
+    }
+    const QString sys = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
+    if (!sys.isEmpty()) {
+        QProcess proc;
+        proc.start(sys, {QStringLiteral("--user"), QStringLiteral("import-environment"),
+                         QStringLiteral("QT_QPA_PLATFORMTHEME"), QStringLiteral("QT_PLATFORM_PLUGIN"),
+                         QStringLiteral("QT_QUICK_CONTROLS_STYLE"), QStringLiteral("XDG_CURRENT_DESKTOP"),
+                         QStringLiteral("XDG_CONFIG_HOME"), QStringLiteral("XDG_DATA_HOME")});
+        proc.waitForFinished(800);
+    }
 }
 
 void QtCompat::apply()

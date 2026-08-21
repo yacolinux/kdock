@@ -414,6 +414,13 @@ int main(int argc, char *argv[])
     // data dir would count as a first run and re-theme the developer's desktop.
     if (Session::isLxqt() && !QtCompat::configured())
         qtCompat.setEnabled(true);
+    // Ensure GIO/systemd-launched KDE apps inherit the LXQt platform theme
+    // on every boot, not just the first time the feature is enabled.
+    // Without this, a magnet-handler ktorrent at 22:42:08 had no
+    // QT_QPA_PLATFORMTHEME while dolphin at 22:45 did — the former fell
+    // back to Fusion/Breeze Light even after kdeglobals was fixed.
+    if (Session::isLxqt())
+        QtCompat::updateActivationEnvironment();
     // The weather widget draws from the same backend the mini-app and the
     // control panel use; its own config file is watched, so a city picked in
     // kdock-weather reaches the dock without a restart.
