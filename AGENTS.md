@@ -1230,8 +1230,12 @@ screen` (`pcmanfm/application.cpp`, el `setWallpaper` de D-Bus recorre **todas**
 escritorio) y bajo Wayland fuerza `perScreenWallpaper = false` (`pcmanfm/desktopwindow.cpp`).
 De escritorios virtuales no sabe nada. Así que kdock los dibuja: **una superficie layer-shell
 por monitor**, en la capa *background*, anclada a los cuatro bordes, `exclusiveZone = -1` y —
-esto importa— **sin región de entrada** (`setMask(QRegion())`): es decorado, todo clic tiene que
-pasar de largo.
+esto importa— **sin región de entrada** (`Qt::WindowTransparentForInput`): es decorado, todo clic
+tiene que pasar de largo. Trampa 2026-08-21: `QWindow::setMask(QRegion())` vacía en Qt Wayland no
+da región vacía sino `set_input_region(nullptr)` = superficie completa (ver
+`QWaylandWindow::updateInputRegion`); solo el flag `WindowTransparentForInput` produce una
+`wl_region` vacía y deja pasar los clics. El `setMask` re-aplicado tras cada `show()` (fix
+`524ebb8`) era un no-op por eso mismo — la ventana bloqueaba 4–8 s tras reiniciar.
 
 **La asimetría con el motor de Plasma es total, y viene de la restricción opuesta**:
 
@@ -2094,7 +2098,7 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   gris—, y eso se leyó como "no funciona cambiar el fondo de todos los monitores"
   (2026-08-10): un botón deshabilitado por una opción vacía no explica nada. El script quedó
   como override para quien tenga el suyo.
-- **Fondo de escritorio QT** (`cards/WallpaperQtCard.qml`, 2026-08-20): capa LXQt del mismo widget, como ítem separado **wallpaperqt** (no condicional sobre `wallpaper`). Un botón por monitor + `Todos`, ambos vía `WallpaperControl` con `setAlternateEngine` idéntico al dock (`src/wallpapercontrol.{h,cpp}` + `src/lxqtwallpapers.{h,cpp}` + `src/wallpaperwindow.{h,cpp}` + `src/wallpaperfolder.{h,cpp}` + `qml/Wallpaper.qml`). En LXQt el fondo lo dibuja `LxqtWallpapers` (layer-shell `background`/`scope="desktop"`/`exclusiveZone=-1`/`mask QRegion()`), con `randomOther` y `kHistory=3`; en Plasma el mismo `WallpaperControl` habla con `org.kde.PlasmaShell`. `controlmanager` no duplica el renderer cuando kdock ya lo hace: delega vía D-Bus `org.kdock.Dock nextWallpaper/nextWallpaperAll` (`src/dockservice.{h,cpp}` + `controlmanager/src/docklink.{h,cpp}` + `DockManager::sharedWallpaperControl()`), fallback local `LxqtWallpapers` si kdock no está. Habilitado siempre (tab por defecto, `cmsections.cpp` + `cmconfig.cpp:knownSections`), icono `media-playlist-shuffle` (igual que `nextwallpaperqt` del dock), sin `wallpaperScript` (no aplica en LXQt).
+- **Fondo de escritorio QT** (`cards/WallpaperQtCard.qml`, 2026-08-20): capa LXQt del mismo widget, como ítem separado **wallpaperqt** (no condicional sobre `wallpaper`). Un botón por monitor + `Todos`, ambos vía `WallpaperControl` con `setAlternateEngine` idéntico al dock (`src/wallpapercontrol.{h,cpp}` + `src/lxqtwallpapers.{h,cpp}` + `src/wallpaperwindow.{h,cpp}` + `src/wallpaperfolder.{h,cpp}` + `qml/Wallpaper.qml`). En LXQt el fondo lo dibuja `LxqtWallpapers` (layer-shell `background`/`scope="desktop"`/`exclusiveZone=-1`/`WindowTransparentForInput`), con `randomOther` y `kHistory=3`; en Plasma el mismo `WallpaperControl` habla con `org.kde.PlasmaShell`. `controlmanager` no duplica el renderer cuando kdock ya lo hace: delega vía D-Bus `org.kdock.Dock nextWallpaper/nextWallpaperAll` (`src/dockservice.{h,cpp}` + `controlmanager/src/docklink.{h,cpp}` + `DockManager::sharedWallpaperControl()`), fallback local `LxqtWallpapers` si kdock no está. Habilitado siempre (tab por defecto, `cmsections.cpp` + `cmconfig.cpp:knownSections`), icono `media-playlist-shuffle` (igual que `nextwallpaperqt` del dock), sin `wallpaperScript` (no aplica en LXQt).
 - **El motor de la grilla es `TileLayout` sin secciones ni grupos** (`cmlayout.cpp`): hay una
   sola grilla y a lo sumo una docena de tarjetas, así que la tarjeta se identifica por el id de
   su sección. Se conservó lo que costó caro allá: colisión manual (libre → coloca; **una** del

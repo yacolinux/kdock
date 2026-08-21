@@ -24,7 +24,7 @@ WallpaperWindow::WallpaperWindow(const QString &screenName, QWindow *parent)
     , m_screenName(screenName)
 {
     setColor(Qt::transparent);
-    setFlags(Qt::FramelessWindowHint);
+    setFlags(Qt::FramelessWindowHint | Qt::WindowTransparentForInput);
     setTitle(QStringLiteral("kdock-wallpaper"));
 
     // Layer-shell properties must be in place before the platform window
@@ -45,13 +45,11 @@ WallpaperWindow::WallpaperWindow(const QString &screenName, QWindow *parent)
     setResizeMode(QQuickView::SizeRootObjectToView);
     setSource(QUrl(QStringLiteral("qrc:/qml/Wallpaper.qml")));
 
-    // Scenery, not UI: an empty mask leaves the surface with an empty input
-    // region, so clicks land on whatever is below instead of being swallowed.
-    // Set now and again after every show() (see setImage/updateScreen): a mask
-    // set before the handle exists or after a destroy()/show() cycle may be
-    // lost on some Qt versions, leaving a fullscreen transparent surface that
-    // blocks all input for a few seconds after a restart (reported 2026-08-20).
-    setMask(QRegion());
+    // Scenery, not UI: clicks must fall through. The flag above is the
+    // mechanism (see header): QWaylandWindow::updateInputRegion maps it to an
+    // empty wl_region. An empty QRegion via setMask would mean the opposite
+    // (nullptr → whole surface) and the re-apply-after-show workaround could
+    // never fix that.
 }
 
 void WallpaperWindow::applyLayerProperties()
@@ -99,11 +97,8 @@ void WallpaperWindow::updateScreen()
     }
     setScreen(target);
     setGeometry(target->geometry());
-    if (wasVisible) {
+    if (wasVisible)
         show();
-        // Re-apply after recreation: destroy()/show() resets the input region.
-        setMask(QRegion());
-    }
 }
 
 void WallpaperWindow::setImage(const QString &path, int fillMode)
@@ -129,8 +124,5 @@ void WallpaperWindow::setImage(const QString &path, int fillMode)
     if (!isVisible()) {
         updateScreen();
         show();
-        // Must follow show(): a mask set before the handle exists is not
-        // reliably applied, and the surface would block input fullscreen.
-        setMask(QRegion());
     }
 }

@@ -11,8 +11,11 @@
 //   - anchored to all four edges, which is how a layer surface asks to be the
 //     size of the output;
 //   - exclusive zone -1, i.e. "do not shrink me for anybody's panel";
-//   - **no input region at all** (setMask with an empty QRegion). This is
-//     scenery: every click has to fall through to whatever is underneath.
+//   - **no input region at all** (Qt::WindowTransparentForInput). Every click
+//     has to fall through to whatever is underneath. Trap: QWindow::setMask
+//     with an empty QRegion on Qt Wayland means set_input_region(nullptr) =
+//     the whole surface (see QWaylandWindow::updateInputRegion). Only the
+//     WindowTransparentForInput flag produces a genuinely empty wl_region.
 //
 // LxqtWallpapers owns one of these per monitor and tells it which image to
 // show. A window with no image hides itself, so a monitor kdock has nothing
