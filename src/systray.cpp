@@ -373,6 +373,27 @@ void SystrayHost::ensureWatcher()
         watcher->deleteLater();
         if (reply.isError()) {
             qWarning() << "kdock: failed to register systray host:" << reply.error().message();
+            // Watcher claimed to exist at ensureWatcher() time but its object
+            // vanished by the time we called RegisterStatusNotifierHost (stale
+            // name, crashing watcher, race on restart). Fall back to becoming
+            // the watcher ourselves instead of leaving m_active false forever
+            // (reported 2026-08-21: systray stayed empty though showSystray=true
+            // after an intense tooltip flicker + restart).
+            if (!m_isWatcher && reply.error().message().contains(QStringLiteral("No such object path"))) {
+                qInfo() << "kdock: systray watcher vanished, becoming watcher ourselves";
+                QDBusConnection bus = QDBusConnection::sessionBus();
+                new SniWatcherKdeAdaptor(this, &m_watcherObject);
+                new SniWatcherFdoAdaptor(this, &m_watcherObject);
+                bus.registerObject(WATCHER_PATH, &m_watcherObject, QDBusConnection::ExportAdaptors);
+                bus.registerService(KDE_WATCHER_SERVICE);
+                bus.registerService(FDO_WATCHER_SERVICE);
+                m_watcherService = KDE_WATCHER_SERVICE;
+                m_isWatcher = true;
+                m_active = true;
+                emit watcherHostRegistered(m_hostService);
+                qInfo() << "kdock: systray host registered (we are the watcher, fallback)";
+                return;
+            }
             return;
         }
         m_active = true;

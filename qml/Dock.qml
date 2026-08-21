@@ -686,6 +686,7 @@ Item {
                                   : Math.max(sectionLayout.implicitHeight + 2 * pad, thickness))
 
     property bool menuOpen: false
+    property bool tooltipVisible: false
     readonly property bool dragging: dragCount > 0
     // The dock wants to be out of the way: always in auto-hide mode, and only
     // while a window reaches it in intelligent-hide (dodge) mode. The other two
@@ -709,7 +710,7 @@ Item {
     // brake on that is onDockHoverPosChanged below, which takes a leftover
     // preview down on the next pointer movement over the dock.
     readonly property bool revealWanted: !hideWanted || (dockHover.hovered && !dockHoverStale)
-                                         || menuOpen || dragging || appPreview.visible
+                                         || menuOpen || dragging || appPreview.visible || tooltipVisible
     // Starts out as a binding so the first frame is right (a dock configured to
     // auto-hide comes up hidden); the handler below breaks it on the first
     // change, which is the point — from there the value is driven, not derived.
@@ -1624,8 +1625,11 @@ Item {
                             visible: config.showTooltips && secMouse.containsMouse
                                      && sec.draggable && !secMouse.drag.active
                                      && sec.token !== "clock2"
-                            delay: 400
+                                     && !root.menuOpen && !appPreview.visible
+                                     && !root.menuOpen && !appPreview.visible
+                            delay: 600
                             text: root.sectionTooltip(sec.token)
+                            onVisibleChanged: root.tooltipVisible = visible
                         }
 
 
@@ -2000,9 +2004,10 @@ Item {
                             // window itself; two of them over one icon is noise.
                             visible: config.showTooltips && mouseArea.containsMouse
                                      && !contextMenu.visible && !mouseArea.drag.active
-                                     && !appPreview.visible
+                                     && !appPreview.visible && !root.menuOpen
                             delay: 600
                             text: delegateRoot.title || delegateRoot.name
+                            onVisibleChanged: root.tooltipVisible = visible
                         }
 
                         Drag.active: mouseArea.drag.active
@@ -2626,8 +2631,9 @@ Item {
                 visible: config.showTooltips && sessionMouse.containsMouse
                          && !sessionMenu.visible
                 delay: 400
-                text: qsTr("Session")
-            }
+                            text: qsTr("Session")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
             Image {
                 id: sessionIcon
                 anchors.centerIn: parent
@@ -2697,12 +2703,13 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && batteryMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && batteryMouse.containsMouse
                          && !profileMenu.visible
                 delay: 400
-                text: battery.tooltipText + "\n"
+                            text: battery.tooltipText + "\n"
                       + qsTr("Clic derecho: brillo y energía")
-            }
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             function profileIcon(p) {
                 if (p === "power-saver") return "power-profile-power-saver"
@@ -2775,7 +2782,7 @@ Item {
                 IconMenuItem {
                     visible: battery.profiles.indexOf("power-saver") >= 0
                     height: visible ? implicitHeight : 0
-                    text: batteryRoot.profileLabel("power-saver")
+                            text: batteryRoot.profileLabel("power-saver")
                            + (battery.activeProfile === "power-saver" ? "  ✓" : "")
                     iconName: batteryRoot.profileIcon("power-saver")
                     onTriggered: battery.setProfile("power-saver")
@@ -2783,7 +2790,7 @@ Item {
                 IconMenuItem {
                     visible: battery.profiles.indexOf("balanced") >= 0
                     height: visible ? implicitHeight : 0
-                    text: batteryRoot.profileLabel("balanced")
+                            text: batteryRoot.profileLabel("balanced")
                            + (battery.activeProfile === "balanced" ? "  ✓" : "")
                     iconName: batteryRoot.profileIcon("balanced")
                     onTriggered: battery.setProfile("balanced")
@@ -2791,7 +2798,7 @@ Item {
                 IconMenuItem {
                     visible: battery.profiles.indexOf("performance") >= 0
                     height: visible ? implicitHeight : 0
-                    text: batteryRoot.profileLabel("performance")
+                            text: batteryRoot.profileLabel("performance")
                            + (battery.activeProfile === "performance" ? "  ✓" : "")
                     iconName: batteryRoot.profileIcon("performance")
                     onTriggered: battery.setProfile("performance")
@@ -2817,11 +2824,12 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && menuMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && menuMouse.containsMouse
                          && !(menuLoader.item && menuLoader.item.visible)
                 delay: 400
-                text: qsTr("Applications")
-            }
+                            text: qsTr("Applications")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 id: menuIcon
@@ -2932,10 +2940,11 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && tileMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && tileMouse.containsMouse
                 delay: 400
-                text: qsTr("Menú de mosaicos")
-            }
+                            text: qsTr("Menú de mosaicos")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 id: tileIcon
@@ -3034,10 +3043,11 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && cmMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && cmMouse.containsMouse
                 delay: 400
-                text: qsTr("Control Manager")
-            }
+                            text: qsTr("Control Manager")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Row {
                 id: cmContent
@@ -3146,11 +3156,12 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && clipMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && clipMouse.containsMouse
                          && !(clipLoader.item && clipLoader.item.visible)
                 delay: 400
-                text: qsTr("Portapapeles")
-            }
+                            text: qsTr("Portapapeles")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 id: clipIcon
@@ -3262,11 +3273,12 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && disksMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && disksMouse.containsMouse
                          && !(disksLoader.item && disksLoader.item.visible)
                 delay: 400
-                text: qsTr("Dispositivos extraíbles")
-            }
+                            text: qsTr("Dispositivos extraíbles")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 id: disksIcon
@@ -3343,11 +3355,12 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && netMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && netMouse.containsMouse
                          && !(netLoader.item && netLoader.item.visible)
                 delay: 400
-                text: network && network.primaryName ? network.primaryName : qsTr("Red")
-            }
+                            text: network && network.primaryName ? network.primaryName : qsTr("Red")
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 id: netIcon
@@ -3455,9 +3468,9 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && wxMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && wxMouse.containsMouse
                 delay: 400
-                text: {
+                            text: {
                     if (!weather || !weather.configured)
                         return qsTr("Clima: elegí una ciudad\nClic para configurarlo")
                     var t = weather.cityLabel + "\n" + weather.tempText + "  "
@@ -3466,7 +3479,8 @@ Item {
                         t += "\n" + qsTr("Sin conexión: último dato de las %1")
                                         .arg(weather.updatedText)
                     return t
-                }
+                                            onVisibleChanged: root.tooltipVisible = visible
+                        }
             }
 
             Row {
@@ -3499,7 +3513,7 @@ Item {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: text.length > 0
-                    text: weather ? weather.tempText : ""
+                            text: weather ? weather.tempText : ""
                     color: root.dockTextColor
                     opacity: weather && weather.stale ? 0.55 : 1.0
                     // Own size when set; otherwise the clock font and, with
@@ -3543,20 +3557,20 @@ Item {
                 onClosed: root.menuOpen = false
 
                 IconMenuItem {
-                    text: qsTr("Ver el pronóstico")
+                            text: qsTr("Ver el pronóstico")
                     iconName: "weather-few-clouds"
                     enabled: weather && weather.configured
                     onTriggered: weatherLauncher.toggle(config.screenName)
                 }
                 IconMenuItem {
-                    text: qsTr("Actualizar ahora")
+                            text: qsTr("Actualizar ahora")
                     iconName: "view-refresh"
                     enabled: weather && weather.configured && !weather.loading
                     onTriggered: weather.refresh(true)
                 }
                 MenuSeparator {}
                 IconMenuItem {
-                    text: qsTr("Configurar el clima…")
+                            text: qsTr("Configurar el clima…")
                     iconName: "configure"
                     onTriggered: weatherLauncher.openSettings()
                 }
@@ -3635,7 +3649,7 @@ Item {
                     Text {
                         id: pagerNumber
                         anchors.centerIn: parent
-                        text: pagerCell.position
+                            text: pagerCell.position
                         font.pixelSize: Math.max(8, Math.round(root.widgetIconPx * 0.52))
                         font.bold: config.labelBold || pagerCell.isCurrent
                         // pagerGrid contains this delegate, so its id resolves
@@ -3669,10 +3683,11 @@ Item {
 
                     ToolTip {
                         popupType: Popup.Window
-                        visible: config.showTooltips && systrayMouse.containsMouse
+                        visible: config.showTooltips && !root.menuOpen && systrayMouse.containsMouse
                         delay: 400
-                        text: model.tooltip || model.service
-                    }
+                            text: model.tooltip || model.service
+                                                onVisibleChanged: root.tooltipVisible = visible
+                        }
 
                     Image {
                         anchors.centerIn: parent
@@ -3801,13 +3816,14 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && itMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && itMouse.containsMouse
                          && !(itLoader.item && itLoader.item.visible)
                 delay: 400
-                text: appearance && appearance.currentIconTheme
+                            text: appearance && appearance.currentIconTheme
                       ? qsTr("Iconset: %1").arg(appearance.currentIconTheme)
                       : qsTr("Iconset de KDE")
-            }
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 anchors.centerIn: parent
@@ -3883,13 +3899,14 @@ Item {
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && csMouse.containsMouse
+                visible: config.showTooltips && !root.menuOpen && csMouse.containsMouse
                          && !(csLoader.item && csLoader.item.visible)
                 delay: 400
-                text: appearance && appearance.currentColorScheme
+                            text: appearance && appearance.currentColorScheme
                       ? qsTr("Colores: %1").arg(appearance.currentColorScheme)
                       : qsTr("Esquema de color de KDE")
-            }
+                                        onVisibleChanged: root.tooltipVisible = visible
+                        }
 
             Image {
                 anchors.centerIn: parent
@@ -4311,7 +4328,7 @@ Item {
             }
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && parent.hovered
+                visible: config.showTooltips && !root.menuOpen && parent.hovered
                 delay: 400
                 contentItem: Rectangle {
                     color: "#404040"
@@ -4332,6 +4349,7 @@ Item {
                             color: "#FFD700"
                             font.pixelSize: 22
                             font.bold: true
+                                                    onVisibleChanged: root.tooltipVisible = visible
                         }
                         Text {
                             width: parent.width
