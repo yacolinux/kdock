@@ -62,6 +62,7 @@ class DesktopWallpapers;
 class LxqtWallpapers;
 class AutoColorScheme;
 class QtCompat;
+class KWinScripts;
 class AppPreviews;
 
 class DockManager : public QObject
@@ -112,6 +113,9 @@ public:
         // "Modo QT": pushes the KDE color scheme onto the LXQt session palette.
         // Only the Settings dialog reaches it; no dock or QML uses it.
         QtCompat *qtCompat = nullptr;
+        // KWin scripts: list/enable/install. Lives in Modo QT tab alongside
+        // QtCompat because KWin is the WM under this LXQt session.
+        KWinScripts *kwinScripts = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -269,6 +273,7 @@ public:
     AutoColorScheme *autoColorScheme() const { return m_shared.autoColors; }
     void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
     QtCompat *qtCompat() const { return m_shared.qtCompat; }
+    KWinScripts *kwinScripts() const { return m_shared.kwinScripts; }
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

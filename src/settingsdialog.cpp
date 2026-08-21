@@ -23,6 +23,7 @@
 #include "iconpickerdialog.h"
 #include "themepicker.h"
 #include "qtcompat.h"
+#include "kwinscripts.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
 #include "weatherconfig.h"
@@ -4341,6 +4342,240 @@ void SettingsDialog::addQtCompatFontRow(QFormLayout *form, QWidget *parent,
     refresh();
 }
 
+void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
+{
+    QWidget *tab = parentLayout->parentWidget() ? qobject_cast<QWidget *>(parentLayout->parentWidget()) : nullptr;
+    // parentLayout lives inside the tab widget; retrieve tab via layout->parent()
+    // Fallback: parentLayout's parent is the tab QWidget
+    if (!tab) {
+        // layout is QVBoxLayout(tab), its parent is QWidget*
+        // qobject_cast from QObject* is safe
+        tab = qobject_cast<QWidget *>(parentLayout->parent());
+    }
+    auto *box = new QGroupBox(tr("Scripts de KWin"), tab);
+    m_kwinScriptsGroup = box;
+    auto *outer = new QVBoxLayout(box);
+
+    // Intro: LXQt uses KWin but does not manage its scripts — kdock does.
+    auto *intro = new QLabel(
+        tr("KWin es el window manager de esta sesión LXQt. Los scripts instalados "
+           "en <tt>~/.local/share/kwin/scripts/</tt> se habilitan por <tt>kwinrc [Plugins] "
+           "<i>id</i>Enabled=true</tt> y KWin los carga tras <i>Reconfigurar</i>. "
+           "Si un efecto no se activa (ej. <i>Truely Maximized</i>), suele ser esa clave en <i>false</i>, "
+           "no interferencia de LXQt."),
+        box);
+    intro->setWordWrap(true);
+    outer->addWidget(intro);
+
+    m_kwinScriptsList = new QListWidget(box);
+    m_kwinScriptsList->setMinimumHeight(160);
+    m_kwinScriptsList->setSelectionMode(QAbstractItemView::SingleSelection);
+    outer->addWidget(m_kwinScriptsList, 1);
+
+    m_kwinScriptsStatus = new QLabel(box);
+    m_kwinScriptsStatus->setWordWrap(true);
+    m_kwinScriptsStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_kwinScriptsStatus->setVisible(false);
+    outer->addWidget(m_kwinScriptsStatus);
+
+    auto *btnRow1 = new QHBoxLayout;
+    auto *toggleBtn = new QPushButton(tr("Activar/Desactivar"), box);
+    toggleBtn->setToolTip(tr("Alterna kwinrc [Plugins] <id>Enabled y hace Reconfigurar KWin."));
+    auto *reconfBtn = new QPushButton(tr("Reconfigurar KWin"), box);
+    reconfBtn->setToolTip(tr("qdbus org.kde.KWin /KWin reconfigure"));
+    auto *refreshBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Refrescar"), box);
+    btnRow1->addWidget(toggleBtn);
+    btnRow1->addWidget(reconfBtn);
+    btnRow1->addStretch();
+    btnRow1->addWidget(refreshBtn);
+    outer->addLayout(btnRow1);
+
+    auto *btnRow2 = new QHBoxLayout;
+    auto *installBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-add")), tr("Instalar desde archivo…"), box);
+    installBtn->setToolTip(tr("kpackagetool6 --type KWin/Script --install <archivo.kwinscript>"));
+    auto *removeBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("list-remove")), tr("Desinstalar"), box);
+    removeBtn->setToolTip(tr("kpackagetool6 --type KWin/Script --remove <id>"));
+    auto *openFolderBtn = new QPushButton(tr("Abrir carpeta"), box);
+    btnRow2->addWidget(installBtn);
+    btnRow2->addWidget(removeBtn);
+    btnRow2->addWidget(openFolderBtn);
+    btnRow2->addStretch();
+    outer->addLayout(btnRow2);
+
+    auto updateButtons = [this, toggleBtn, removeBtn] {
+        QListWidgetItem *it = m_kwinScriptsList ? m_kwinScriptsList->currentItem() : nullptr;
+        const bool has = it != nullptr;
+        toggleBtn->setEnabled(has);
+        removeBtn->setEnabled(has);
+        if (has) {
+            const bool en = it->data(Qt::UserRole + 1).toBool();
+            toggleBtn->setText(en ? tr("Desactivar") : tr("Activar"));
+        } else {
+            toggleBtn->setText(tr("Activar/Desactivar"));
+        }
+    };
+
+    connect(m_kwinScriptsList, &QListWidget::currentRowChanged, box, [updateButtons](int) { updateButtons(); });
+    connect(m_kwinScriptsList, &QListWidget::itemSelectionChanged, box, [updateButtons] { updateButtons(); });
+
+    connect(toggleBtn, &QPushButton::clicked, this, [this] {
+        QListWidgetItem *it = m_kwinScriptsList ? m_kwinScriptsList->currentItem() : nullptr;
+        if (!it || !m_manager || !m_manager->kwinScripts())
+            return;
+        const QString id = it->data(Qt::UserRole).toString();
+        const bool en = it->data(Qt::UserRole + 1).toBool();
+        QString err = m_manager->kwinScripts()->setEnabled(id, !en);
+        if (!err.isEmpty()) {
+            m_kwinScriptsStatus->setText(tr("Error: %1").arg(err));
+            m_kwinScriptsStatus->setVisible(true);
+        } else {
+            m_kwinScriptsStatus->setVisible(false);
+        }
+        // refresh will be triggered by file watcher; force after delay
+        QTimer::singleShot(800, this, [this] { rebuildKWinScriptsList(); });
+    });
+
+    connect(reconfBtn, &QPushButton::clicked, this, [this] {
+        if (!m_manager || !m_manager->kwinScripts())
+            return;
+        QString err = m_manager->kwinScripts()->reconfigure();
+        if (!err.isEmpty()) {
+            m_kwinScriptsStatus->setText(tr("Reconfigurar: %1").arg(err));
+            m_kwinScriptsStatus->setVisible(true);
+        } else {
+            m_kwinScriptsStatus->setText(tr("KWin reconfigurado."));
+            m_kwinScriptsStatus->setVisible(true);
+            QTimer::singleShot(1500, this, [this] {
+                if (m_kwinScriptsStatus && m_kwinScriptsStatus->text() == tr("KWin reconfigurado."))
+                    m_kwinScriptsStatus->setVisible(false);
+            });
+        }
+        QTimer::singleShot(700, this, [this] { rebuildKWinScriptsList(); });
+    });
+
+    connect(refreshBtn, &QPushButton::clicked, this, [this] { rebuildKWinScriptsList(); });
+
+    connect(installBtn, &QPushButton::clicked, this, [this] {
+        if (!m_manager || !m_manager->kwinScripts())
+            return;
+        const QString path = QFileDialog::getOpenFileName(
+            this, tr("Instalar script de KWin"), QDir::homePath(),
+            tr("KWin scripts (*.kwinscript *.tar.gz *.tgz);;Todos (*.*)"));
+        if (path.isEmpty())
+            return;
+        QString err = m_manager->kwinScripts()->install(path);
+        if (!err.isEmpty()) {
+            QMessageBox::warning(this, tr("Instalar script"), err);
+            m_kwinScriptsStatus->setText(tr("Instalar: %1").arg(err));
+            m_kwinScriptsStatus->setVisible(true);
+        } else {
+            m_kwinScriptsStatus->setText(tr("Instalado: %1").arg(QFileInfo(path).fileName()));
+            m_kwinScriptsStatus->setVisible(true);
+        }
+        rebuildKWinScriptsList();
+    });
+
+    connect(removeBtn, &QPushButton::clicked, this, [this] {
+        QListWidgetItem *it = m_kwinScriptsList ? m_kwinScriptsList->currentItem() : nullptr;
+        if (!it || !m_manager || !m_manager->kwinScripts())
+            return;
+        const QString id = it->data(Qt::UserRole).toString();
+        if (QMessageBox::question(this, tr("Desinstalar script"),
+                                   tr("¿Desinstalar \"%1\" (%2)?").arg(it->text(), id),
+                                   QMessageBox::Yes | QMessageBox::No)
+            != QMessageBox::Yes)
+            return;
+        QString err = m_manager->kwinScripts()->uninstall(id);
+        if (!err.isEmpty()) {
+            QMessageBox::warning(this, tr("Desinstalar"), err);
+            m_kwinScriptsStatus->setText(tr("Desinstalar: %1").arg(err));
+            m_kwinScriptsStatus->setVisible(true);
+        } else {
+            m_kwinScriptsStatus->setVisible(false);
+        }
+        rebuildKWinScriptsList();
+    });
+
+    connect(openFolderBtn, &QPushButton::clicked, this, [] {
+        const QString dir = QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))
+                                .filePath(QStringLiteral("kwin/scripts"));
+        QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
+    });
+
+    // Initial populate + live updates
+    rebuildKWinScriptsList();
+    if (m_manager && m_manager->kwinScripts()) {
+        connect(m_manager->kwinScripts(), &KWinScripts::changed, box, [this] { rebuildKWinScriptsList(); });
+    }
+
+    parentLayout->addWidget(box);
+    updateButtons();
+}
+
+void SettingsDialog::rebuildKWinScriptsList()
+{
+    if (!m_kwinScriptsList || !m_manager || !m_manager->kwinScripts())
+        return;
+    KWinScripts *ks = m_manager->kwinScripts();
+    if (!ks->available()) {
+        m_kwinScriptsList->clear();
+        auto *it = new QListWidgetItem(tr("(KWin no responde — org.kde.KWin no está en el bus)"));
+        it->setFlags(it->flags() & ~Qt::ItemIsSelectable);
+        m_kwinScriptsList->addItem(it);
+        if (m_kwinScriptsGroup)
+            m_kwinScriptsGroup->setEnabled(false);
+        return;
+    }
+    if (m_kwinScriptsGroup)
+        m_kwinScriptsGroup->setEnabled(true);
+
+    ks->refresh();
+    const QString prevId = m_kwinScriptsList->currentItem()
+                               ? m_kwinScriptsList->currentItem()->data(Qt::UserRole).toString()
+                               : QString();
+    m_kwinScriptsList->clear();
+    const QVariantList list = ks->scripts();
+    for (const QVariant &v : list) {
+        const QVariantMap m = v.toMap();
+        const QString id = m.value(QStringLiteral("id")).toString();
+        const QString name = m.value(QStringLiteral("name")).toString();
+        const QString version = m.value(QStringLiteral("version")).toString();
+        const QString api = m.value(QStringLiteral("api")).toString();
+        const bool en = m.value(QStringLiteral("enabled")).toBool();
+        const bool loaded = m.value(QStringLiteral("loaded")).toBool();
+        QString label = QStringLiteral("%1  (%2)").arg(name, id);
+        if (!version.isEmpty())
+            label += QStringLiteral("  v%1").arg(version);
+        if (!api.isEmpty())
+            label += QStringLiteral("  [%1]").arg(api);
+        label += en ? tr(" — Activado") : tr(" — Desactivado");
+        label += loaded ? tr(" · Cargado") : tr(" · No cargado");
+
+        auto *it = new QListWidgetItem(label);
+        it->setData(Qt::UserRole, id);
+        it->setData(Qt::UserRole + 1, en);
+        it->setData(Qt::UserRole + 2, loaded);
+        QString tip = m.value(QStringLiteral("description")).toString();
+        if (!tip.isEmpty())
+            it->setToolTip(tip + QStringLiteral("\n") + m.value(QStringLiteral("path")).toString());
+        else
+            it->setToolTip(m.value(QStringLiteral("path")).toString());
+        // Icon: checkmark for enabled
+        if (en)
+            it->setIcon(QIcon::fromTheme(QStringLiteral("emblem-checked")));
+        else
+            it->setIcon(QIcon::fromTheme(QStringLiteral("emblem-unavailable")));
+        m_kwinScriptsList->addItem(it);
+        if (!prevId.isEmpty() && id == prevId)
+            m_kwinScriptsList->setCurrentItem(it);
+    }
+    if (list.isEmpty()) {
+        auto *it = new QListWidgetItem(tr("(No hay scripts instalados en ~/.local/share/kwin/scripts)"));
+        it->setFlags(it->flags() & ~Qt::ItemIsSelectable);
+        m_kwinScriptsList->addItem(it);
+    }
+}
+
 // One row of the translation table: the lxqt.conf key, a swatch and the hex.
 // The swatch is drawn here and not through themePreviewPixmap(): that one draws
 // the three-color preview of a whole scheme, this is one color per row.
@@ -4549,6 +4784,9 @@ QWidget *SettingsDialog::createQtCompatTab()
             m_manager->qtCompat()->applyNow();
     });
     layout->addWidget(applyNow);
+
+    // --- KWin scripts (inside Modo QT because KWin is the WM under LXQt) ---
+    createKWinScriptsGroup(layout);
 
     // --- Diagnostics --------------------------------------------------------
     // Which file is being written and whether anything is going to notice. The

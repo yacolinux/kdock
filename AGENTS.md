@@ -56,6 +56,7 @@ src/
   maxmincontrol.{h,cpp}   — Maximizes (left click) / minimizes (right click) the active window via KWin shortcuts (token maxmin, KDE only)
   activewindowcontrol.{h,cpp} — Closes the active window (left click) or pushes it to the next virtual desktop without following it (right click); token closewindow
   kwinshortcut.{h,cpp}    — Shared helper for the KDE-only widgets: sessionIsKde() + invoke(<KWin global shortcut name>)
+  kwinscripts.{h,cpp}     — KWin scripts: list/installed/enabled/loaded from FS + kwinrc + org.kde.KWin/Scripting; install via kpackagetool6 (Modo QT)
   wallpapercontrol.{h,cpp} — Advances the KDE slideshow wallpaper to the next image on a specific monitor (token nextwallpaper)
   desktopwallpapers.{h,cpp} — A different wallpaper per virtual desktop: snapshots KDE's own config for desktop 1 and, on desktops 2..kMaxDesktops, applies per monitor either a static image or KDE's own slideshow rooted at a configurable folder (no widget; Settings -> Wallpapers)
   plasmascript.h          — Header-only helpers over org.kde.PlasmaShell.evaluateScript (escapeJs / evaluate / run / evaluateBlocking), shared by the two above
@@ -1196,6 +1197,22 @@ apagó" de "nadie decidió todavía". Va en `main()` a propósito: `qtcompat.cpp
 escritorio a quien la corriera.
 
 - **Propagación del entorno de activación (2026-08-21):** `QtCompat::updateActivationEnvironment()` hace `dbus-update-activation-environment --systemd --all` (fallback `systemctl --user import-environment QT_QPA_PLATFORMTHEME …`) en cada arranque bajo LXQt (`main.cpp` después del `setEnabled`). Sin esto, los lanzamientos vía GIO/systemd (handlers `magnet:`, autostart) heredan el entorno mínimo de `systemd --user` (28 vars, sin `QT_QPA_PLATFORMTHEME`) aunque `systemctl --user show-environment` ya tenga las 40 vars; `ktorrent` arrancó así y ni siquiera cargó `liblxqt.so`, dependiendo solo de `KColorSchemeManager` — que antes del fix sincrónico tampoco tenía `UiSettings` a tiempo. `portal-kde` (pid 5266) sí tenía el entorno completo, de ahí que `dolphin` sí se viera bien.
+
+#### Scripts de KWin en Modo QT (`src/kwinscripts.{h,cpp}`, 2026-08-21)
+
+Módulo dentro de la solapa **Modo QT** que lista los scripts de KWin instalados y permite cargarlos — KWin es el WM Wayland en uso bajo esta LXQt (`LXQt:kwin_wayland`). Motivo: algunos scripts (Overview, tiler) funcionaban pero `truely-maximized` (ventanas sin título al maximizar) aparecía como `Enabled=false` en `kwinrc [Plugins]` y no cargaba, sin relación con LXQt.
+
+- **Fuentes de verdad**: FS (`~/.local/share/kwin/scripts/*/metadata.json` + `/usr/share/kwin/scripts`, `KPackageStructure==KWin/Script`, `KPlugin Id/Name/Version`, `X-Plasma-API`) + `kwinrc [Plugins] <id>Enabled` (persistente, vía `kwriteconfig6` para no perder sintaxis KConfig) + D-Bus `org.kde.KWin /Scripting isScriptLoaded` (runtime, `call(...,800)` para no bloquear 25s). `KWinScripts::scan()` une las tres, ordena por nombre.
+- **Acciones**: `setEnabled(id,bool)` escribe `kwinrc` + `qdbus org.kde.KWin /KWin reconfigure` (verificado: `true`→`isScriptLoaded true`, `false`→`false`); `install(path)` vía `kpackagetool6 --type KWin/Script -i/-u`; `uninstall(id)` vía `-r`; `reconfigure()` solo. `QFileSystemWatcher` sobre `kwinrc` + dir con debounce 400ms → `changed()`.
+- **UI**: `QGroupBox` en `createQtCompatTab()` (`SettingsDialog::createKWinScriptsGroup`/`rebuildKWinScriptsList`), solo si `Session::hasKWin()` (org.kde.KWin en bus). `QListWidget` con `id (Name) vVersion [api] — Activado/Desactivado · Cargado/No cargado`, icono `emblem-checked/unavailable`, tooltip con description+path. Botones Activar/Desactivar, Reconfigurar KWin, Refrescar, Instalar desde archivo (QFileDialog `*.kwinscript`), Desinstalar (confirm), Abrir carpeta (`~/.local/share/kwin/scripts`). Estado en `QLabel` + watcher → auto-refresh. Gating: `hasKWin()==false` → lista deshabilitada con `(KWin no responde)`.
+- **Integración**: `KWinScripts` en `DockManager::Shared` (`dockmanager.h:64`), construido en `main.cpp` junto a `QtCompat`, expuesto vía `DockManager::kwinScripts()`. Solo el diálogo lo alcanza, como `QtCompat`. Sin QML. `CMakeLists.txt` añade `kwinscripts.cpp/h`, link `Qt6::DBus`.
+
+#### Arranque sin bloqueo 5s tras reinicio (`src/dockmanager.cpp` + `src/main.cpp`, 2026-08-21)
+
+`DockManager::sync()` creaba 3 docks (`eDP-1#1` 1.5s + `eDP-1#4` 0.9s + `eDP-1` 1.1s = 3.6s) sincrónicamente, bloqueando el loop y dejando al dock sin input ~4s tras reinicio (medido `dockmanager-timing after sync 3601ms`). Además `DockService` se registraba al final de `main()` (tras wallpapers/darkAppearance/previews), demorando `org.kdock.Dock` a ~2.8s.
+
+- `sync()` ahora crea el primer dock sync y los restantes vía `QTimer::singleShot(0)` con re-chequeo de `wantedDocks()`/`enabledDocks()`/`contains()` — primer dock aparece en ~1.1s, input bombea entre los demás.
+- `DockService::registerOnBus()` movido justo tras `DockManager` (antes de wallpapers), para que `dockIds` responda en ~1.3s. `KWinScripts::isLoaded` con timeout 800ms (antes 25s) evita congelar UI al listar 8 scripts tras reinicio.
 
 ### Acciones de sesión bajo LXQt (`src/powercontrol.{h,cpp}`, 2026-08-20)
 

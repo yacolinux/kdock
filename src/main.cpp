@@ -51,6 +51,7 @@
 #include "appearancecontrol.h"
 #include "autocolorscheme.h"
 #include "qtcompat.h"
+#include "kwinscripts.h"
 #include "darkmodeappearance.h"
 #include "networkcontrol.h"
 #include "weatherconfig.h"
@@ -402,6 +403,7 @@ int main(int argc, char *argv[])
     // the schemes every picker of kdock already applies also reach the rest of
     // the desktop's Qt applications. Off by default and inert while off.
     QtCompat qtCompat(&theme);
+    KWinScripts kwinScripts;
     // …except in the session it was written for, where leaving it off means
     // every color scheme kdock applies stops at kdock's own window. Switched on
     // once, the first time kdock runs under LXQt, and never again: `configured()`
@@ -458,6 +460,7 @@ int main(int argc, char *argv[])
     shared.weather = &weather;
     shared.appearance = &appearance;
     shared.qtCompat = &qtCompat;
+    shared.kwinScripts = &kwinScripts;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
     shared.lxqtWallpapers = &lxqtWallpapers;
@@ -474,6 +477,12 @@ int main(int argc, char *argv[])
 
     DockManager manager(shared);
     autoColors.setManager(&manager);
+    // The dock's own D-Bus service — register early so `org.kdock.Dock` answers
+    // quickly after a restart. Previously it was at the very end, after wallpapers
+    // / darkAppearance / previews, so `dockIds` took ~2.8s to appear and the dock
+    // felt frozen for ~5s. Now the first dock is already on screen after ~1.1s.
+    DockService dockService(&manager);
+    dockService.registerOnBus();
 
     // Wallpapers per virtual desktop. start() re-applies the current desktop's
     // set (or puts desktop 1 back if a previous run died with ours up), and the
@@ -534,12 +543,6 @@ int main(int argc, char *argv[])
     // start so that click is instant too.
     TileMenuLauncher::startIfPreloading();
     ControlManagerLauncher::startIfPreloading();
-
-    // The dock's own D-Bus service. It exists for kdock-controlmanager: dark
-    // mode has to be flipped *inside* this process to repaint (there is no file
-    // watcher on the .conf), and the settings dialog opens from nowhere else.
-    DockService dockService(&manager);
-    dockService.registerOnBus();
 
     // And the one global shortcut kdock publishes of its own, with no default
     // key: the user assigns one in Preferencias del sistema → Atajos.

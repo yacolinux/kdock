@@ -14,6 +14,7 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QTimer>
 
 #include <algorithm>
 #include <utility>
@@ -661,10 +662,45 @@ void DockManager::sync()
     // for another this avoids a frame with no dock at all. (KWin re-lays out
     // maximized windows on its own if the two reserve different amounts of
     // space — its work areas are per output, not per desktop.)
-    for (const QString &id : wanted) {
+    //
+    // Creating a DockWindow loads QML (Dock.qml) synchronously — ~1s per dock
+    // on this hardware (measured 2026-08-21: 3 docks * ~1s = 3.6s inside sync()).
+    // Doing them back-to-back blocks the event loop for the whole batch, so the
+    // first dock stays without input for ~4s after a restart. Defer all but the
+    // first creation to the next event-loop turn: the primary dock appears in
+    // ~1s and input is pumped between the rest.
+    QStringList toCreate;
+    for (const QString &id : wanted)
         if (!m_instances.contains(id))
-            createInstance(id, id == primaryDock); // built on first use, not at startup
-        setInstanceOnScreen(id, true);
+            toCreate << id;
+    if (!toCreate.isEmpty()) {
+        const QString first = toCreate.takeFirst();
+        createInstance(first, first == primaryDock);
+        setInstanceOnScreen(first, true);
+        for (const QString &id : std::as_const(toCreate)) {
+            const bool isPrimary = (id == primaryDock);
+            QTimer::singleShot(0, this, [this, id, isPrimary] {
+                // The set of wanted docks may have changed while we were queued
+                // (desktop switch, disable). Re-check before creating.
+                if (m_instances.contains(id))
+                    return;
+                const QStringList curWanted = wantedDocks(currentDesktop());
+                if (!curWanted.contains(id))
+                    return;
+                if (!DockConfig::enabledDocks().contains(id))
+                    return;
+                createInstance(id, isPrimary);
+                setInstanceOnScreen(id, true);
+            });
+        }
+        // Already-existing wanted docks still need onScreen=true
+        for (const QString &id : wanted) {
+            if (m_instances.contains(id))
+                setInstanceOnScreen(id, true);
+        }
+    } else {
+        for (const QString &id : wanted)
+            setInstanceOnScreen(id, true);
     }
     for (const QString &id : alive)
         if (!wanted.contains(id))

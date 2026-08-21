@@ -438,4 +438,10 @@ private:
     QFormLayout *m_qtCompatForm = nullptr;
     QLabel *m_qtCompatIcons = nullptr;
     QLabel *m_qtCompatUiSettings = nullptr;
+    // KWin scripts group inside Modo QT tab
+    QWidget *m_kwinScriptsGroup = nullptr;
+    class QListWidget *m_kwinScriptsList = nullptr;
+    QLabel *m_kwinScriptsStatus = nullptr;
+    void rebuildKWinScriptsList();
+    void createKWinScriptsGroup(QVBoxLayout *parentLayout);
 };
