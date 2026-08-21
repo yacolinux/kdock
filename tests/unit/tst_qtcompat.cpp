@@ -28,10 +28,13 @@
 #include "theme.h"
 
 #include <QFile>
+#include <QFileDevice>
 #include <QFileInfo>
 #include <QFont>
+#include <QGuiApplication>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTextStream>
 
@@ -484,6 +487,67 @@ private slots:
         QCOMPARE(lxqt.value(QStringLiteral("General/theme")).toString(),
                  QStringLiteral("graphite"));
         QCOMPARE(paletteValue(QStringLiteral("window_color")), QStringLiteral("#111213"));
+    }
+
+    // ---- Entorno de activación ----------------------------------------------
+    // `updateActivationEnvironment()` escribe en el almacén de activación de la
+    // sesión (systemd + D-Bus), que **le sobrevive**: lo que publica lo heredan
+    // todas las apps activadas por D-Bus, spectacle incluido. El bug que motivó
+    // la lista blanca (2026-08-21) fue `--all`, que subió el entorno entero de
+    // un kdock arrancado desde un arnés de Xvfb —DISPLAY=:99, XAUTHORITY de un
+    // xvfb-run muerto, XDG_* de un sandbox descartable— a la sesión del usuario.
+    // Esta prueba congela las dos mitades del arreglo: la reja por plataforma y
+    // la prohibición de `--all`.
+    void updateActivationEnvironmentNeverPublishesEverything()
+    {
+        // Las herramientas falsas van en un directorio descartable primero en el
+        // PATH, no en el fakebin de la suite: así, aunque la reja por plataforma
+        // regresione, la llamada cae en un fake y nunca en la herramienta de la
+        // sesión real. QProcess usa `waitForFinished`, o sea síncrono: alcanza
+        // con leer el registro después de la llamada.
+        QTemporaryDir fakeDir;
+        QVERIFY(fakeDir.isValid());
+        const QString logPath = fakeDir.filePath(QStringLiteral("calls.log"));
+        for (const char *tool : {"dbus-update-activation-environment", "systemctl"}) {
+            const QString path = fakeDir.filePath(QLatin1String(tool));
+            QFile f(path);
+            QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Text));
+            f.write("#!/bin/sh\n");
+            f.write("echo \"$(basename \"$0\") <- $*\" >> "
+                    + logPath.toUtf8() + "\n");
+            f.write("exit 0\n");
+            f.close();
+            QVERIFY(f.setPermissions(f.permissions() | QFileDevice::ExeOwner
+                                     | QFileDevice::ExeGroup | QFileDevice::ExeOther));
+        }
+
+        const QByteArray oldPath = qgetenv("PATH");
+        qputenv("PATH", fakeDir.path().toUtf8() + ':' + oldPath);
+        QtCompat::updateActivationEnvironment();
+        qputenv("PATH", oldPath);
+
+        QFile logFile(logPath);
+        const QString log = logFile.open(QIODevice::ReadOnly | QIODevice::Text)
+                                ? QString::fromUtf8(logFile.readAll())
+                                : QString();
+
+        // Pase lo que pase —la reja corta bajo el arnés o la lista blanca se
+        // publica en una sesión Wayland de verdad— lo único que causó el bug no
+        // puede aparecer.
+        QVERIFY2(!log.contains(QStringLiteral("--all")), qPrintable(log));
+
+        if (QGuiApplication::platformName() == QLatin1String("wayland")) {
+            // Sesión real: solo las claves del tema de plataforma, ninguna de
+            // sandbox.
+            QVERIFY2(log.contains(QStringLiteral("--systemd")), qPrintable(log));
+            QVERIFY2(log.contains(QStringLiteral("QT_QPA_PLATFORMTHEME")), qPrintable(log));
+            QVERIFY2(log.contains(QStringLiteral("XDG_CURRENT_DESKTOP")), qPrintable(log));
+            QVERIFY2(!log.contains(QStringLiteral("XDG_CONFIG_HOME")), qPrintable(log));
+        } else {
+            // Arnés (xcb/offscreen): inerte, la reja cortó antes de buscar la
+            // herramienta.
+            QVERIFY2(log.isEmpty(), qPrintable(log));
+        }
     }
 };
 

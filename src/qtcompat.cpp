@@ -391,20 +391,44 @@ void QtCompat::updateActivationEnvironment()
     // Manager Environment already had it — the portal-kde helper
     // (pid 5266) did, GIO's child didn't. Propagating once at
     // kdock startup closes the window for the next launch.
+    //
+    // Whatever goes in there is session-wide and outlives kdock, so the
+    // list is explicit and `--all` is banned. That flag uploads this
+    // process's *entire* environment: a kdock started from one of the Xvfb
+    // harnesses published DISPLAY=:99, QT_QPA_PLATFORM=xcb, XAUTHORITY of a
+    // dead xvfb-run and the fake-tool PATH to every D-Bus-activated app in
+    // the user's session. Spectacle is activated that way, so it aborted
+    // with "could not connect to display :99" on every screenshot until the
+    // environment was repaired by hand (2026-08-21).
+    //
+    // For the same reason the sandbox knobs stay out of the list: every
+    // harness in CLAUDE.md overrides XDG_DATA_HOME / XDG_CONFIG_HOME, and
+    // publishing a throwaway directory session-wide is the same bug wearing
+    // a different variable. The keys below are the ones the platform theme
+    // actually needs, and they are identical for the whole session.
+    static const QStringList keys{QStringLiteral("QT_QPA_PLATFORMTHEME"),
+                                  QStringLiteral("QT_PLATFORM_PLUGIN"),
+                                  QStringLiteral("QT_QUICK_CONTROLS_STYLE"),
+                                  QStringLiteral("XDG_CURRENT_DESKTOP")};
+
+    // And the guard one step earlier: only the dock of the real session may
+    // speak for the session. Under Xvfb the platform is xcb or offscreen,
+    // and a run that isolated its config has nothing worth publishing.
+    if (QGuiApplication::platformName() != QLatin1String("wayland"))
+        return;
+
     const QString tool = QStandardPaths::findExecutable(QStringLiteral("dbus-update-activation-environment"));
     if (!tool.isEmpty()) {
         QProcess proc;
-        proc.start(tool, {QStringLiteral("--systemd"), QStringLiteral("--all")});
+        // Unset names are ignored by the tool, so no filtering is needed here.
+        proc.start(tool, QStringList{QStringLiteral("--systemd")} + keys);
         proc.waitForFinished(800);
         return;
     }
     const QString sys = QStandardPaths::findExecutable(QStringLiteral("systemctl"));
     if (!sys.isEmpty()) {
         QProcess proc;
-        proc.start(sys, {QStringLiteral("--user"), QStringLiteral("import-environment"),
-                         QStringLiteral("QT_QPA_PLATFORMTHEME"), QStringLiteral("QT_PLATFORM_PLUGIN"),
-                         QStringLiteral("QT_QUICK_CONTROLS_STYLE"), QStringLiteral("XDG_CURRENT_DESKTOP"),
-                         QStringLiteral("XDG_CONFIG_HOME"), QStringLiteral("XDG_DATA_HOME")});
+        proc.start(sys, QStringList{QStringLiteral("--user"), QStringLiteral("import-environment")} + keys);
         proc.waitForFinished(800);
     }
 }
