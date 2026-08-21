@@ -10,11 +10,10 @@
 #pragma once
 
 #include <QDBusArgument>
+#include <QDBusMessage>
 #include <QObject>
 #include <QPixmap>
 #include <QVariantMap>
-
-class QDBusInterface;
 
 // One node of the menu as it comes off the wire: `(ia{sv}av)`, where the last
 // field is the children — each an `av` variant wrapping another such struct.
@@ -27,7 +26,7 @@ struct DBusMenuLayoutItem
 Q_DECLARE_METATYPE(DBusMenuLayoutItem)
 
 // Recursive (de)marshalling. MUST be paired with qDBusRegisterMetaType (done in
-// the DBusMenuClient ctor): without the type registered, QDBusInterface hands
+// the DBusMenuClient ctor): without the type registered, QtDBus hands
 // back an empty value and manual demarshalling of the nested struct desyncs
 // until libdbus aborts the process ("type struct not a basic type") — the same
 // trap the SNI pixmap types fell into.
@@ -77,13 +76,18 @@ private slots:
 
 private:
     void sendEvent(int id, const QString &eventId);
+    // Every call goes out through this: a QDBusMessage on the session bus, never
+    // a QDBusInterface. The convenience class fetches the introspection XML in
+    // its *constructor*, with a blocking call — and this object is built while
+    // handling the item's own (blocking) registration, so that read deadlocks
+    // both processes until the bus times out. See the note in systray.h.
+    QDBusMessage menuCall(const QString &member, const QVariantList &args) const;
     const DBusMenuLayoutItem *findNode(const DBusMenuLayoutItem &node, int id) const;
     QVariantList childrenToVariant(const DBusMenuLayoutItem &node) const;
     QVariantMap nodeToVariant(const DBusMenuLayoutItem &node) const;
 
     QString m_service;
     QString m_path;
-    QDBusInterface *m_iface = nullptr;
     DBusMenuLayoutItem m_root;
     bool m_ready = false;
     bool m_pending = false;

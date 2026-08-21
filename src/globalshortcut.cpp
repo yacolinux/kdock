@@ -37,7 +37,13 @@ bool GlobalShortcuts::registerAction(const QString &actionId, const QString &fri
     QDBusMessage reg = QDBusMessage::createMethodCall(kService, kPath, kIface,
                                                       QStringLiteral("doRegister"));
     reg.setArguments({fields});
-    bus.call(reg, QDBus::BlockWithGui, 2000);
+    // asyncCall, and NOT call(BlockWithGui): this runs from main() before
+    // app.exec(), and BlockWithGui spins a *nested* event loop while it waits.
+    // Anything the bus delivers meanwhile is dispatched right there — which is
+    // how a tray client registering its icon ended up being served from inside
+    // this call, before the dock had started (see systray.cpp). Nothing here
+    // needs the reply: kglobalaccel either takes the action or it does not.
+    bus.asyncCall(reg, 2000);
 
     // An empty key list with SetPresent (2) publishes the action with no
     // combination attached: it appears in the shortcuts KCM waiting for one.
@@ -51,7 +57,9 @@ bool GlobalShortcuts::registerAction(const QString &actionId, const QString &fri
     QDBusMessage keys = QDBusMessage::createMethodCall(kService, kPath, kIface,
                                                        QStringLiteral("setShortcut"));
     keys.setArguments({fields, QVariant::fromValue(QList<int>()), uint(2)});
-    bus.call(keys, QDBus::BlockWithGui, 2000);
+    // Ordered after doRegister by the bus itself: both messages travel the same
+    // connection to the same destination, and D-Bus preserves that order.
+    bus.asyncCall(keys, 2000);
 
     if (!m_connected) {
         // The press arrives on the *component* object, not on /kglobalaccel.

@@ -712,6 +712,32 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   30 líneas que construye un backend por vez e imprime un marcador entre uno y otro
   (2026-08-08). Si ves ese mensaje en cualquier arnés, no lo ignores: buscá **cuál** de los
   backends lo emite antes de suponer que es del código que estás tocando.
+  Y volvió a morder el 2026-08-21 con una vuelta de tuerca: la rama que demarshalaba el `ToolTip`
+  de la bandeja tenía el mismo error **desde siempre y nunca se había ejecutado**, porque el
+  código pedía la propiedad con el nombre equivocado (`Tooltip` en vez de `ToolTip`, ver
+  `systray.cpp`). Corregir el nombre —un cambio que se ve trivial— encendió la rama y con ella el
+  flood de warnings. Corolario: **arreglar un nombre de propiedad de D-Bus estrena código**, así
+  que mirá el log después. Y la otra mitad del arreglo es que `canConvert<T>()` **también
+  escribe**: preguntarle a `QVariant` si puede convertir a un tipo de D-Bus recorre los
+  conversores registrados, que marshalan. Para elegir la rama, comparar `value.metaType()` con
+  `QMetaType::fromType<T>()`.
+- **Nunca hagas una llamada D-Bus bloqueante desde adentro de un handler de D-Bus.** El que te
+  llamó puede estar bloqueado *en esa misma llamada* esperando tu respuesta, y entonces no puede
+  contestarte: los dos se esperan hasta el timeout del bus (25 s por omisión). Es exactamente lo
+  que hacía `SystrayItem::readProperties()` con una docena de `QDBusInterface::property()`
+  llamadas desde `RegisterStatusNotifierItem` — blueman-tray registra sincrónicamente y el
+  resultado eran 24 s de dock congelado en **cada** arranque, con las registraciones de los demás
+  clientes encoladas detrás (2026-08-21, ver `AGENTS.md`). Tres reglas que salieron de ahí:
+  contestá primero y trabajá después (`QMetaObject::invokeMethod(..., Qt::QueuedConnection)`);
+  **`QDBusInterface` está prohibido en un camino sensible al tiempo**, porque su *constructor*
+  hace un `Introspect` bloqueante (no lo dice ninguna firma); y ponéle timeout explícito a todo
+  `asyncCall`, porque "no contesta nunca" es el estado normal de un cliente que está bloqueado.
+- **Un bucle de eventos anidado en `main()` dispara handlers antes de que la app exista.**
+  `QDBusConnection::call(..., QDBus::BlockWithGui)` no espera quieto: bombea el bucle, así que
+  cualquier mensaje que llegue mientras tanto se atiende **ahí**, antes de `app.exec()` y con los
+  objetos a medio construir. En kdock eso metía el registro de un ícono de bandeja adentro de
+  `GlobalShortcuts::registerAction()` — el backtrace tenía `main` → `registerAction` →
+  `QEventLoop::exec` → `SystrayHost::registerItem`. Si no necesitás la respuesta, `asyncCall`.
 - **Un widget que se esconde cuando no está configurado se queda sin la puerta para
   configurarlo** (2026-08-11, reportado por el usuario). El widget del clima salía de
   `sectionVisible()` mientras no hubiera ciudad, y la única entrada a su configuración es el

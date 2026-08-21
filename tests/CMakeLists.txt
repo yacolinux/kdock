@@ -56,6 +56,28 @@ kdock_add_unit_test(tst_audiocontrol)
 kdock_add_unit_test(tst_session)
 kdock_add_unit_test(tst_lxqtwallpapers)
 
+# tst_systray is registered by hand too, and wrapped in `dbus-run-session`: the
+# host it exercises takes org.kde.StatusNotifierWatcher, so on the developer's
+# real session bus it would fight the running kdock for the session's tray (and
+# on a KDE session, plasmashell). Without the wrapper the test does not run at
+# all — it is skipped, not silently pointed at the real bus.
+qt_add_executable(tst_systray ${CMAKE_CURRENT_SOURCE_DIR}/unit/tst_systray.cpp)
+target_link_libraries(tst_systray PRIVATE kdock_core Qt6::Test)
+target_include_directories(tst_systray PRIVATE ${KDOCK_TESTS_DIR}/unit)
+find_program(KDOCK_DBUS_RUN_SESSION dbus-run-session)
+if(KDOCK_DBUS_RUN_SESSION)
+    add_test(NAME tst_systray
+             COMMAND ${KDOCK_DBUS_RUN_SESSION} -- $<TARGET_FILE:tst_systray>)
+else()
+    add_test(NAME tst_systray COMMAND ${CMAKE_COMMAND} -E echo
+             "dbus-run-session not found: skipping the systray test")
+    set_tests_properties(tst_systray PROPERTIES SKIP_REGULAR_EXPRESSION "skipping")
+endif()
+set_tests_properties(tst_systray PROPERTIES
+    LABELS "unit"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PATH=${CMAKE_CURRENT_BINARY_DIR}/fakebin:$ENV{PATH}"
+    SKIP_RETURN_CODE 77)
+
 # tst_cmslider is registered by hand instead of through kdock_add_unit_test: it
 # runs once per QQC2 style, because QQuickStyle::setStyle() only takes effect
 # once per process and the bug it freezes (a Slider 0 px tall, see the file)

@@ -4,11 +4,11 @@
 #pragma once
 
 #include <QDBusAbstractAdaptor>
-#include <QDBusInterface>
 #include <QDBusMessage>
 #include <QDBusServiceWatcher>
 #include <QObject>
 #include <QPixmap>
+#include <QVariantMap>
 
 class DBusMenuClient;
 
@@ -63,13 +63,29 @@ private slots:
     void readProperties();
 
 private:
-    QPixmap decodePixmap(const QVariant &variant);
-    // Read an SNI pixmap property (a(iiay)) via a raw Properties.Get call —
-    // QDBusInterface::property() does not reliably demarshal that type. Returns
-    // the largest frame, converted from big-endian ARGB32.
-    QPixmap readPixmapProperty(const QString &name) const;
-    QDBusInterface *m_iface = nullptr;
+    // Every call this class makes is asynchronous, and that is not an
+    // optimisation — it is a correctness requirement. readProperties() runs from
+    // inside the D-Bus handler of RegisterStatusNotifierItem, and the client that
+    // is registering is typically *blocked* inside that very call waiting for our
+    // reply (blueman-tray, and every libappindicator client, register
+    // synchronously). Asking it for a property with a blocking call there means
+    // both processes wait for each other until the bus gives up: measured
+    // 2026-08-21, 24.1 s of frozen dock and 25.2 s of frozen blueman on every
+    // kdock start, with the rest of the session's tray clients queued behind it.
+    // QDBusInterface is banned here for the same reason: its constructor fetches
+    // the introspection XML with a blocking call.
+    void applyProperties(const QVariantMap &props);
+    // Fallback for items that do not implement Properties.GetAll: one async Get
+    // per key, collected into a map and applied when the last one lands.
+    void requestPropertiesIndividually();
+    // Fire-and-forget method call on the item's SNI interface.
+    void callItem(const QString &member, const QVariantList &args);
     DBusMenuClient *m_menu = nullptr;
+    // One properties round trip in flight at a time; a refresh asked for while
+    // one is pending is remembered and replayed once (an item that emits
+    // NewIcon/NewStatus in a burst must not stack round trips).
+    bool m_propsPending = false;
+    bool m_propsQueued = false;
 };
 
 class SystrayHost : public QObject

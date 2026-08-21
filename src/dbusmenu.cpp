@@ -75,10 +75,6 @@ DBusMenuClient::DBusMenuClient(const QString &service, const QString &path, QObj
     // Before any call: see the warning on the operators in the header.
     qDBusRegisterMetaType<DBusMenuLayoutItem>();
 
-    m_iface = new QDBusInterface(service, path, MENU_IFACE,
-                                 QDBusConnection::sessionBus(), this);
-    m_iface->setTimeout(kCallTimeoutMs);
-
     // An item may rebuild its menu at any time (blueman rewrites it on every
     // device change). Both signals only say *what* changed; re-reading the whole
     // tree is cheap enough for menus this size.
@@ -96,12 +92,15 @@ DBusMenuClient::~DBusMenuClient()
         QStringLiteral("ItemsPropertiesUpdated"), this, SLOT(onItemsPropertiesUpdated()));
 }
 
+QDBusMessage DBusMenuClient::menuCall(const QString &member, const QVariantList &args) const
+{
+    QDBusMessage msg = QDBusMessage::createMethodCall(m_service, m_path, MENU_IFACE, member);
+    msg.setArguments(args);
+    return msg;
+}
+
 void DBusMenuClient::requestLayout()
 {
-    if (!m_iface || !m_iface->isValid()) {
-        emit layoutFailed();
-        return;
-    }
     if (m_pending) // a reply is already on its way; it will emit for both callers
         return;
     m_pending = true;
@@ -109,7 +108,9 @@ void DBusMenuClient::requestLayout()
     // Depth -1 = the whole tree in one round trip. Lazily-filled submenus still
     // need their AboutToShow (see aboutToShow()), but most items answer in full.
     auto *watcher = new QDBusPendingCallWatcher(
-        m_iface->asyncCall(QStringLiteral("GetLayout"), 0, -1, QStringList()), this);
+        QDBusConnection::sessionBus().asyncCall(
+            menuCall(QStringLiteral("GetLayout"), {0, -1, QStringList()}), kCallTimeoutMs),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, watcher] {
         watcher->deleteLater();
@@ -206,21 +207,21 @@ void DBusMenuClient::setOpen(bool open)
 
 void DBusMenuClient::sendEvent(int id, const QString &eventId)
 {
-    if (!m_iface || !m_iface->isValid())
-        return;
     // Fire and forget: the item's handler may take as long as it likes (it often
     // opens a window), and nothing here depends on the reply.
-    m_iface->asyncCall(QStringLiteral("Event"), id, eventId,
-                       QVariant::fromValue(QDBusVariant(QString())),
-                       static_cast<uint>(QDateTime::currentSecsSinceEpoch()));
+    QDBusConnection::sessionBus().asyncCall(
+        menuCall(QStringLiteral("Event"),
+                 {id, eventId, QVariant::fromValue(QDBusVariant(QString())),
+                  static_cast<uint>(QDateTime::currentSecsSinceEpoch())}),
+        kCallTimeoutMs);
 }
 
 void DBusMenuClient::aboutToShow(int id)
 {
-    if (!m_iface || !m_iface->isValid())
-        return;
     auto *watcher = new QDBusPendingCallWatcher(
-        m_iface->asyncCall(QStringLiteral("AboutToShow"), id), this);
+        QDBusConnection::sessionBus().asyncCall(
+            menuCall(QStringLiteral("AboutToShow"), {id}), kCallTimeoutMs),
+        this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
         watcher->deleteLater();
         QDBusPendingReply<bool> reply = *watcher;

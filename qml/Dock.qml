@@ -1678,7 +1678,20 @@ Item {
                                : root.widgetLabelMode === 4 && sec.labelled
                                  ? root.labelBoxHeight + root.labelGap
                                  : (secVisual.height - secVisual.contentH) / 2
-                            sourceComponent: root.componentFor(sec.token)
+                            // Nothing is built for a section that is not drawn.
+                            // A Loader instantiates its component even when the
+                            // section is invisible (`visible: false` only stops
+                            // the painting), and every widget component brings a
+                            // Menu, a ToolTip and one or more themed icons with
+                            // it: on this session that was ~20 unused widgets per
+                            // dock, three docks' worth, resolved and rasterised
+                            // at startup. Measured 2026-08-21 by sampling the
+                            // main thread during a restart — it sat in
+                            // QQmlObjectCreator / QQuickMenuPrivate::createItem /
+                            // XdgIconLoader for ~2 s. The apps block already did
+                            // exactly this for `showAppIcons` (see componentFor).
+                            sourceComponent: root.sectionVisible(sec.token)
+                                             ? root.componentFor(sec.token) : null
                             // Which selectable-apps widget this is: the
                             // component is declared in the root scope and
                             // cannot see `sec`, so the token is pushed in. It

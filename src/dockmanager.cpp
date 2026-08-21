@@ -10,6 +10,7 @@
 #include "virtualdesktops.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -18,6 +19,11 @@
 
 #include <algorithm>
 #include <utility>
+
+namespace {
+// Gap between two deferred dock creations (see sync()).
+constexpr int kDeferredDockMs = 150;
+} // namespace
 
 DockManager::DockManager(const Shared &shared, QObject *parent)
     : QObject(parent)
@@ -677,9 +683,19 @@ void DockManager::sync()
         const QString first = toCreate.takeFirst();
         createInstance(first, first == primaryDock);
         setInstanceOnScreen(first, true);
+        int delay = 0;
         for (const QString &id : std::as_const(toCreate)) {
             const bool isPrimary = (id == primaryDock);
-            QTimer::singleShot(0, this, [this, id, isPrimary] {
+            // Staggered, not singleShot(0): zero timers are drained in one pass
+            // of the event loop, so three of them build three docks back to back
+            // and the whole batch is one stall (measured 2.1 s on this session).
+            // A gap between them lets the first dock paint and answer clicks
+            // while the rest are still being built — which is the difference the
+            // user feels after a restart. Each dock costs ~0.7-1.5 s to build
+            // (KDOCK_DEBUG_STARTUP), so the extra latency for the last one is
+            // noise next to that.
+            delay += kDeferredDockMs;
+            QTimer::singleShot(delay, this, [this, id, isPrimary] {
                 // The set of wanted docks may have changed while we were queued
                 // (desktop switch, disable). Re-check before creating.
                 if (m_instances.contains(id))
@@ -724,6 +740,18 @@ void DockManager::createInstance(const QString &dockId, bool primary)
 
 DockManager::Instance DockManager::buildInstance(const QString &dockId, bool primary)
 {
+    // Test seam, off unless asked for (same shape as KDOCK_DEBUG_DODGE): how long
+    // this dock takes to build. Building one is the only thing at startup that
+    // blocks the event loop for a noticeable time — it loads Dock.qml and
+    // instantiates every widget it draws, with its menus and its icons — so this
+    // is the number to watch when the dock "does not answer for N seconds after
+    // a restart". Read with:
+    //   KDOCK_DEBUG_STARTUP=1 kdock 2>&1 | grep startup
+    QElapsedTimer buildTimer;
+    const bool traceStartup = qEnvironmentVariableIsSet("KDOCK_DEBUG_STARTUP");
+    if (traceStartup)
+        buildTimer.start();
+
     DockConfig *cfg = configFor(dockId);
 
     // No widget token: this is the dock's own apps block. The models of the
@@ -768,6 +796,10 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     window->setManager(this);
     window->setPrimary(primary);
     window->show();
+
+    if (traceStartup)
+        qInfo("kdock: startup dock %s built in %lld ms", qPrintable(dockId),
+              qlonglong(buildTimer.elapsed()));
 
     return {model, systrayModel, clock, clock2, window, primary};
 }

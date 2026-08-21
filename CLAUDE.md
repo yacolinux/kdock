@@ -1246,6 +1246,8 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **Una cadena con `" = "` adentro se parte mal en el catálogo de traducciones.**
 - **`Window.window` se lee desde un `Item`, no desde adentro de un `Timer`.**
 - **Un `QDBusArgument` local va `const` — y en `BatteryControl` no lo estaba.**
+- **Nunca hagas una llamada D-Bus bloqueante desde adentro de un handler de D-Bus.**
+- **Un bucle de eventos anidado en `main()` dispara handlers antes de que la app exista.**
 - **Popups y menús**
 - **Un popup del dock con el que se pueda INTERACTUAR va con `Qt.ToolTip`, nunca con `Qt.Popup`** — y no puede cerrarse por *leave*.
 - **QML no concatena literales adyacentes como C++.**
@@ -1279,6 +1281,64 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **El arnés de Xvfb del dock no sirve para clickear widgets con el motor de fondos encendido**: la superficie del fondo tapa el dock y se come los clics.
 - **El *scope* de una superficie layer-shell decide su `WindowType` en KWin**, y kdock lo tenía hardcodeado en `"dock"` para todas.
 - **Medir un "flicker" comparando dos capturas mide el contenido vivo de las ventanas**, no el bug.
+
+## Depurar un arranque que "no responde"
+
+"El dock no recibe clicks N segundos después de reiniciar" tiene al menos cuatro causas posibles
+y **ninguna se distingue mirando el código**. El 2026-08-21 se recorrieron las cuatro en ese
+orden; las tres primeras son descartes de un comando cada una, y la cuarta es la que encontró el
+bug (un deadlock de D-Bus con la bandeja, ver `AGENTS.md` → *Arranque sin bloqueo tras reinicio*).
+
+**Antes que nada, dos preguntas al usuario**, porque parten el árbol en dos: ¿los clicks **se
+pierden** o llegan tarde de golpe? ¿es sólo el dock o **todo el escritorio**? "Se pierden" y
+"todo" descarta que el bucle del dock esté ocupado y apunta a una superficie que se come el
+input… o a que el resto de las apps también están bloqueadas, que es lo que pasaba acá.
+
+1. **¿Se cuelga KWin?** Latencia de una llamada trivial cada 150 ms durante el reinicio. Su D-Bus
+   se atiende en el mismo hilo que el input, así que sirve de termómetro del compositor:
+   ```bash
+   busctl --user get-property org.kde.KWin /VirtualDesktopManager \
+          org.kde.KWin.VirtualDesktopManager current   # ~15 ms; un pico de segundos = KWin parado
+   ```
+2. **¿Qué superficies hay, y en qué capa?** Un script de KWin cargado por D-Bus
+   (`loadScript` + `start`) que imprima `workspace.windowList()` con `frameGeometry`, `dock`,
+   `desktopWindow` y `layer`, más `windowAdded`/`windowRemoved` para tener la **línea de tiempo
+   con timestamps** en el journal. Así se ve si algo a pantalla completa aparece por encima de las
+   ventanas (capa ≥ 2) y cuándo aparece cada dock. La superficie del wallpaper de kdock sale con
+   `desktopWindow=true layer=0`, o sea **debajo** de las ventanas: no puede comerse un clic
+   dirigido a Dolphin. **Acordate de `unloadScript` al terminar.**
+3. **¿Se redimensionan las ventanas?** El mismo script, conectando `frameGeometryChanged` de cada
+   ventana normal: al morir el dock desaparecen sus zonas exclusivas y la sospecha natural es una
+   tormenta de relayout en todas las apps. Acá **no hubo ni un solo cambio de geometría**.
+4. **¿Se cuelga el propio dock, y dónde?** Dos herramientas, en este orden:
+   ```bash
+   # (a) termómetro: latencia de org.kdock.Dock durante el reinicio
+   busctl --user --timeout=30 call org.kdock.Dock /Dock org.kdock.Dock primaryDockId
+   # (b) backtrace del bloqueo, en vivo (ptrace_scope=2 en esta máquina: hace falta sudo)
+   sudo eu-stack -p $(pgrep -x kdock)
+   ```
+   Un `dock_ms=24352` es la firma del **timeout de 25 s de D-Bus**, no de "el arranque es lento".
+   Y `eu-stack` sobre el proceso congelado da la respuesta en una línea: dos muestras a 2 s de
+   distancia con la misma pila = bloqueo, y la pila dice exactamente quién.
+5. **¿Quién no contesta?** `dbus-monitor --session` durante el reinicio, y después parear cada
+   `method call` con su `method return`/`error` por `serial`/`reply_serial` para listar las
+   llamadas lentas. Es lo que mostró las dos mitades del deadlock (25,18 s en un sentido, 24,14 s
+   en el otro) y **a quién** le estaba esperando cada una.
+
+Y para el costo legítimo del arranque (instanciar el QML de cada dock) está la costura
+`KDOCK_DEBUG_STARTUP=1`, que imprime `startup dock <id> built in N ms` por dock — apagada por
+omisión, como `KDOCK_DEBUG_DODGE`.
+
+**Dos advertencias sobre medir esto:**
+
+- **Un reinicio disparado desde el menú se mide igual con `busctl --user call org.kdock.Dock
+  /Dock org.kdock.Dock restart`**, que es el mismo camino (`kdock::restartAll`). No hace falta
+  tocar el dock a mano.
+- **El proceso relanzado hereda el stderr del que lo lanzó.** Si en algún momento lo arrancaste
+  con `> /tmp/loquesea.log`, todos los reinicios siguientes escriben ahí y no en el journal ni en
+  el log que estás mirando. `ls -l /proc/$(pgrep -x kdock)/fd/2` antes de sacar conclusiones. Y si
+  truncaste ese archivo mientras el proceso viejo lo tenía abierto, queda con un agujero de NULs
+  al principio y **`grep` lo trata como binario**: `grep -a`.
 
 ## Depurar agrupación de ventanas
 

@@ -1207,12 +1207,84 @@ Módulo dentro de la solapa **Modo QT** que lista los scripts de KWin instalados
 - **UI**: `QGroupBox` en `createQtCompatTab()` (`SettingsDialog::createKWinScriptsGroup`/`rebuildKWinScriptsList`), solo si `Session::hasKWin()` (org.kde.KWin en bus). `QListWidget` con `id (Name) vVersion [api] — Activado/Desactivado · Cargado/No cargado`, icono `emblem-checked/unavailable`, tooltip con description+path. Botones Activar/Desactivar, Reconfigurar KWin, Refrescar, Instalar desde archivo (QFileDialog `*.kwinscript`), Desinstalar (confirm), Abrir carpeta (`~/.local/share/kwin/scripts`). Estado en `QLabel` + watcher → auto-refresh. Gating: `hasKWin()==false` → lista deshabilitada con `(KWin no responde)`.
 - **Integración**: `KWinScripts` en `DockManager::Shared` (`dockmanager.h:64`), construido en `main.cpp` junto a `QtCompat`, expuesto vía `DockManager::kwinScripts()`. Solo el diálogo lo alcanza, como `QtCompat`. Sin QML. `CMakeLists.txt` añade `kwinscripts.cpp/h`, link `Qt6::DBus`.
 
-#### Arranque sin bloqueo 5s tras reinicio (`src/dockmanager.cpp` + `src/main.cpp`, 2026-08-21)
+#### Arranque sin bloqueo tras reinicio (`src/systray.cpp` + `src/dbusmenu.cpp` + `src/globalshortcut.cpp` + `src/dockmanager.cpp`, 2026-08-21)
 
-`DockManager::sync()` creaba 3 docks (`eDP-1#1` 1.5s + `eDP-1#4` 0.9s + `eDP-1` 1.1s = 3.6s) sincrónicamente, bloqueando el loop y dejando al dock sin input ~4s tras reinicio (medido `dockmanager-timing after sync 3601ms`). Además `DockService` se registraba al final de `main()` (tras wallpapers/darkAppearance/previews), demorando `org.kdock.Dock` a ~2.8s.
+**La causa era un deadlock de D-Bus con la bandeja, no el costo del arranque.** El síntoma
+reportado —"kdock no recibe clicks 5-8 s tras reiniciar, y el escritorio entero tampoco"— tenía
+dos mitades, y la primera se llevaba hasta 25 s.
 
-- `sync()` ahora crea el primer dock sync y los restantes vía `QTimer::singleShot(0)` con re-chequeo de `wantedDocks()`/`enabledDocks()`/`contains()` — primer dock aparece en ~1.1s, input bombea entre los demás.
-- `DockService::registerOnBus()` movido justo tras `DockManager` (antes de wallpapers), para que `dockIds` responda en ~1.3s. `KWinScripts::isLoaded` con timeout 800ms (antes 25s) evita congelar UI al listar 8 scripts tras reinicio.
+**La mitad grande: `SystrayItem::readProperties()` era sincrónica.** Una docena de
+`QDBusInterface::property()` bloqueantes (más el `Introspect` que hace el **constructor** de
+`QDBusInterface`, y otro más adentro de `DBusMenuClient`), corriendo desde adentro del handler
+de `RegisterStatusNotifierItem`. El cliente que se registra suele hacerlo con una llamada
+**sincrónica** y se queda adentro de ella hasta que el watcher le conteste: mientras kdock le
+preguntaba las propiedades, el otro no podía contestar. Los dos se esperaban hasta el timeout
+del bus. Medido con `dbus-monitor` durante un reinicio:
+
+```
+:1.1598 (blueman-tray) -> kdock          RegisterStatusNotifierItem "/org/blueman/sni"  25,18 s
+:1.1593 (kdock)        -> blueman-tray   Properties.Get /org/blueman/sni                24,14 s
+```
+
+Y detrás de kdock quedaban **encoladas las registraciones de todos los demás**
+(`xdg-desktop-portal-kde` esperó 24,65 s), que es por qué el usuario veía el escritorio entero
+muerto y no sólo el dock. El backtrace del bloqueo (`eu-stack` sobre el proceso vivo) mostraba
+además cómo se llegaba tan temprano: `main()` → `GlobalShortcuts::registerAction()` →
+`QDBusConnection::call(BlockWithGui)` → **bucle de eventos anidado** → el handler de la bandeja,
+todo antes de `app.exec()`.
+
+Lo que cambió:
+
+- **`SystrayItem` no hace una sola llamada bloqueante.** Un `Properties.GetAll` asíncrono
+  reemplaza a la docena de lecturas (con respaldo key-por-key para los ítems que no implementan
+  `GetAll`), `Activate`/`SecondaryActivate`/`ContextMenu` van por `asyncCall`, y **`QDBusInterface`
+  desapareció de la clase** — su constructor introspecciona bloqueando. Todas las llamadas llevan
+  timeout de 4 s en vez de los 25 s por omisión. Una sola ida y vuelta en vuelo por ítem, con la
+  siguiente recordada (`m_propsPending`/`m_propsQueued`), así que un ítem que emite `NewIcon` en
+  ráfaga no apila round trips.
+- **`DBusMenuClient` tampoco usa `QDBusInterface`** (mismo constructor bloqueante, y se construye
+  desde `readProperties()`): `menuCall()` arma el `QDBusMessage` a mano.
+- **`SniWatcherAdaptor::RegisterStatusNotifierItem` contesta primero y trabaja después**
+  (`QMetaObject::invokeMethod(..., Qt::QueuedConnection)`): la respuesta ya está en el cable
+  antes de que se construya el ítem, así que el cliente sale de su llamada sincrónica.
+- **`GlobalShortcuts::registerAction` usa `asyncCall`**, no `call(BlockWithGui)`: nada de bucles
+  anidados desde `main()`.
+- Al corregir el nombre de la propiedad (`ToolTip`; el código pedía `Tooltip` y nunca la
+  encontraba) se destapó una rama latente que demarshalaba con un `QDBusArgument` **no const** —
+  la trampa documentada, que se anuncia con "QDBusArgument: write from a read-only object" y
+  termina abortando el proceso. Ahora los dos locales son `const` y el tipo se compara con
+  `metaType()` en vez de `canConvert()` (preguntarle a `QVariant` si puede convertir recorre los
+  conversores de D-Bus, que **marshalan** — la misma escritura sobre un argumento de lectura).
+
+**La mitad chica: construir un dock cuesta ~0,4–1,5 s de QML** (instanciar `Dock.qml` con sus
+widgets, cada uno con su `Menu`, su `ToolTip` y sus íconos). Con tres docks eso son ~2 s en los
+que el dock existe pero no atiende:
+
+- `Dock.qml` **no instancia el componente de una sección que no se dibuja**
+  (`sourceComponent: sectionVisible(token) ? componentFor(token) : null`) — antes el `Loader` lo
+  construía igual, porque `visible: false` sólo deja de pintarlo. Es lo que el bloque `apps` ya
+  hacía con `showAppIcons`. Verificado pixel a pixel contra el binario anterior (idéntico).
+- Los docks diferidos de `sync()` se crean **escalonados** (`kDeferredDockMs`, 150 ms) en vez de
+  con `singleShot(0)`: los timers de cero se drenan todos en una pasada del bucle, así que los
+  tres docks se construían de corrido y el primero no llegaba a pintar. Medido en la sesión real
+  (eventos `windowAdded` de KWin, dos corridas por variante): con escalonado el **primer** dock
+  aparece a +1,1 s del reinicio en vez de +2,0 s; el último llega 0,3 s más tarde.
+- **`KDOCK_DEBUG_STARTUP` es la costura de medición** (apagada por omisión, como
+  `KDOCK_DEBUG_DODGE`): imprime `kdock: startup dock <id> built in N ms` por dock.
+
+Resultado en la sesión real, midiendo la latencia de `org.kdock.Dock` cada ~35 ms durante un
+reinicio: peor pausa **24 352 ms → 775 ms**, y los seis ítems de bandeja siguen apareciendo.
+Congelado en `tests/unit/tst_systray.cpp`, que corre bajo `dbus-run-session` (el host toma
+`org.kde.StatusNotifierWatcher`) con un cliente que exporta su ícono y después duerme sin bucle
+de eventos: el control positivo —devolver una sola lectura bloqueante— lo hace fallar con
+`registerItem() tardó 2455 ms`.
+
+**Lo que NO era**, y costó descartarlo (todo medido, ver `CLAUDE.md` → *Depurar un arranque que
+no responde*): KWin no se cuelga (latencia de D-Bus plana en 15 ms durante todo el reinicio), no
+hay tormenta de redimensionado (ninguna ventana cambia de geometría al desaparecer las zonas
+exclusivas), y ninguna superficie de kdock se come el input (la del wallpaper está en la capa
+`background`, debajo de las ventanas). Y **compartir un `QQmlEngine` entre docks es peor**, no
+mejor: probado, 2,9 s contra 1,5 s para los mismos tres docks.
 
 ### Acciones de sesión bajo LXQt (`src/powercontrol.{h,cpp}`, 2026-08-20)
 

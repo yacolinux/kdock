@@ -7,6 +7,7 @@
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QDBusMetaType>
+#include <QDBusObjectPath>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDBusServiceWatcher>
@@ -19,6 +20,8 @@
 #include <QVariantMap>
 #include <QtEndian>
 
+#include <memory>
+
 // The StatusNotifierItem spec is KDE-originated: in practice every watcher,
 // host and item uses the org.kde.* bus names (KDE, libappindicator, Qt/GTK
 // trays). The org.freedesktop.* names are essentially never implemented, so we
@@ -28,6 +31,25 @@ static const QString KDE_WATCHER_SERVICE = QStringLiteral("org.kde.StatusNotifie
 static const QString FDO_WATCHER_SERVICE = QStringLiteral("org.freedesktop.StatusNotifierWatcher");
 static const QString WATCHER_PATH = QStringLiteral("/StatusNotifierWatcher");
 static const QString ITEM_IFACE = QStringLiteral("org.kde.StatusNotifierItem");
+
+// Every call to an item carries this timeout instead of the bus default of 25 s.
+// The calls are asynchronous, so this only decides how long a pending reply is
+// kept alive for a client that never answers — but "never answers" is the normal
+// state of a tray client that is itself blocked, so the default is far too long.
+static constexpr int kItemCallTimeoutMs = 4000;
+
+// The properties the dock draws. Only used by the per-key fallback: the normal
+// path is a single GetAll.
+static const QStringList kItemProperties = {
+    QStringLiteral("IconName"),      QStringLiteral("IconThemePath"),
+    QStringLiteral("OverlayIconName"), QStringLiteral("Status"),
+    QStringLiteral("Category"),      QStringLiteral("Title"),
+    QStringLiteral("ItemIsMenu"),    QStringLiteral("Menu"),
+    QStringLiteral("ToolTip"),       QStringLiteral("IconPixmap"),
+    QStringLiteral("AttentionIconPixmap")};
+
+// Largest usable frame of an SNI pixmap property, converted to a QPixmap.
+static QPixmap pixmapFromProperty(const QVariant &value);
 
 // SNI pixmap wire types: IconPixmap et al. are a(iiay) = array of
 // (width, height, ARGB32-big-endian bytes). These must be registered with
@@ -104,8 +126,6 @@ SystrayItem::SystrayItem(const QString &service, const QString &path, QObject *p
     : QObject(parent)
     , service(service)
     , path(path)
-    , m_iface(new QDBusInterface(service, path, ITEM_IFACE,
-                                  QDBusConnection::sessionBus(), this))
 {
     readProperties();
 
@@ -130,17 +150,88 @@ SystrayItem::~SystrayItem()
 
 void SystrayItem::readProperties()
 {
-    if (!m_iface || !m_iface->isValid())
+    // One async GetAll instead of a dozen blocking property reads. See the
+    // comment on applyProperties() in the header for why "async" is the whole
+    // point and not a refinement.
+    if (m_propsPending) {
+        m_propsQueued = true;
         return;
+    }
+    m_propsPending = true;
 
-    iconName = m_iface->property("IconName").toString();
-    iconThemePath = m_iface->property("IconThemePath").toString();
-    overlayIconName = m_iface->property("OverlayIconName").toString();
-    status = m_iface->property("Status").toString();
-    category = m_iface->property("Category").toString();
-    title = m_iface->property("Title").toString();
-    itemIsMenu = m_iface->property("ItemIsMenu").toBool();
-    menuPath = m_iface->property("Menu").value<QDBusObjectPath>().path();
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        service, path, QStringLiteral("org.freedesktop.DBus.Properties"),
+        QStringLiteral("GetAll"));
+    msg.setArguments({ITEM_IFACE});
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(msg, kItemCallTimeoutMs), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
+        watcher->deleteLater();
+        m_propsPending = false;
+        const QDBusPendingReply<QVariantMap> reply = *watcher;
+        if (reply.isError() || reply.value().isEmpty()) {
+            // Not every item implements GetAll (some GTK/appindicator trays
+            // answer UnknownMethod, others an empty map); ask key by key instead
+            // of giving up, which would leave the icon blank forever.
+            requestPropertiesIndividually();
+            return;
+        }
+        applyProperties(reply.value());
+        if (m_propsQueued) {
+            m_propsQueued = false;
+            readProperties();
+        }
+    });
+}
+
+void SystrayItem::requestPropertiesIndividually()
+{
+    // Still "one round trip in flight" as far as callers are concerned, so a
+    // NewIcon arriving now is remembered instead of starting a second batch.
+    m_propsPending = true;
+    // Shared, not raw: the watchers are children of this item, so an item that
+    // goes away mid-flight destroys them without ever running the lambdas.
+    auto collected = std::make_shared<QVariantMap>();
+    auto left = std::make_shared<int>(kItemProperties.size());
+    for (const QString &key : kItemProperties) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            service, path, QStringLiteral("org.freedesktop.DBus.Properties"),
+            QStringLiteral("Get"));
+        msg.setArguments({ITEM_IFACE, key});
+        auto *watcher = new QDBusPendingCallWatcher(
+            QDBusConnection::sessionBus().asyncCall(msg, kItemCallTimeoutMs), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this,
+                [this, watcher, key, collected, left] {
+            watcher->deleteLater();
+            const QDBusPendingReply<QDBusVariant> reply = *watcher;
+            if (!reply.isError())
+                collected->insert(key, reply.value().variant());
+            if (--*left > 0)
+                return;
+            m_propsPending = false;
+            applyProperties(*collected);
+            if (m_propsQueued) {
+                m_propsQueued = false;
+                readProperties();
+            }
+        });
+    }
+}
+
+void SystrayItem::applyProperties(const QVariantMap &props)
+{
+    const auto str = [&props](const char *key) {
+        return props.value(QLatin1String(key)).toString();
+    };
+
+    iconName = str("IconName");
+    iconThemePath = str("IconThemePath");
+    overlayIconName = str("OverlayIconName");
+    status = str("Status");
+    category = str("Category");
+    title = str("Title");
+    itemIsMenu = props.value(QStringLiteral("ItemIsMenu")).toBool();
+    menuPath = props.value(QStringLiteral("Menu")).value<QDBusObjectPath>().path();
     hasMenu = !menuPath.isEmpty();
     // The menu client outlives single property reads (it caches the layout and
     // listens for updates), so build it once and only rebuild if the item moves
@@ -154,13 +245,23 @@ void SystrayItem::readProperties()
         m_menu = nullptr;
     }
 
-    QVariant tooltipVar = m_iface->property("Tooltip");
-    if (tooltipVar.isValid() && tooltipVar.canConvert<QVariantMap>()) {
-        QVariantMap map = tooltipVar.toMap();
+    // "ToolTip" is the spec's spelling. "Tooltip" is asked for as well because
+    // that is the only name this code used to use — which meant the property was
+    // never actually found, and the struct branch below never ran. Fixing the
+    // name is what first ran it, and it announced itself with a flood of
+    // "QDBusArgument: write from a read-only object": the local was not const.
+    QVariant tooltipVar = props.value(QStringLiteral("ToolTip"));
+    if (!tooltipVar.isValid())
+        tooltipVar = props.value(QStringLiteral("Tooltip"));
+    if (tooltipVar.metaType() == QMetaType::fromType<QVariantMap>()) {
+        const QVariantMap map = tooltipVar.toMap();
         tooltipTitle = map.value(QStringLiteral("title"), map.value(QStringLiteral("Title"))).toString();
         tooltipSub = map.value(QStringLiteral("description"), map.value(QStringLiteral("Description"))).toString();
-    } else if (tooltipVar.isValid() && tooltipVar.canConvert<QDBusArgument>()) {
-        QDBusArgument arg = tooltipVar.value<QDBusArgument>();
+    } else if (tooltipVar.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        // const, and it matters: the non-const beginStructure()/beginArray() are
+        // the *writing* overloads, and using them on a reply desyncs the
+        // demarshalling until libdbus aborts the whole process.
+        const QDBusArgument arg = tooltipVar.value<QDBusArgument>();
         arg.beginStructure();
         QString s1, s2, s3;
         arg >> s1 >> s2;
@@ -173,13 +274,13 @@ void SystrayItem::readProperties()
         arg.endStructure();
         tooltipTitle = s1.isEmpty() ? s3 : s1;
     } else {
-        tooltipTitle = m_iface->property("Title").toString();
+        tooltipTitle = title;
     }
 
     if (iconName.isEmpty()) {
-        iconPixmap = readPixmapProperty(QStringLiteral("IconPixmap"));
+        iconPixmap = pixmapFromProperty(props.value(QStringLiteral("IconPixmap")));
         if (iconPixmap.isNull()) // some trays only set the attention icon
-            iconPixmap = readPixmapProperty(QStringLiteral("AttentionIconPixmap"));
+            iconPixmap = pixmapFromProperty(props.value(QStringLiteral("AttentionIconPixmap")));
         iconWidth = iconPixmap.width();
         iconHeight = iconPixmap.height();
     } else {
@@ -191,14 +292,25 @@ void SystrayItem::readProperties()
     emit changed();
 }
 
-QPixmap SystrayItem::readPixmapProperty(const QString &name) const
+static QPixmap pixmapFromProperty(const QVariant &value)
 {
-    if (!m_iface)
-        return {};
-    // With the meta types registered (see SystrayHost ctor), QDBusInterface
-    // demarshals the a(iiay) property straight into KDbusImageVector.
-    const KDbusImageVector images =
-        m_iface->property(name.toLatin1().constData()).value<KDbusImageVector>();
+    // a(iiay) = array of (width, height, ARGB32-big-endian), as it came out of
+    // the properties reply.
+    //
+    // Two things here are deliberate. The local **must be const**: the non-const
+    // beginArray()/beginStructure() are the *writing* overloads, and using them
+    // on a reply desyncs the demarshalling until libdbus aborts the process (it
+    // announces itself first with "QDBusArgument: write from a read-only
+    // object"). And the type is matched with metaType(), not canConvert(): asking
+    // QVariant to convert walks the registered D-Bus converters, which marshals —
+    // the same write on a read-only argument.
+    KDbusImageVector images;
+    if (value.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        const QDBusArgument arg = value.value<QDBusArgument>();
+        arg >> images;
+    } else if (value.metaType() == QMetaType::fromType<KDbusImageVector>()) {
+        images = value.value<KDbusImageVector>();
+    }
 
     // Pick the largest frame with a plausible ARGB32 payload.
     const KDbusImageStruct *best = nullptr;
@@ -224,44 +336,31 @@ QPixmap SystrayItem::readPixmapProperty(const QString &name) const
     return QPixmap::fromImage(out);
 }
 
-QPixmap SystrayItem::decodePixmap(const QVariant &variant)
-{
-    if (!variant.isValid() || !variant.canConvert<QDBusArgument>())
-        return {};
-    QDBusArgument arg = variant.value<QDBusArgument>();
-    arg.beginArray();
-    QPixmap result;
-    while (!arg.atEnd()) {
-        arg.beginStructure();
-        int w = 0, h = 0;
-        QByteArray data;
-        arg >> w >> h >> data;
-        arg.endStructure();
-        if (w > 0 && h > 0 && data.size() == w * h * 4) {
-            QImage img(reinterpret_cast<const uchar *>(data.constData()), w, h, QImage::Format_ARGB32);
-            result = QPixmap::fromImage(img.copy());
-            break;
-        }
-    }
-    arg.endArray();
-    return result;
-}
-
 void SystrayItem::refresh()
 {
     readProperties();
 }
 
+void SystrayItem::callItem(const QString &member, const QVariantList &args)
+{
+    // Fire and forget: the item's handler may take as long as it likes (it often
+    // opens a window), and nothing here depends on the reply.
+    QDBusMessage msg = QDBusMessage::createMethodCall(service, path, ITEM_IFACE, member);
+    msg.setArguments(args);
+    QDBusConnection::sessionBus().asyncCall(msg, kItemCallTimeoutMs);
+}
+
 void SystrayItem::activate(int x, int y)
 {
-    if (!m_iface || !m_iface->isValid())
-        return;
     // Asynchronous on purpose, and the reply *is* inspected: an item whose
     // Activate is missing or fails is the signal to show its menu instead, which
     // is the only sensible thing a left click can do there. A blocking call
     // would also freeze the dock while the item opens its window.
+    QDBusMessage msg = QDBusMessage::createMethodCall(service, path, ITEM_IFACE,
+                                                      QStringLiteral("Activate"));
+    msg.setArguments({x, y});
     auto *watcher = new QDBusPendingCallWatcher(
-        m_iface->asyncCall(QStringLiteral("Activate"), x, y), this);
+        QDBusConnection::sessionBus().asyncCall(msg, kItemCallTimeoutMs), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
         watcher->deleteLater();
         if (QDBusPendingReply<> reply = *watcher; reply.isError())
@@ -271,14 +370,12 @@ void SystrayItem::activate(int x, int y)
 
 void SystrayItem::secondaryActivate(int x, int y)
 {
-    if (m_iface && m_iface->isValid())
-        m_iface->call(QStringLiteral("SecondaryActivate"), x, y);
+    callItem(QStringLiteral("SecondaryActivate"), {x, y});
 }
 
 void SystrayItem::contextMenu(int x, int y)
 {
-    if (m_iface && m_iface->isValid())
-        m_iface->call(QStringLiteral("ContextMenu"), x, y);
+    callItem(QStringLiteral("ContextMenu"), {x, y});
 }
 
 // ---------------------------------------------------------------------------
@@ -516,8 +613,19 @@ bool SniWatcherAdaptor::hostRegistered() const
 void SniWatcherAdaptor::RegisterStatusNotifierItem(const QString &serviceOrPath,
                                                    const QDBusMessage &msg)
 {
-    if (m_host)
-        m_host->registerItem(serviceOrPath, msg.service());
+    if (!m_host)
+        return;
+    // Reply now, work later. The client on the other end usually registers with
+    // a *blocking* call and stays inside it until we answer, so anything we do
+    // here happens while it cannot answer us back. Building the item is a queued
+    // call so the reply for this message is already on the wire by then; the
+    // item's own reads are asynchronous too (see SystrayItem), which is what
+    // stops the two processes from waiting on each other for the 25 s the bus
+    // allows. Measured before the fix: 24 s of frozen dock per start.
+    const QString caller = msg.service();
+    QMetaObject::invokeMethod(m_host, [host = m_host, serviceOrPath, caller] {
+        host->registerItem(serviceOrPath, caller);
+    }, Qt::QueuedConnection);
 }
 
 void SniWatcherAdaptor::RegisterStatusNotifierHost(const QString &service)

@@ -58,7 +58,15 @@ conexión con `this` de contexto quedaba llamando `setEnabled()` sobre botones l
 anclar una app desde el dock cerraba kdock (ver *Trampas que muerden* en `CLAUDE-TRAMPS.md`). Es un
 test de widgets y corre igual headless, porque `sandbox.h` ya construye una `QApplication`.
 
-El último es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira
+`tst_systray` es el único que necesita un **bus de sesión propio**: `SystrayHost` toma
+`org.kde.StatusNotifierWatcher`, así que en el bus de verdad le pelearía la bandeja al kdock
+del usuario. Por eso se registra a mano en `tests/CMakeLists.txt`, envuelto en
+`dbus-run-session`, y se saltea si esa herramienta no está. Congela el deadlock del 2026-08-21:
+un cliente de bandeja que exporta su ícono y después duerme sin bucle de eventos, y la pregunta
+de si el bucle del host sigue latiendo mientras tanto. El control positivo —una sola lectura de
+propiedad bloqueante— lo hace fallar con `registerItem() tardó 2455 ms`.
+
+`tst_qmlload` es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira
 los archivos del árbol, no lo que quedó *dentro* del binario, y el smoke necesita Xvfb y
 medio minuto. `tst_qmlload` instancia cada `.qml` del recurso con un `QQmlComponent` en
 milisegundos, así que cubre el archivo que nadie agregó al `qt_add_resources` y —lo que lo
