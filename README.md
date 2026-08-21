@@ -605,6 +605,14 @@ Mesa** y un **heap de 571 MB**, sin techo. Desde esta versión:
 
 El `ToolTip` del reloj mejorado mantiene su diseño personalizado (contentItem propio).
 
+**Arranque.** Un dock sólo instancia los widgets que dibuja: un `Loader` construye su
+componente aunque la sección esté invisible (`visible: false` sólo deja de pintarla), así que
+los widgets apagados costaban su `Menu`, su `ToolTip` y sus íconos en cada arranque. Y los
+docks que el escritorio actual quiere se crean **escalonados**, no todos en la misma pasada del
+bucle de eventos: el primero aparece y ya responde mientras se construyen los demás.
+Construir un dock cuesta ~0,4–1,5 s según cuántos widgets tenga (medible con
+`KDOCK_DEBUG_STARTUP=1`).
+
 | | Antes (11 h / 6 docks) | Después |
 |---|---|---|
 | `QSGRenderThread` | 68 | ~4-6 (uno por ventana dock visible) |

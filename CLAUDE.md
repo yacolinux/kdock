@@ -27,9 +27,11 @@ mano**, pero para verificar un cambio empezá por la suite. Tres cosas que impor
 - **Toda corrida es sandbox**: `XDG_DATA_HOME` descartable + herramientas falsas en el `PATH`
   (`tests/lib/`). Si escribís un test nuevo que arranca un binario, pasá por ahí o le vas a
   cambiar el brillo y el tema al usuario.
-- **Hay cuatro costuras de test en producción**, las cuatro apagadas por defecto y documentadas
+- **Hay cinco costuras de test en producción**, las cinco apagadas por defecto y documentadas
   en el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`),
   `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`),
+  `KDOCK_DEBUG_STARTUP` (cuánto tarda en construirse cada dock, `src/dockmanager.cpp` — la
+  respuesta a "el dock no responde al arrancar", ver *Depurar un arranque que "no responde"*),
   `KDOCK_WEATHER_FIXTURE` (una respuesta grabada del proveedor en vez de la red,
   `src/weathercontrol.cpp`) — esta última es lo que hace que `tst_weather` corra en CI, que no
   tiene internet — y `KDOCK_TEST_DISPLAYS` (la lista de monitores de PowerDevil como JSON,

@@ -583,6 +583,14 @@ threads** and a **571 MB heap**, with no ceiling. As of this version:
 
 The enhanced clock's `ToolTip` keeps its custom design (own contentItem).
 
+**Startup.** A dock only instantiates the widgets it draws: a `Loader` builds its component
+even when the section is invisible (`visible: false` only stops the painting), so every switched
+off widget used to cost its `Menu`, its `ToolTip` and its icons on every start. And the docks the
+current desktop wants are created **staggered**, not all in the same pass of the event loop: the
+first one shows up and answers input while the rest are still being built. Building one dock
+costs ~0.4-1.5 s depending on how many widgets it carries (measurable with
+`KDOCK_DEBUG_STARTUP=1`).
+
 | | Before (11 h / 6 docks) | After |
 |---|---|---|
 | `QSGRenderThread` | 68 | ~4-6 (one per visible dock window) |

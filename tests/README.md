@@ -98,17 +98,22 @@ Valen para cualquier arnés gráfico de este proyecto:
 Los dos se comprobaron rompiendo un `.qml` a propósito: `qmllint` **pasa** y `qml.smoke` falla.
 Ese es exactamente el reparto de trabajo entre los dos.
 
-## Las dos costuras de test en producción
+## Las tres costuras de test en producción
 
-Son dos, chicas y documentadas en el código:
+Son tres, chicas y documentadas en el código:
 
 - **`KDOCK_TEST_SCREENS`** (`src/dockmanager.cpp`): la lista de monitores. Es lo único que ata
   `DockManager` a la plataforma y bajo Xvfb no hay forma de simular un segundo monitor
   (`xrandr --setmonitor` no hace nada acá: este Xvfb no implementa monitores de RandR 1.5).
 - **`KDOCK_DEBUG_DODGE`** (`src/dockwindow.cpp`): imprime cada transición de `windowsOverlap`.
   El estado del *intelligent hide* no está en D-Bus y una captura no alcanza para afirmarlo.
+- **`KDOCK_DEBUG_STARTUP`** (`src/dockmanager.cpp`): imprime cuánto tarda en construirse cada
+  dock (`startup dock <id> built in N ms`). Es el número a mirar cuando el dock "no responde
+  al arrancar", y lo que distingue el costo legítimo del QML de un bloqueo de D-Bus — que se ve
+  igual desde afuera y se diagnostica distinto (ver `CLAUDE.md` → *Depurar un arranque que "no
+  responde"*).
 
-Las dos están apagadas salvo que se las pida explícitamente.
+Las tres están apagadas salvo que se las pida explícitamente.
 
 ## Trampas de los tests que ya mordieron
 
