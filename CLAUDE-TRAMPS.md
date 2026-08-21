@@ -71,6 +71,37 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   acá**: volver *un* connect a `this`, recompilar y confirmar que el test pasa de `Passed` a
   `SEGFAULT` — sin eso no se sabe si el test prueba el bug o mira para otro lado.
 
+- **Un repintado que se cuelga de `changed()` no puede refrescar la fuente de `changed()`**
+  (2026-08-21, reportado como *"quise activar el KWin script Truely Maximized, el dock se colgó y
+  se cerró"* — SIGSEGV con coredump). La solapa *Modo QT* conecta
+  `KWinScripts::changed` → `SettingsDialog::rebuildKWinScriptsList()`, y el repintado llamaba
+  `ks->refresh()` para tener datos frescos. `refresh()` emite `changed()`. O sea el ciclo
+  `rebuild → refresh → changed → rebuild`, sin fondo: **el primer clic entra y no sale nunca**.
+  El coredump son cientos de marcos alternando `rebuildKWinScriptsList` y `QDir::entryList`.
+  Lo que lo hace confuso es que **no se ve como un crash sino como un cuelgue**: cada vuelta hace
+  un `scan()` —dos listados de directorio más una llamada D-Bus **bloqueante** a KWin por script—
+  así que el dock se congela varios segundos antes de desbordar la pila. Y el efecto que el
+  usuario pidió **sí quedó aplicado** (`kwriteconfig6` + `reconfigure` corren antes del repintado),
+  con lo cual el síntoma se lee como "activar un script mata al dock" cuando el toggle fue lo único
+  que funcionó.
+  La cura tiene dos mitades, y la primera es la general:
+  - **La señal emite sólo cuando algo cambió.** `refresh()` compara el scan con el caché y calla
+    si son iguales, así que un oyente que refresque de vuelta converge en una vuelta. Es lo que
+    congela `tests/unit/tst_kwinscripts.cpp` (el test que no necesita KWin en el bus).
+  - **El repintado es una vista pura**: lee el caché y nada más. Quien quiera datos frescos llama
+    a `refresh()`, que repinta por la señal. Más una bandera de reentrada como segunda cerradura.
+  **El test unitario no alcanza para la segunda mitad**: `rebuildKWinScriptsList()` corta en
+  `!available()` cuando `org.kde.KWin` no está en el bus, o sea siempre en CI. Eso se prueba con la
+  sonda que linkea los `.o` (receta en `CLAUDE.md`) corriendo **sin** `dbus-run-session`, que le
+  hace `->click()` a *Refrescar* y a *Activar* con `kwriteconfig6` falso en el `PATH` y
+  `XDG_CONFIG_HOME` descartable — si no, la sonda le escribe el `kwinrc` de verdad. El control
+  positivo es obligatorio: con el código viejo la sonda sale con **139 (SIGSEGV)** en el primer
+  clic de *Refrescar*, que además es el camino sin efectos secundarios.
+  Y el corolario del watcher, que es la misma trampa de más abajo: `KWinScripts` vigila el
+  **directorio** de `kwinrc`, o sea `~/.config`. Sin una marca `(mtime, size)` del archivo propio,
+  cualquier programa de la sesión escribiendo cualquier config le costaba un `scan()` entero —con
+  sus llamadas D-Bus bloqueantes en el hilo de la GUI— y le borraba la selección a la lista.
+
 - **Vigilar un DIRECTORIO donde uno mismo escribe es un bucle garantizado** (2026-08-14,
   reportado como *"flickeo en la solapa Widgets del diálogo"* + el sistema pesado). `AutoColorScheme`
   vigilaba `plasma-org.kde.plasma.desktop-appletsrc` **y su directorio** —que es `~/.config`— y

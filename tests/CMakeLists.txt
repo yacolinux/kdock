@@ -55,6 +55,7 @@ kdock_add_unit_test(tst_settingsdialog)
 kdock_add_unit_test(tst_audiocontrol)
 kdock_add_unit_test(tst_session)
 kdock_add_unit_test(tst_lxqtwallpapers)
+kdock_add_unit_test(tst_kwinscripts)
 
 # tst_systray is registered by hand too, and wrapped in `dbus-run-session`: the
 # host it exercises takes org.kde.StatusNotifierWatcher, so on the developer's

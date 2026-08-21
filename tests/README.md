@@ -58,6 +58,18 @@ conexión con `this` de contexto quedaba llamando `setEnabled()` sobre botones l
 anclar una app desde el dock cerraba kdock (ver *Trampas que muerden* en `CLAUDE-TRAMPS.md`). Es un
 test de widgets y corre igual headless, porque `sandbox.h` ya construye una `QApplication`.
 
+`tst_kwinscripts` congela otro crash real, y es un buen ejemplo de test que **sólo puede probar
+la mitad**. `KWinScripts::refresh()` emitía `changed()` siempre; la solapa *Modo QT* repinta su
+lista con esa señal y el repintado refrescaba de vuelta, así que el primer clic en *Activar*
+entraba en un ciclo sin fondo y desbordaba la pila (2026-08-21). El test siembra un
+`metadata.json` en el sandbox —sin eso las dos corridas de `scan()` darían vacío y el ciclo no se
+ejercitaría— y afirma las dos direcciones: un oyente que refresca desde `changed()` converge en
+una vuelta, y un scan distinto sí emite. Lo que **no** puede cubrir es el repintado del diálogo:
+corta en `!available()` cuando `org.kde.KWin` no está en el bus, o sea siempre en CI. Esa mitad se
+prueba a mano con la sonda que linkea los `.o` (receta en `CLAUDE.md`), sin `dbus-run-session`, con
+`kwriteconfig6` falso en el `PATH` y `XDG_CONFIG_HOME` descartable — si no, le escribe el `kwinrc`
+del usuario.
+
 `tst_systray` es el único que necesita un **bus de sesión propio**: `SystrayHost` toma
 `org.kde.StatusNotifierWatcher`, así que en el bus de verdad le pelearía la bandeja al kdock
 del usuario. Por eso se registra a mano en `tests/CMakeLists.txt`, envuelto en

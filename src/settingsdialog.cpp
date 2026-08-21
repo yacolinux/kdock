@@ -66,6 +66,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QScrollArea>
 #include <QSettings>
@@ -4418,7 +4419,16 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
     connect(m_kwinScriptsList, &QListWidget::currentRowChanged, box, [updateButtons](int) { updateButtons(); });
     connect(m_kwinScriptsList, &QListWidget::itemSelectionChanged, box, [updateButtons] { updateButtons(); });
 
-    connect(toggleBtn, &QPushButton::clicked, this, [this] {
+    // Every "re-read from disk" goes through here and never through
+    // rebuildKWinScriptsList(): refresh() emits changed(), changed() rebuilds
+    // the list, and a rebuild that refreshes again closes the cycle. See the
+    // comment on rebuildKWinScriptsList().
+    auto requestRefresh = [this] {
+        if (m_manager && m_manager->kwinScripts())
+            m_manager->kwinScripts()->refresh();
+    };
+
+    connect(toggleBtn, &QPushButton::clicked, this, [this, requestRefresh] {
         QListWidgetItem *it = m_kwinScriptsList ? m_kwinScriptsList->currentItem() : nullptr;
         if (!it || !m_manager || !m_manager->kwinScripts())
             return;
@@ -4432,10 +4442,10 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
             m_kwinScriptsStatus->setVisible(false);
         }
         // refresh will be triggered by file watcher; force after delay
-        QTimer::singleShot(800, this, [this] { rebuildKWinScriptsList(); });
+        QTimer::singleShot(800, this, requestRefresh);
     });
 
-    connect(reconfBtn, &QPushButton::clicked, this, [this] {
+    connect(reconfBtn, &QPushButton::clicked, this, [this, requestRefresh] {
         if (!m_manager || !m_manager->kwinScripts())
             return;
         QString err = m_manager->kwinScripts()->reconfigure();
@@ -4450,12 +4460,12 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
                     m_kwinScriptsStatus->setVisible(false);
             });
         }
-        QTimer::singleShot(700, this, [this] { rebuildKWinScriptsList(); });
+        QTimer::singleShot(700, this, requestRefresh);
     });
 
-    connect(refreshBtn, &QPushButton::clicked, this, [this] { rebuildKWinScriptsList(); });
+    connect(refreshBtn, &QPushButton::clicked, this, requestRefresh);
 
-    connect(installBtn, &QPushButton::clicked, this, [this] {
+    connect(installBtn, &QPushButton::clicked, this, [this, requestRefresh] {
         if (!m_manager || !m_manager->kwinScripts())
             return;
         const QString path = QFileDialog::getOpenFileName(
@@ -4472,10 +4482,10 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
             m_kwinScriptsStatus->setText(tr("Instalado: %1").arg(QFileInfo(path).fileName()));
             m_kwinScriptsStatus->setVisible(true);
         }
-        rebuildKWinScriptsList();
+        requestRefresh();
     });
 
-    connect(removeBtn, &QPushButton::clicked, this, [this] {
+    connect(removeBtn, &QPushButton::clicked, this, [this, requestRefresh] {
         QListWidgetItem *it = m_kwinScriptsList ? m_kwinScriptsList->currentItem() : nullptr;
         if (!it || !m_manager || !m_manager->kwinScripts())
             return;
@@ -4493,7 +4503,7 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
         } else {
             m_kwinScriptsStatus->setVisible(false);
         }
-        rebuildKWinScriptsList();
+        requestRefresh();
     });
 
     connect(openFolderBtn, &QPushButton::clicked, this, [] {
@@ -4502,20 +4512,33 @@ void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
         QDesktopServices::openUrl(QUrl::fromLocalFile(dir));
     });
 
-    // Initial populate + live updates
-    rebuildKWinScriptsList();
+    // Live updates first, then one scan to fill the cache: refresh() emits
+    // changed() only when the scan differs, so the explicit rebuild below is
+    // what covers the "nothing installed" case.
     if (m_manager && m_manager->kwinScripts()) {
         connect(m_manager->kwinScripts(), &KWinScripts::changed, box, [this] { rebuildKWinScriptsList(); });
+        m_manager->kwinScripts()->refresh();
     }
+    rebuildKWinScriptsList();
 
     parentLayout->addWidget(box);
     updateButtons();
 }
 
+// Pure view update: paints m_kwinScriptsList from the KWinScripts cache and
+// touches nothing else. It must NOT call KWinScripts::refresh() — refresh()
+// emits changed(), which is wired back to this function, so a refresh from
+// here recursed until the stack overflowed and took the whole dock down with
+// it (2026-08-21, first click on "Activar"). The re-entrancy guard is the
+// second lock on the same door, in case a future caller re-adds the cycle.
 void SettingsDialog::rebuildKWinScriptsList()
 {
     if (!m_kwinScriptsList || !m_manager || !m_manager->kwinScripts())
         return;
+    if (m_kwinScriptsRebuilding)
+        return;
+    m_kwinScriptsRebuilding = true;
+    const QScopeGuard clearRebuilding([this] { m_kwinScriptsRebuilding = false; });
     KWinScripts *ks = m_manager->kwinScripts();
     if (!ks->available()) {
         m_kwinScriptsList->clear();
@@ -4529,7 +4552,6 @@ void SettingsDialog::rebuildKWinScriptsList()
     if (m_kwinScriptsGroup)
         m_kwinScriptsGroup->setEnabled(true);
 
-    ks->refresh();
     const QString prevId = m_kwinScriptsList->currentItem()
                                ? m_kwinScriptsList->currentItem()->data(Qt::UserRole).toString()
                                : QString();

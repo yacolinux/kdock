@@ -5,6 +5,7 @@
 #include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -13,6 +14,8 @@
 #include <QProcess>
 #include <QSettings>
 #include <QStandardPaths>
+
+#include <algorithm>
 
 namespace {
 
@@ -301,11 +304,38 @@ QList<KWinScripts::ScriptInfo> KWinScripts::scriptInfos() const
     return m_cache.isEmpty() ? const_cast<KWinScripts *>(this)->scan() : m_cache;
 }
 
+// Emits changed() only when the scan actually differs from the cache. Two
+// reasons: a listener that rebuilds a widget on changed() would otherwise wipe
+// the user's selection on every unrelated config write, and any listener that
+// refreshes back would spin forever — which is exactly what killed the dock
+// on 2026-08-21 (SettingsDialog::rebuildKWinScriptsList).
 void KWinScripts::refresh()
 {
-    m_cache = scan();
+    QList<ScriptInfo> fresh = scan();
+    const bool same = fresh.size() == m_cache.size()
+        && std::equal(fresh.cbegin(), fresh.cend(), m_cache.cbegin(),
+                      [](const ScriptInfo &a, const ScriptInfo &b) {
+                          return a.id == b.id && a.name == b.name && a.version == b.version
+                              && a.path == b.path && a.enabled == b.enabled && a.loaded == b.loaded;
+                      });
+    m_cache = std::move(fresh);
     ensureWatched();
-    emit changed();
+    if (!same)
+        emit changed();
+}
+
+// True the first time it is asked after kwinrc changed on disk. KConfig
+// replaces the file by rename, so (mtime, size) is what identifies a write.
+bool KWinScripts::kwinrcChangedOnDisk()
+{
+    const QFileInfo fi(kwinrcPath());
+    const QString stamp = QStringLiteral("%1/%2")
+                              .arg(fi.lastModified().toMSecsSinceEpoch())
+                              .arg(fi.size());
+    if (stamp == m_kwinrcStamp)
+        return false;
+    m_kwinrcStamp = stamp;
+    return true;
 }
 
 void KWinScripts::ensureWatched()
@@ -325,11 +355,20 @@ void KWinScripts::ensureWatched()
         watcher->addPath(path);
     if (QFileInfo::exists(dir))
         watcher->addPath(dir);
+    kwinrcChangedOnDisk(); // seed the stamp so the first event is not a false positive
     connect(watcher, &QFileSystemWatcher::fileChanged, this, [this, watcher, path](const QString &) {
-        m_debounce.start();
+        if (kwinrcChangedOnDisk())
+            m_debounce.start();
         // Re-add after atomic replace
         if (!watcher->files().contains(path) && QFileInfo::exists(path))
             watcher->addPath(path);
     });
-    connect(watcher, &QFileSystemWatcher::directoryChanged, this, [this] { m_debounce.start(); });
+    // That directory is ~/.config, shared with every other program on the
+    // session: without the stamp check, anyone writing any config file would
+    // cost a full scan() — nine directory listings plus nine blocking D-Bus
+    // calls to KWin, on the GUI thread.
+    connect(watcher, &QFileSystemWatcher::directoryChanged, this, [this] {
+        if (kwinrcChangedOnDisk())
+            m_debounce.start();
+    });
 }

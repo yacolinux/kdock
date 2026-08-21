@@ -1193,6 +1193,7 @@ Lo que esos dos no pueden probar, y cómo se probó:
 ## Trampas que muerden
 El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y leéla entrada cuyo título coincida con el área que estás tocando. Este índice es solopara saber qué existe y cuándo consultarlo:
 - **Un `QDialog` sin parent no lo borra nadie, y el diálogo de kdock colgaba de un `QQuickView`**
+- **Un repintado que se cuelga de `changed()` no puede refrescar la fuente de `changed()`**
 - **Una conexión de una solapa del diálogo NO puede tener a `this` de contexto**
 - **Vigilar un DIRECTORIO donde uno mismo escribe es un bucle garantizado**
 - **`QZipWriter` AGREGA al archivo que encuentra, no lo pisa**

@@ -71,5 +71,7 @@ private:
     QTimer m_debounce;
     QList<ScriptInfo> m_cache;
     bool m_watching = false;
+    QString m_kwinrcStamp; // (mtime, size) of kwinrc at the last watcher event
+    bool kwinrcChangedOnDisk();
     void ensureWatched();
 };

@@ -442,6 +442,7 @@ private:
     QWidget *m_kwinScriptsGroup = nullptr;
     class QListWidget *m_kwinScriptsList = nullptr;
     QLabel *m_kwinScriptsStatus = nullptr;
+    bool m_kwinScriptsRebuilding = false;
     void rebuildKWinScriptsList();
     void createKWinScriptsGroup(QVBoxLayout *parentLayout);
 };
