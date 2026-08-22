@@ -60,6 +60,21 @@ public slots:
     // empty when there was nothing generated yet.
     Q_SCRIPTABLE QString saveColorScheme();
 
+    // The *automatic* mode: regenerate on every wallpaper change. Separate from
+    // the two above, which are the manual path and work with this off.
+    //
+    // It is a call and not a config write for the same reason dark mode is:
+    // switching it on captures the defaults, applies straight away and (under
+    // dark mode) may refuse — none of which happens by writing the key from
+    // another process, and the panel would show a switch that lies.
+    Q_SCRIPTABLE bool colorAutoEnabled();
+    Q_SCRIPTABLE void setColorAutoEnabled(bool on);
+    // Whether generating right now would find a wallpaper to sample. The panel
+    // gates its buttons on this: with no source every press is a silent no-op,
+    // and a card that says "Generado" over nothing is worse than a greyed
+    // button. See AutoColorScheme::canRead().
+    Q_SCRIPTABLE bool colorAutoCanRead();
+
     Q_SCRIPTABLE bool darkMode();
     Q_SCRIPTABLE void setDarkMode(bool on);
     Q_SCRIPTABLE void toggleDarkMode();
@@ -79,9 +94,15 @@ public slots:
 
 signals:
     Q_SCRIPTABLE void darkModeChanged(bool on);
+    // ColorAuto's switch moved. Not only from setColorAutoEnabled(): the
+    // settings tab writes it too, and **dark mode switches it off by itself**
+    // (it owns the desktop's appearance while it is on) and back afterwards. A
+    // panel that only echoed its own presses would go stale on all three.
+    Q_SCRIPTABLE void colorAutoChanged(bool enabled);
 
 private:
     DockManager *m_manager;
     // Last value announced, so the notifier does not re-emit on every repaint.
     bool m_lastDarkMode = false;
+    bool m_lastColorAuto = false;
 };

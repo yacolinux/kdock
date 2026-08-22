@@ -164,6 +164,25 @@ void LxqtWallpapers::syncWindows()
     }
 }
 
+QHash<QString, QString> LxqtWallpapers::currentImages() const
+{
+    QHash<QString, QString> out;
+    if (!m_active)
+        return out; // nothing of ours on screen; see the header
+    for (auto it = m_windows.constBegin(); it != m_windows.constEnd(); ++it) {
+        // A monitor with nothing configured has a hidden surface and an empty
+        // path. Skipping it is what lets ColorAuto colour the docks of the
+        // monitors it *could* resolve and clear the rest, instead of sampling
+        // a picture that is not there.
+        if (!it.value())
+            continue;
+        const QString image = it.value()->image();
+        if (!image.isEmpty())
+            out.insert(it.key(), image);
+    }
+    return out;
+}
+
 QString LxqtWallpapers::pcmanfmWallpaper()
 {
     // The profile is the one LXQt's autostart entry passes (--profile=lxqt);

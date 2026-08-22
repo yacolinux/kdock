@@ -1196,6 +1196,33 @@ escondería justo el dato— y verifica el color dominante, la decisión claro/o
 **todas** las razones de contraste generadas cumplan su objetivo sobre cuatro imágenes por
 tres claridades. `tests/unit/tst_autocolorscheme.cpp` cubre la máquina de estados sin D-Bus.
 
+**Y desde 2026-08-22 el camino de lectura → aplicación también se prueba en CI, pero sólo por
+la rama de LXQt.** `AutoColorScheme::setWallpaperSource()` reemplaza el viaje por D-Bus por un
+`std::function`, así que `tst_autocolorscheme` puede inyectar rutas y afirmar sobre lo que sale.
+Tres cosas de esos casos:
+
+- **La fuente hay que sembrarla con la clave `""`.** `systemScreenName()` cae a
+  `QGuiApplication::screens()` y bajo `offscreen` la única pantalla **no tiene nombre**, así que
+  el monitor que manda se llama `""`. Con cualquier otro conector, `leadImage` queda vacío y la
+  contabilidad de `variant`/`lastImage` no corre: el test pasa sin probar esa mitad.
+- **Las imágenes se generan con `QImage`, no son fixtures**, misma razón que
+  `tst_wallpapercolors`: lo que se afirma es el color que sale. Y van **saturadas**, porque el
+  portón de saturación/valor del muestreo descarta gris, negro y blanco.
+- **Los `.colors` sobreviven entre casos.** El `init()` limpia la sección `[ColorAuto]` del
+  `kdock.conf` pero no el directorio, así que un caso que afirme "no se escribió nada" tiene que
+  borrar los dos generados primero o ve los de la prueba anterior.
+
+Y el control positivo que confirmó que esos casos no pasan de arriba: cambiar `if (m_source)`
+por `if (false)`, recompilar y correr — 6 de los 7 fallan. (El séptimo, "una fuente vacía no
+aplica nada", pasa igual: sin fuente la llamada D-Bus también falla y no se aplica nada. Es un
+test más débil por naturaleza.)
+
+**Y ojo con que `Session::kind()` cambia entre esta máquina y CI**: acá
+`XDG_CURRENT_DESKTOP=LXQt:kwin_wayland` da `Lxqt`, en el container de Arch no está definida y da
+`Other`, o sea que el watcher de `appletsrc` se arma en CI y no acá. Ningún test afirma sobre
+eso hoy, pero si tocás esa rama corré el tier entero con las tres:
+`for s in kde lxqt other; do KDOCK_TEST_SESSION=$s ctest --test-dir build -L unit; done`.
+
 Lo que esos dos no pueden probar, y cómo se probó:
 
 - **Que la solapa funcione**: la sonda que linkea los `.o` de `kdock_core.dir` (receta de más
@@ -1204,6 +1231,14 @@ Lo que esos dos no pueden probar, y cómo se probó:
   **por el `QGroupBox` que los contiene**; el interruptor maestro es el único `QCheckBox` que
   no está dentro de ninguno. Con `enabledScreens=` de una pantalla inexistente el
   `DockManager` no arma ninguna ventana y la sonda no necesita ningún backend real.
+  - **Y con `KDOCK_TEST_SESSION` se prueban las dos ramas de la solapa sin cambiar de máquina**
+    (2026-08-22). Bajo `lxqt` el grupo se llama *Esquema del sistema* y crece dos filas de
+    estado (*Fondos* / *Modo QT*) con sus botones de salto; bajo `kde` se llama *Esquema del
+    sistema (KDE)* y no tiene ninguna. La sonda las encuentra por el `title()` del grupo e
+    imprime el `text()` de cada `QLabel`, que es lo que prueba **cuál** de los cuatro mensajes
+    salió — la captura sola no distingue "apagado" de "activado". El `grab()` va sobre **ese
+    grupo**, no sobre el diálogo: las solapas viven en un `QScrollArea` y el grupo puede quedar
+    afuera del viewport.
 - **Que el dock se pinte de verdad**: el arnés de Xvfb con `enabled=true`, `colorDocks=true` y
   **`systemScheme=false`** en el `[ColorAuto]` del `.conf` de prueba, y el `import -window` de
   siempre. El control es correr dos veces, con la feature prendida y apagada, y comparar el

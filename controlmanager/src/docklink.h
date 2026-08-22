@@ -22,12 +22,28 @@ class DockLink : public QObject
     Q_OBJECT
     Q_PROPERTY(bool available READ available NOTIFY changed)
     Q_PROPERTY(bool darkMode READ darkMode WRITE setDarkMode NOTIFY changed)
+    // ColorAuto's *automatic* mode, and whether a generation would find a
+    // wallpaper at all. The second one is what stops the card from claiming
+    // success over a no-op — see refresh().
+    Q_PROPERTY(bool colorAutoEnabled READ colorAutoEnabled WRITE setColorAutoEnabled NOTIFY changed)
+    Q_PROPERTY(bool colorAutoCanRead READ colorAutoCanRead NOTIFY changed)
+    // Whether the dock on the bus answers these two at all.
+    //
+    // The panel and the dock restart independently, so a panel from this build
+    // can be talking to a kdock that predates ColorAuto's switch — and the two
+    // "no" answers are indistinguishable from a real no otherwise. With this
+    // false the card falls back to how it behaved before: buttons live, no
+    // claims about wallpapers it cannot ask about.
+    Q_PROPERTY(bool colorAutoKnown READ colorAutoKnown NOTIFY changed)
 
 public:
     explicit DockLink(QObject *parent = nullptr);
 
     bool available() const { return m_available; }
     bool darkMode() const { return m_darkMode; }
+    bool colorAutoEnabled() const { return m_colorAutoEnabled; }
+    bool colorAutoCanRead() const { return m_colorAutoCanRead; }
+    bool colorAutoKnown() const { return m_colorAutoKnown; }
 
     Q_INVOKABLE void setDarkMode(bool on);
     Q_INVOKABLE void toggleDarkMode() { setDarkMode(!m_darkMode); }
@@ -44,6 +60,16 @@ public:
     // purpose: the engine keeps which of its two generated schemes is current,
     // and that has to exist exactly once for the whole session.
     Q_INVOKABLE void generateColorScheme();
+    // The automatic mode. A call and not a config write: switching it on
+    // captures the defaults and applies straight away, and dark mode can refuse
+    // — all of that lives in the dock's process.
+    Q_INVOKABLE void setColorAutoEnabled(bool on);
+    Q_INVOKABLE void toggleColorAuto() { setColorAutoEnabled(!m_colorAutoEnabled); }
+    // Re-read just the "is there a wallpaper to sample" answer. It changes
+    // without any signal to hang off (a slideshow step, a monitor unplugged,
+    // the wallpaper engine switched off in the dock's settings), so the card
+    // asks again when it is about to matter instead of trusting a cache.
+    Q_INVOKABLE void refreshColorAuto();
     // Blocking, unlike everything else here: the card shows the id it saved,
     // and there is nothing to show until the dock answers. Short timeout so a
     // dock that went away cannot freeze the panel.
@@ -59,9 +85,13 @@ signals:
 
 private slots:
     void onDarkModeChanged(bool on);
+    void onColorAutoChanged(bool enabled);
 
 private:
     bool m_available = false;
     bool m_darkMode = false;
+    bool m_colorAutoEnabled = false;
+    bool m_colorAutoCanRead = false;
+    bool m_colorAutoKnown = false;
     QVariantList m_docks;
 };

@@ -34,6 +34,8 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <functional>
+
 #include "wallpapercolors.h"
 
 class AppearanceControl;
@@ -60,6 +62,23 @@ public:
     // the manager's own constructor), while it needs the manager to reach those
     // docks. Everything here tolerates a null manager, so the gap is safe.
     void setManager(DockManager *manager) { m_manager = manager; }
+
+    // Where the wallpapers come from when this session is not Plasma's.
+    //
+    // Under LXQt there is no plasmashell to ask: kdock paints the wallpapers
+    // itself (LxqtWallpapers), so the engine that painted them is the only
+    // thing that knows what is on each monitor. Injected from main() rather
+    // than reached for directly, the same split WallpaperControl already makes
+    // with setAlternateEngine() for the very same reason.
+    //
+    // Setting it replaces the D-Bus round trip entirely, which makes the read
+    // **synchronous** — generateNow() then has its result before it returns.
+    // It also shortens the debounce: the 1200 ms below exist to outlast the
+    // asynchronous half of a Plasma wallpaper change, and this path has none.
+    //
+    // The callback returns connector name -> image path. An empty hash is a
+    // normal answer ("nothing to sample"), not a failure.
+    void setWallpaperSource(std::function<QHash<QString, QString>()> source);
 
     // ---- persisted settings (shared kdock.conf, group [ColorAuto]) ---------
     static bool enabled();
@@ -125,6 +144,18 @@ public:
     // docks and removes the generated files.
     void setEnabled(bool on);
 
+    // Would a generation right now have a wallpaper to sample?
+    //
+    // Not a detail: with the answer no, every entry point (the tab button, the
+    // dock widget, the panel card) is a silent no-op, and that is exactly how
+    // this feature looked under LXQt before it had a source at all. Anything
+    // with a button has to be able to ask, or it ends up claiming success over
+    // nothing — the panel card did precisely that.
+    //
+    // Under LXQt it means "kdock is drawing the wallpapers and at least one
+    // monitor has an image"; under Plasma, "there is a plasmashell to ask".
+    bool canRead() const;
+
     // Re-read the wallpapers and re-apply. Debounced, so every trigger can call
     // it freely. No-op while the feature is off.
     void refresh();
@@ -161,7 +192,9 @@ signals:
 private:
     void onDarkModePing();
     // Ask Plasma for every connected containment's current wallpaper image,
-    // keyed by connector name, and continue in applyPalettes().
+    // keyed by connector name, and continue in applyPalettes(). With a
+    // wallpaper source injected (see setWallpaperSource) it asks that instead,
+    // and applyPalettes() runs before this returns.
     void readWallpapers();
     void applyPalettes(const QHash<QString, QString> &imageByScreen);
     // (Re)arm the watch on Plasma's applet config. Must run again after every
@@ -203,6 +236,9 @@ private:
     AppearanceControl *m_appearance = nullptr;
     DockManager *m_manager = nullptr;
     VirtualDesktops *m_desktops = nullptr;
+    // Set under LXQt only. When it is there, readWallpapers() never touches
+    // D-Bus. See setWallpaperSource().
+    std::function<QHash<QString, QString>()> m_source;
 
     // Coalesces the four triggers, and — more importantly — waits out the
     // asynchronous half of a wallpaper change: kdock only asks Plasma to cycle

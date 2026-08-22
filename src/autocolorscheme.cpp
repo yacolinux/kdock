@@ -6,6 +6,7 @@
 #include "dockconfig.h"
 #include "dockmanager.h"
 #include "plasmascript.h"
+#include "session.h"
 #include "theme.h"
 #include "virtualdesktops.h"
 
@@ -200,35 +201,45 @@ AutoColorScheme::AutoColorScheme(Theme *theme, AppearanceControl *appearance,
                 [this](int) { refresh(); });
     }
 
-    // The trigger that actually matters. The in-process ones only fire for
-    // wallpaper changes kdock itself made, and the usual way to change a
-    // wallpaper is *not* that: a Script Runner script talking qdbus6 straight
-    // to plasmashell, KDE's own slideshow timer, or System Settings all leave
-    // kdock completely out of the loop. Watching Plasma's config catches every
-    // one of them. Deliberately not gated on enabled(): the gate lives in
-    // refresh(), and gating here would mean ticking the box does nothing until
-    // the *next* wallpaper change.
-    connect(&m_wallpaperWatch, &QFileSystemWatcher::fileChanged, this,
-            [this](const QString &) {
-                armWallpaperWatch();
-                if (appletsrcChanged())
-                    refresh();
-            });
-    connect(&m_wallpaperWatch, &QFileSystemWatcher::directoryChanged, this,
-            [this](const QString &) {
-                // The file can be missing for an instant mid-rename; re-arming
-                // from the directory is what picks the new inode back up. But a
-                // directory event says nothing about *which* file moved, and
-                // this directory is ~/.config: our own applySystem() lands a
-                // kdeglobals in it through plasma-apply-colorscheme, so
-                // refreshing on the event itself is a loop with no way out (see
-                // appletsrcChanged()).
-                armWallpaperWatch();
-                if (appletsrcChanged())
-                    refresh();
-            });
-    armWallpaperWatch();
-    appletsrcChanged(); // seed the stamp; the first real change is the trigger
+    // The trigger that actually matters **under Plasma**. The in-process ones
+    // only fire for wallpaper changes kdock itself made, and the usual way to
+    // change a wallpaper is *not* that: a Script Runner script talking qdbus6
+    // straight to plasmashell, KDE's own slideshow timer, or System Settings
+    // all leave kdock completely out of the loop. Watching Plasma's config
+    // catches every one of them. Deliberately not gated on enabled(): the gate
+    // lives in refresh(), and gating here would mean ticking the box does
+    // nothing until the *next* wallpaper change.
+    //
+    // Under LXQt there is nothing for it to catch, so it is not armed at all.
+    // kdock **is** the wallpaper engine there (LxqtWallpapers), and the only
+    // two callers of WallpaperWindow::setImage() — apply() and advance() —
+    // both emit wallpapersApplied, which main() already wires to refresh().
+    // That covers every change by construction. Leaving the watch on would
+    // only cost a stat on every write to ~/.config, which under LXQt includes
+    // each kdeglobals our own applySystem() produces.
+    if (!Session::isLxqt()) {
+        connect(&m_wallpaperWatch, &QFileSystemWatcher::fileChanged, this,
+                [this](const QString &) {
+                    armWallpaperWatch();
+                    if (appletsrcChanged())
+                        refresh();
+                });
+        connect(&m_wallpaperWatch, &QFileSystemWatcher::directoryChanged, this,
+                [this](const QString &) {
+                    // The file can be missing for an instant mid-rename;
+                    // re-arming from the directory is what picks the new inode
+                    // back up. But a directory event says nothing about *which*
+                    // file moved, and this directory is ~/.config: our own
+                    // applySystem() lands a kdeglobals in it through
+                    // plasma-apply-colorscheme, so refreshing on the event
+                    // itself is a loop with no way out (see appletsrcChanged()).
+                    armWallpaperWatch();
+                    if (appletsrcChanged())
+                        refresh();
+                });
+        armWallpaperWatch();
+        appletsrcChanged(); // seed the stamp; the first real change is the trigger
+    }
 
     // A previous run may have died with a generated scheme on the desktop. The
     // flag is persisted precisely so that this is recoverable: put the user's
@@ -241,6 +252,21 @@ AutoColorScheme::AutoColorScheme(Theme *theme, AppearanceControl *appearance,
         restoreDefaults();
     else if (enabled() && !DockConfig::anyDarkModeActive())
         refresh();
+}
+
+void AutoColorScheme::setWallpaperSource(std::function<QHash<QString, QString>()> source)
+{
+    m_source = std::move(source);
+    if (!m_source)
+        return;
+    // The 1200 ms of the Plasma path are there to outlast the asynchronous half
+    // of a wallpaper change: kdock only asks Plasma to cycle the plugin and KDE
+    // picks the next image afterwards, so reading too early returns the
+    // previous path. A source has no such half — the image is already on screen
+    // before the signal that brings us here is emitted — so all that is left to
+    // buy is coalescing the burst (a desktop switch, a screen hotplug and the
+    // slideshow timer can all land together).
+    m_debounce.setInterval(200);
 }
 
 void AutoColorScheme::armWallpaperWatch()
@@ -445,6 +471,18 @@ void AutoColorScheme::setEnabled(bool on)
     emit changed();
 }
 
+bool AutoColorScheme::canRead() const
+{
+    // Cheap enough to ask on demand: the source walks one hash of live surfaces
+    // (at most one entry per monitor), so there is nothing to cache and nothing
+    // that could go stale between the question and the click.
+    if (m_source)
+        return !m_source().isEmpty();
+    // No source means the Plasma path, and there the only way to know without
+    // paying for a round trip is whether anybody is there to answer it.
+    return Session::hasPlasmaShell();
+}
+
 void AutoColorScheme::restoreDefaults()
 {
     // The dock colors are ours unconditionally — they are a read-time override
@@ -565,6 +603,27 @@ void AutoColorScheme::generateNow()
 
 void AutoColorScheme::readWallpapers()
 {
+    // Not Plasma's session: the wallpapers belong to whoever main() injected,
+    // and asking them is a plain function call. No round trip, so none of the
+    // m_reading bookkeeping below applies — applyPalettes() runs before this
+    // returns, which is what makes generateNow() synchronous under LXQt.
+    if (m_source) {
+        QHash<QString, QString> imageByScreen;
+        const QHash<QString, QString> raw = m_source();
+        for (auto it = raw.constBegin(); it != raw.constEnd(); ++it) {
+            // Same resolution as the Plasma path: strips file:// and unwraps a
+            // wallpaper package. LXQt paths are plain files, so this normally
+            // costs one stat — but the config is shared between the two
+            // engines, so a path that came from a Plasma session can still turn
+            // up here.
+            const QString path = resolveImagePath(it.value());
+            if (!path.isEmpty())
+                imageByScreen.insert(it.key(), path);
+        }
+        applyPalettes(imageByScreen);
+        return;
+    }
+
     if (m_reading)
         return; // one round trip in flight is enough; the debounce coalesced the rest
     m_reading = true;
@@ -764,11 +823,14 @@ void AutoColorScheme::applySystem(const SchemeColors &scheme)
 QString AutoColorScheme::saveCurrentScheme()
 {
     if (!m_haveScheme) {
-        // Nothing generated in this process yet. Kick one off and let the user
-        // press save again — generating is a D-Bus round trip, so there is no
-        // scheme to write out synchronously here.
+        // Nothing generated in this process yet, so generate now.
         generateNow();
-        return {};
+        // With an injected wallpaper source that already finished, and there is
+        // something to save: fall through. On the Plasma path it was a D-Bus
+        // round trip, so there is still nothing to write out synchronously and
+        // the user has to press save again — which is what the tab says.
+        if (!m_haveScheme)
+            return {};
     }
 
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)

@@ -361,8 +361,11 @@ void SettingsDialog::buildTabs()
     m_kbLayout = m_kbVariant = m_kbModel = nullptr;
     m_kbOptions = nullptr;
     m_kbStatus = nullptr;
-    if (m_manager && m_manager->qtCompat())
+    m_qtCompatTabIndex = -1;
+    if (m_manager && m_manager->qtCompat()) {
         addTab(createQtCompatTab(), tr("Modo QT"));
+        m_qtCompatTabIndex = m_tabWidget->count() - 1;
+    }
     m_audioTabIndex = -1;
     m_audioOutGroup = m_audioInGroup = m_audioAppGroup = nullptr;
     m_audioOutLayout = m_audioInLayout = m_audioAppLayout = nullptr;
@@ -386,8 +389,11 @@ void SettingsDialog::buildTabs()
     }
     // Not a per-dock setting either: it drives the whole session's wallpapers.
     m_wallpaperSnapshotList = nullptr;
-    if (m_manager)
+    m_wallpapersTabIndex = -1;
+    if (m_manager) {
         addTab(createWallpapersTab(), tr("Wallpapers"));
+        m_wallpapersTabIndex = m_tabWidget->count() - 1;
+    }
     // Not a per-dock setting: the previews are their own process with their own
     // config, so this tab looks the same whichever dock is selected.
     if (PreviewsLauncher::available())
@@ -3519,6 +3525,20 @@ void SettingsDialog::showColorAutoTab()
         m_tabWidget->setCurrentIndex(m_colorAutoTabIndex);
 }
 
+void SettingsDialog::showQtCompatTab()
+{
+    clearSearch();
+    if (m_qtCompatTabIndex >= 0 && m_qtCompatTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_qtCompatTabIndex);
+}
+
+void SettingsDialog::showWallpapersTab()
+{
+    clearSearch();
+    if (m_wallpapersTabIndex >= 0 && m_wallpapersTabIndex < m_tabWidget->count())
+        m_tabWidget->setCurrentIndex(m_wallpapersTabIndex);
+}
+
 void SettingsDialog::showAudioTab()
 {
     clearSearch();
@@ -3965,15 +3985,31 @@ QWidget *SettingsDialog::createColorAutoTab()
 {
     auto *tab = new QWidget;
     auto *layout = new QVBoxLayout(tab);
+    // Under LXQt both ends of this feature are somebody else's: the wallpaper
+    // comes from kdock's own engine instead of from plasmashell, and the scheme
+    // only reaches the session's Qt applications through Modo QT. Neither is
+    // visible from here, so the tab has to say so — see the status lines in the
+    // system group below. Same branch idiom as the Wallpapers tab.
+    const bool lxqt = Session::isLxqt();
 
     auto *intro = new QLabel(
-        tr("Genera un esquema de color de KDE a partir del color predominante del fondo "
-           "de pantalla y lo aplica al cambiar de fondo. El esquema es <b>temporal</b>: "
-           "se reescribe en cada cambio y se borra al desactivar esto. Las fuentes y los "
-           "botones se calculan por contraste, así que el resultado se lee sea cual sea "
-           "la foto."),
+        lxqt ? tr("Genera un esquema de color a partir del color predominante del fondo "
+                  "de pantalla y lo aplica al cambiar de fondo. El esquema es "
+                  "<b>temporal</b>: se reescribe en cada cambio y se borra al desactivar "
+                  "esto. Las fuentes y los botones se calculan por contraste, así que el "
+                  "resultado se lee sea cual sea la foto.<br><br>"
+                  "Acá el fondo lo lee de las imágenes que <b>dibuja el propio kdock</b> "
+                  "(solapa Wallpapers): bajo LXQt no hay plasmashell a quien preguntarle, "
+                  "y el fondo de PCManFM es uno solo para toda la sesión, así que no "
+                  "serviría para darle un color a cada monitor.")
+             : tr("Genera un esquema de color de KDE a partir del color predominante del "
+                  "fondo de pantalla y lo aplica al cambiar de fondo. El esquema es "
+                  "<b>temporal</b>: se reescribe en cada cambio y se borra al desactivar "
+                  "esto. Las fuentes y los botones se calculan por contraste, así que el "
+                  "resultado se lee sea cual sea la foto."),
         tab);
     intro->setWordWrap(true);
+    intro->setTextFormat(Qt::RichText);
     layout->addWidget(intro);
 
     auto *warn = new QLabel(
@@ -4046,19 +4082,33 @@ QWidget *SettingsDialog::createColorAutoTab()
     connect(generate, &QPushButton::clicked, this, [this, manualStatus] {
         if (!m_manager || !m_manager->autoColorScheme())
             return;
-        m_manager->autoColorScheme()->generateNow();
+        // Set **before** generating, not after. Under LXQt the wallpaper source
+        // is a plain call, so generateNow() finishes — changed() and all —
+        // before it returns, and setting the text afterwards would leave
+        // "Generando…" on screen for ever over a scheme that is already up.
+        // The changed() handler below is what clears it, on both paths.
         manualStatus->setText(tr("Generando…"));
+        m_manager->autoColorScheme()->generateNow();
     });
-    connect(save, &QPushButton::clicked, this, [this, manualStatus] {
+    connect(save, &QPushButton::clicked, this, [this, manualStatus, lxqt] {
         if (!m_manager || !m_manager->autoColorScheme())
             return;
         const QString id = m_manager->autoColorScheme()->saveCurrentScheme();
-        // Empty means there was nothing generated yet, so save kicked off a
-        // generation instead. Saying so beats a button that looks inert.
-        manualStatus->setText(id.isEmpty()
-                                  ? tr("Todavía no hay nada generado: se generó uno ahora, "
-                                       "volvé a apretar Guardar.")
-                                  : tr("Guardado y aplicado como <b>%1</b>.").arg(id));
+        if (!id.isEmpty()) {
+            manualStatus->setText(tr("Guardado y aplicado como <b>%1</b>.").arg(id));
+            return;
+        }
+        // Empty means two different things depending on the path, and telling
+        // the user to press again is only right on one of them. Under Plasma
+        // saving generates first and the generation is a D-Bus round trip, so
+        // there genuinely is nothing to write yet. With a synchronous source
+        // that generation already finished, so an empty id means it produced
+        // nothing at all — which under LXQt means no wallpaper to read.
+        manualStatus->setText(
+            lxqt ? tr("No se pudo generar ningún esquema: no hay ningún fondo que leer. "
+                      "Fijate el estado de <b>Fondos</b>, más abajo.")
+                 : tr("Todavía no hay nada generado: se generó uno ahora, "
+                      "volvé a apretar Guardar."));
     });
     // Generating is a D-Bus round trip, so the new colors only exist a moment
     // later: repainting the preview from the click handler would keep showing
@@ -4066,7 +4116,16 @@ QWidget *SettingsDialog::createColorAutoTab()
     // is in place, which is the only correct moment.
     if (m_manager && m_manager->autoColorScheme()) {
         connect(m_manager->autoColorScheme(), &AutoColorScheme::changed, manualBox,
-                [refreshPreview] { refreshPreview(); });
+                [refreshPreview, manualStatus] {
+                    // Clearing here and not in the click handler is what makes
+                    // "Generando…" correct on both paths: it goes away when the
+                    // scheme is actually up, whether that was synchronous (an
+                    // injected source) or a D-Bus round trip later. The save
+                    // handler runs *after* its own changed(), so its message
+                    // survives this.
+                    manualStatus->clear();
+                    refreshPreview();
+                });
     }
     refreshPreview();
     layout->addWidget(manualBox);
@@ -4123,7 +4182,8 @@ QWidget *SettingsDialog::createColorAutoTab()
     bodyLayout->addWidget(docksBox);
 
     // --- System ------------------------------------------------------------
-    auto *sysBox = new QGroupBox(tr("Esquema del sistema (KDE)"), body);
+    auto *sysBox = new QGroupBox(lxqt ? tr("Esquema del sistema") : tr("Esquema del sistema (KDE)"),
+                                 body);
     auto *sysForm = new QFormLayout(sysBox);
     auto *systemScheme = new QCheckBox(tr("Cambiar el esquema de color de todo el escritorio"),
                                        sysBox);
@@ -4154,6 +4214,75 @@ QWidget *SettingsDialog::createColorAutoTab()
             m_manager->autoColorScheme()->refreshNow();
     });
     monitor->setEnabled(systemScheme->isChecked());
+
+    // --- The two things this depends on under LXQt --------------------------
+    //
+    // Neither is visible from this tab and each can silently make the whole
+    // feature look broken: with no wallpaper engine there is nothing to sample,
+    // and with Modo QT off the scheme stops at kdock and the KDE applications.
+    // Both are read live rather than described in prose, because "it depends on
+    // another tab" is exactly the sentence a user cannot act on.
+    if (lxqt) {
+        const auto statusRow = [sysBox, sysForm](const QString &label, QLabel **out,
+                                                 const QString &jump) {
+            auto *host = new QWidget(sysBox);
+            auto *row = new QHBoxLayout(host);
+            row->setContentsMargins(0, 0, 0, 0);
+            *out = new QLabel(host);
+            (*out)->setWordWrap(true);
+            (*out)->setTextFormat(Qt::RichText);
+            row->addWidget(*out, 1);
+            auto *button = new QPushButton(jump, host);
+            row->addWidget(button);
+            sysForm->addRow(label, host);
+            return button;
+        };
+
+        QLabel *wallStatus = nullptr;
+        QPushButton *wallJump = statusRow(tr("Fondos:"), &wallStatus, tr("Ir a Wallpapers"));
+        connect(wallJump, &QPushButton::clicked, this, &SettingsDialog::showWallpapersTab);
+
+        QLabel *qtStatus = nullptr;
+        QPushButton *qtJump = statusRow(tr("Modo QT:"), &qtStatus, tr("Ir a Modo QT"));
+        connect(qtJump, &QPushButton::clicked, this, &SettingsDialog::showQtCompatTab);
+
+        const auto refreshStatus = [this, wallStatus, qtStatus] {
+            LxqtWallpapers *engine = m_manager ? m_manager->lxqtWallpapers() : nullptr;
+            // active() and not enabled(): the master switch is shared with the
+            // Plasma engine, so a config carried over from there arrives with it
+            // already on while nothing of ours is drawing.
+            const int count = engine ? engine->currentImages().size() : 0;
+            if (engine && engine->active() && count > 0) {
+                wallStatus->setText(tr("los dibuja kdock — %n monitor(es) con fondo para "
+                                       "leer.", nullptr, count));
+            } else if (engine && engine->active()) {
+                wallStatus->setText(tr("<b>los dibuja kdock, pero no hay ninguna imagen "
+                                       "configurada</b>: no hay nada que leer."));
+            } else {
+                wallStatus->setText(tr("<b>apagados</b> — el escritorio es de PCManFM y "
+                                       "ColorAuto no tiene ningún fondo que leer."));
+            }
+
+            const bool on = QtCompat::enabled() && QtCompat::colorsEnabled();
+            qtStatus->setText(on ? tr("activado — el esquema llega también a las apps Qt "
+                                      "de LXQt.")
+                                 : tr("<b>apagado</b> — el esquema llega al dock y a las "
+                                      "apps de KDE, pero no a las demás apps Qt."));
+        };
+
+        if (QtCompat *compat = m_manager ? m_manager->qtCompat() : nullptr)
+            connect(compat, &QtCompat::changed, sysBox, refreshStatus);
+        if (LxqtWallpapers *engine = m_manager ? m_manager->lxqtWallpapers() : nullptr)
+            connect(engine, &LxqtWallpapers::activeChanged, sysBox, refreshStatus);
+        // A generation is also the moment the wallpaper count can have changed
+        // (a slideshow step, a monitor plugged in).
+        if (m_manager && m_manager->autoColorScheme()) {
+            connect(m_manager->autoColorScheme(), &AutoColorScheme::changed, sysBox,
+                    refreshStatus);
+        }
+        refreshStatus();
+    }
+
     bodyLayout->addWidget(sysBox);
 
     // --- Selection ---------------------------------------------------------

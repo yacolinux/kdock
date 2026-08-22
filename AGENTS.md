@@ -1113,6 +1113,49 @@ tres diálogos vive.
 - **Guardar: `saveCurrentScheme()`** escribe el esquema vigente como `~/.local/share/color-schemes/kdock-<n>.colors` (primer `n` libre), lo aplica y **suelta la propiedad del sistema** (`applied = false`). Ese último paso es el que hace que "guardar" signifique "quedate con este": desde ahí `restoreDefaults()` no toca ni el esquema ni el iconset, así que apagar la casilla ya no pisa lo guardado. Por eso **`applied` significa "el esquema del sistema es nuestro"**, no "hay algo aplicado".
 - **La lectura del fondo es un `evaluateScript` recortado** de `DesktopWallpapers::captureScriptJs()`: plugin + clave `Image` por containment. `org.kde.slideshow` **sí** guarda ahí la imagen vigente (verificado en el `plasma-org.kde.plasma.desktop-appletsrc` de esta sesión), así que un solo viaje cubre los dos plugins. El mapeo `"x,y"` → conector sale de `DesktopWallpapers::geometryKeys()`, que se volvió `public static` para no tener dos copias de ese hecho.
   - Los fondos por omisión de KDE son **paquetes**: el `Image` apunta a un directorio y la foto está en `contents/images/`. `resolveImagePath()` lo desenvuelve (el archivo más grande = la variante de mayor resolución); sin eso, todo fondo de fábrica se muestrearía como "ilegible" y la feature parecería rota.
+- **Bajo LXQt la lectura es otra, y es la única parte de ColorAuto que se portó** (2026-08-22).
+  No hay plasmashell a quien preguntarle, así que `readWallpapers()` tiene dos ramas y la de
+  LXQt **no toca D-Bus**: `AutoColorScheme::setWallpaperSource()` recibe de `main.cpp` un
+  `std::function` que devuelve conector → ruta, y ahí `main()` le pasa
+  `LxqtWallpapers::currentImages()`. Es el mismo reparto que ya hacía
+  `WallpaperControl::setAlternateEngine()` y por la misma razón. El gate es `Session::isLxqt()`
+  y no `hasPlasmaShell()`, a propósito: tiene que coincidir con el motor de fondos que arrancó
+  unas líneas más arriba en `main()`.
+  - **`currentImages()` lee las superficies vivas, no la config.** En modo pase de diapositivas
+    la elección es aleatoria y vive sólo en `m_slideshowHistory`, así que recalcular con
+    `imageFor()` podría contestar otra foto que la que está en pantalla.
+  - **El fondo de PCManFM NO es respaldo** (decisión del usuario, 2026-08-22). Es uno solo para
+    toda la sesión, así que un color por monitor sería una ficción. Con el motor de fondos
+    apagado `currentImages()` devuelve vacío, ColorAuto no aplica nada, y **la solapa lo dice**
+    en vez de quedarse muda — que es como se veía el bug que esto arregla.
+  - **Y el watcher de `appletsrc` no se arma bajo LXQt.** No hay nada que pueda cachar: los dos
+    únicos llamadores de `WallpaperWindow::setImage()` (`apply()` y `advance()`) emiten
+    `wallpapersApplied`, que `main.cpp` ya conecta a `refresh()`, así que todo cambio está
+    cubierto por construcción. Dejarlo armado sólo costaría un `stat` en cada escritura de
+    `~/.config`, que bajo LXQt incluye cada `kdeglobals` que produce el propio `applySystem()`.
+  - **La fuente es sincrónica, y eso cambia dos cosas visibles.** `applyPalettes()` ya corrió
+    cuando `generateNow()` vuelve, así que (a) `saveCurrentScheme()` escribe el permanente en la
+    primera llamada —se acabó el «volvé a apretar Guardar», que sigue valiendo bajo Plasma— y
+    (b) el handler de *Generar Color* tiene que poner «Generando…» **antes** de llamar, o el
+    `changed()` que limpia el cartel pasa primero y el texto queda pegado para siempre. El
+    debounce baja de 1200 ms a 200: los 1200 son para la mitad asincrónica de un cambio de
+    fondo de Plasma, que acá no existe; lo que queda es coalescer la ráfaga.
+  - **Aplicar no se tocó**: sigue siendo `.colors` + `plasma-apply-colorscheme` → `kdeglobals`,
+    y de ahí a las apps Qt de LXQt por el espejo del Modo QT. Medido en esta sesión:
+    `[Colors:Window] BackgroundNormal=36,36,36` ↔ `lxqt.conf window_color=#242424`. O sea que
+    **ColorAuto depende del Modo QT para llegar más allá del dock y de las apps de KDE**, y por
+    eso la solapa muestra su estado vivo con un botón de salto (abajo).
+  - **Y el iconset de ColorAuto sigue siendo sólo del dock**, también por decisión: va al
+    override propio de `Theme`, que el Modo QT deliberadamente no espeja (espeja
+    `kdeglobals Icons/Theme`). Cambiarle el iconset a todas las apps en cada paso del pase sería
+    mucho más disruptivo que cambiarles el color.
+  - La costura es además lo que hizo **testeable en CI el camino de lectura → aplicación**, que
+    hasta acá no tenía un solo caso: `tst_autocolorscheme` inyecta una fuente falsa y cubre el
+    alternado A/B, el memo de `applyPalettes()` (y que un run manual esté exento), el reseteo
+    de `variant` al cambiar la imagen que manda, y que una fuente vacía no escriba nada. Ojo con
+    el conector: bajo `offscreen` la única pantalla **no tiene nombre**, así que el monitor que
+    manda se llama `""` y la fuente hay que sembrarla con esa clave o `leadImage` queda vacío y
+    media contabilidad no corre.
 - **El monitor que manda el esquema del sistema** sale de un combo propio: `""` = seguir al widget de Brillo, `"internal"`, o un conector. **PowerDevil identifica los monitores por etiqueta, no por conector** (verificado en vivo: `display23` → `"Samsung Electric Company S22F350"`, mientras el conector es `DP-1`), así que el puente es `QScreen::manufacturer() + " " + model()`, que es de donde esa etiqueta sale. El combo existe **porque ese mapeo puede fallar** y hace falta una salida a mano.
 - **Enclavamiento con el modo oscuro**: al entrar en oscuro ColorAuto se apaga y anota `suspendedByDark`; al salir, vuelve tras 1500 ms (que es lo que tarda `DarkModeAppearance` en restaurar el esquema anterior con `startDetached` — re-aplicar antes lo pisaría). Un ping repetido es un no-op, porque el color de acento emite la misma señal.
   - **Y hace falta una guarda en `DarkModeAppearance`, que es la trampa principal de toda la feature.** Al entrar en oscuro, `apply(true)` fotografía el esquema vivo como "lo que tenía el usuario"; si en ese momento está puesto un `KdockColorAuto*`, lo guarda como tal y salir del modo oscuro restaura un esquema **cuyo archivo ya se borró**, sin forma de recuperarse. Es el mismo modo de falla que ya documentaba el `darkAppearanceSelfApplied()` de al lado. La cura: mientras `AutoColorScheme::applied()`, el snapshot toma el **default guardado de ColorAuto**. Solo el esquema de color lo necesita — los iconsets de ColorAuto van al override propio del dock, nunca al iconset de KDE que ese bucle fotografía. `tst_autocolorscheme::darkModeSnapshotsTheUserSchemeNotOurs()` es su control positivo: sacando la guarda pasa a guardar `KdockColorAuto1`.
@@ -1123,6 +1166,37 @@ tres diálogos vive.
   - **El interruptor maestro (*Activar ColorAuto*) NO deshabilita los ajustes de abajo**, y esa fue una corrección de la v2 (reportada el 2026-08-12): todos —claridad, color de selección, iconsets, qué monitor manda, si se pintan los docks— los lee también el camino manual, que anda con la casilla apagada. Grisarlos dejaba la solapa entera inservible para quien solo quería el botón. El interruptor decide **cuándo** se regenera, no **cómo**.
   - **El widget del dock** (token `colorauto`): clic izquierdo genera, clic derecho abre la solapa (`sectionHasAltClick`/`sectionAltClick` → `DockWindow::openColorAutoSettings()`). Su backend ya viaja en `Shared`, así que se salta casi todo el checklist de siete archivos, igual que el `pager`.
   - La solapa muestra además una **vista previa** del color generado: los mismos tres swatches (ventana, texto, selección) que dibuja el selector de temas, vía `themePreviewPixmap()`. Dos detalles: se refresca desde `AutoColorScheme::changed` y **no** desde el clic, porque generar es un viaje de ida y vuelta por D-Bus y repintar en el handler mostraría el esquema anterior; y el `id` de la entrada **codifica los colores**, porque esa caché de pixmaps está indexada por id y uno fijo serviría el primer esquema para siempre. Al abrir la solapa sin haber generado nada, `previewEntry()` lee el `.colors` aplicado del disco.
+  - **Las dos líneas de estado de la solapa, bajo LXQt** (2026-08-22, dentro del grupo *Esquema
+    del sistema*): *Fondos* y *Modo QT*, cada una con su botón de salto a esa solapa
+    (`showWallpapersTab()` / `showQtCompatTab()`, con sus índices al lado de los otros en
+    `settingsdialog.h`). Existen porque **las dos cosas de las que depende el resultado viven en
+    otra solapa y ninguna se ve desde acá**: sin motor de fondos no hay nada que muestrear, y
+    sin Modo QT el esquema se queda en el dock y las apps de KDE. Se leen en vivo
+    (`LxqtWallpapers::active()` + cuántas imágenes hay, `QtCompat::enabled() && colorsEnabled()`)
+    y no se describen en prosa, porque *"depende de otra solapa"* es justo la frase sobre la que
+    el usuario no puede actuar. Se refrescan desde `QtCompat::changed`,
+    `LxqtWallpapers::activeChanged` y `AutoColorScheme::changed`.
+  - **La tarjeta del panel también tiene el interruptor, y le pregunta al dock antes de prometer
+    nada** (2026-08-22). Tres botones: *Generar*, *Guardar* y *Activar/Desactivar*. El tercero es
+    una llamada (`setColorAutoEnabled`) y no una escritura de la clave, por lo mismo que el modo
+    oscuro: activar captura los defaults y aplica en el acto, y el modo oscuro puede negarse —
+    nada de eso pasa escribiendo el `.conf` desde otro proceso. Por eso tampoco es optimista: su
+    `checked` sólo se mueve con la señal `colorAutoChanged`, que `DockService` emite comparando
+    el valor (la señal de `AutoColorScheme::changed` también salta por cosas que no tocan el
+    interruptor, como generar).
+    - **Y `colorAutoCanRead` existe porque la tarjeta mentía.** Ponía «Generado del fondo
+      actual.» justo después de una llamada **asincrónica**, pasara lo que pasara; bajo LXQt con
+      el motor de fondos apagado eso es un no-op silencioso y el cartel era directamente falso.
+      Ahora pregunta (`AutoColorScheme::canRead()`) y, si no hay nada que leer, gris a *Generar*
+      y lo dice. Regla general: **un botón que dispara algo asincrónico no puede escribir su
+      propio mensaje de éxito.**
+    - **Y hay una tercera respuesta además de sí y no: «este dock no conoce la pregunta».** El
+      panel y el dock se reinician por separado, así que un panel de este build puede estar
+      hablándole a un kdock anterior, que contesta *error* a los dos métodos — indistinguible de
+      un "no" si sólo se mira el bool. De ahí `DockLink::colorAutoKnown`: con eso en false la
+      tarjeta vuelve a comportarse como antes (Generar y Guardar vivos, sin afirmar nada sobre
+      fondos que no puede consultar) y sólo grisa el interruptor. Sin esa distinción, el día del
+      `install` la tarjeta se ve rota hasta que el usuario reinicia el dock.
   - **La tarjeta del panel de control** (sección `colorauto`), que llega por **D-Bus** (`org.kdock.Dock`: `generateColorScheme` / `saveColorScheme`) en vez de compilar el motor adentro. No es indirección porque sí: el motor guarda cuál de sus dos esquemas está aplicado, y dos procesos haciendo ping-pong sobre los mismos dos nombres se pisarían. `saveColorScheme` es la única llamada **bloqueante** del panel, porque la tarjeta muestra el nombre que quedó.
 - **`AutoColorScheme` se construye ANTES que `DockManager`** (y recibe el manager con `setManager()` después). Los docks lo reciben como context property al crearse, y los primeros se crean dentro del constructor del manager: al revés, arrancaban con `autoColors` nulo y el widget nacía muerto.
 - **No es un widget del dock en el sentido de la sección**: el token `colorauto` sí lo es (y va en `knownWidgetTokens()`, que `tests/static/check-widget-tokens.py` verifica), pero la feature en sí toca `Dock.qml` sobre todo por los tres bindings de color.
@@ -1155,7 +1229,13 @@ tres diálogos vive.
    - **La escritura va guardada dos veces**: no se hace si el valor ya coincide (si no, escribir `kdeglobals` dispara `Theme::changed` → `apply()` → escribir otra vez, en bucle) y tampoco si es el mismo valor que esta instancia ya mandó (`m_lastUiSettingsWrite`).
    - **Sincrónica desde 2026-08-21** (bug `ktorrent` vs `dolphin` recién reiniciado): `syncKdeUiSettings()` era `QProcess::startDetached` y dejaba ~47 s de ventana. `ktorrent` pid 7165 arrancó a `22:42:08` vía GIO/systemd con entorno pelado (28 vars, sin `QT_QPA_PLATFORMTHEME`) mientras `kdeglobals` se corrigió recién a `22:42:55` (`UiSettings ColorScheme=Otto`); se quedó en Breeze Light `#eff0f1`/`#ffffff`. `dolphin` pid 7604 a `22:45` con entorno completo (40 vars, `QT_QPA_PLATFORMTHEME=lxqt`) ya vio Otto `#2c3746`. Ahora es `QProcess::start` + `waitForFinished(1200)` (~30 ms; fake `kwriteconfig6` de `tests/lib/fakebin.sh:23` sigue instantáneo). `m_lastUiSettingsWrite` solo se sella si el proceso terminó, así un timeout reintenta en el siguiente debounce.
    - Verificado de punta a punta con el Dolphin de verdad bajo Xvfb: sin la clave, `(255,255,255)` + `(239,240,241)`; con ella, `(44,55,70)` — el `#2c3746` del esquema elegido.
-- **`kdeglobals` es la fuente de verdad, no la solapa.** No hay esquema propio guardado: se traduce lo que ese archivo diga en cada momento, y el disparador es `Theme::changed` (que ya vigila el archivo) con un debounce de 250 ms. Eso es lo que hace que **cualquier otro selector de kdock llegue a LXQt sin una línea extra** — el widget del dock, la solapa Colores, ColorAuto y el modo oscuro ya escriben ahí. El selector de la solapa es por eso un `ThemePickerButton` en modo **`ApplyToDesktop`**: es un espejo, no un segundo ajuste.
+- **`kdeglobals` es la fuente de verdad, no la solapa.** No hay esquema propio guardado: se traduce lo que ese archivo diga en cada momento, y el disparador es `Theme::changed` (que ya vigila el archivo) con un debounce de 250 ms. Eso es lo que hace que **cualquier otro selector de kdock llegue a LXQt sin una línea extra** — el widget del dock, la solapa Colores, ColorAuto y el modo oscuro ya escriben ahí.
+  - **ColorAuto es el caso que más rinde de eso, y conviene decirlo al revés también**: la mitad
+    de *aplicar* de ColorAuto no tuvo que portarse a LXQt **porque este espejo ya existía**
+    (2026-08-22). El corolario incómodo es que **con el Modo QT apagado, el esquema que genera
+    ColorAuto se queda en el dock y en las apps de KDE**, aunque su casilla diga «todo el
+    escritorio». Por eso la solapa ColorAuto muestra el estado vivo de esto con un botón de
+    salto, en vez de dejar que se lea como un bug. El selector de la solapa es por eso un `ThemePickerButton` en modo **`ApplyToDesktop`**: es un espejo, no un segundo ajuste.
 - **Una reescritura idéntica no se hace.** El plugin reacciona por parte y solo cuando esa parte se movió (`paletteChanged_` para los colores, una comparación viejo/nuevo para el iconset y las fuentes) — el mismo "already set" que tiene `plasma-apply-colorscheme` —, así que escribir lo mismo no re-tematiza nada y solo churnearía el archivo cada vez que algo toca `kdeglobals`. El chequeo es sobre **todas** las claves pendientes juntas (`pendingWrites()`), no por grupo.
 - **Apagar cualquier casilla solo deja de aplicar: NO restaura.** Decisión de producto: lo último escrito queda puesto para que el usuario lo maneje con `lxqt-config-appearance`. Restaurar pelearía con lo que haya hecho él en el medio.
 - **Arranca en `false` y apagado es inerte**, y eso no es opcional: esto escribe en la sesión viva y **`XDG_DATA_HOME` no aísla `lxqt.conf`** (sale de `QSettings::UserScope`, o sea de `XDG_CONFIG_HOME`). La reja del `enabled` es lo único que hace inocua a cualquier sonda que construya la clase.

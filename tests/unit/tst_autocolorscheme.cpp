@@ -21,8 +21,11 @@
 #include "theme.h"
 #include "wallpapercolors.h"
 
+#include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QHash>
+#include <QImage>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTest>
@@ -39,6 +42,51 @@ void writeShared(const QString &key, const QVariant &value)
     QSettings s = shared();
     s.setValue(key, value);
     s.sync();
+}
+
+// Cuál de los dos esquemas quedó aplicado. Es estado persistido, así que se lee
+// del archivo y no de la API — el getter es privado, y de todos modos lo que
+// importa acá es justamente lo que sobrevive al proceso.
+int appliedSlot()
+{
+    return shared().value(QStringLiteral("ColorAuto/lastSlot"), 1).toInt();
+}
+
+// Un PNG de color sólido en el sandbox. Generado y no fixture, por la misma
+// razón que en tst_wallpapercolors: lo que se afirma es el color que sale de la
+// imagen, así que un blob binario escondería justo el dato bajo prueba.
+// Saturado a propósito — el portón de saturación/valor del muestreo descarta
+// gris, negro y blanco.
+QString solidImage(const QString &name, const QColor &color)
+{
+    const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
+    QDir().mkpath(dir);
+    const QString path = dir + QLatin1Char('/') + name;
+    QImage img(64, 64, QImage::Format_RGB32);
+    img.fill(color);
+    img.save(path, "PNG");
+    return path;
+}
+
+// El conector del monitor que manda, tal como lo ve este test.
+//
+// systemScreenName() cae a QGuiApplication::screens() y bajo `offscreen` la
+// única pantalla **no tiene nombre**, así que el monitor que manda se llama "".
+// Sembrar la fuente con esa clave es lo que hace que el camino "cambió el fondo
+// del monitor que manda" se ejercite de verdad; con cualquier otro nombre
+// leadImage queda vacío y la mitad de la contabilidad no corre.
+const QString kLeadScreen = QString();
+
+QString schemePath(const QString &id)
+{
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+           + QStringLiteral("/color-schemes/") + id + QStringLiteral(".colors");
+}
+
+void removeGeneratedSchemes()
+{
+    QFile::remove(schemePath(AutoColorScheme::kSchemeIdA));
+    QFile::remove(schemePath(AutoColorScheme::kSchemeIdB));
 }
 
 } // namespace
@@ -569,6 +617,187 @@ private slots:
         AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
         QVERIFY(!AutoColorScheme::applied());
         QCOMPARE(theme.iconTheme(), QStringLiteral("Papirus"));
+    }
+
+    // ---- La fuente de fondos inyectada (el camino de LXQt) -----------------
+    //
+    // Es lo único que hace testeable el ciclo leer -> muestrear -> aplicar. Bajo
+    // Plasma eso es un viaje de ida y vuelta por D-Bus y este test es hermético,
+    // así que hasta acá no había un solo caso que lo cubriera.
+    //
+    // La costura es la de producción —main() le pasa LxqtWallpapers::currentImages
+    // cuando la sesión es LXQt—, y lo único falso es de dónde salen las rutas.
+    // De yapa, la fuente es sincrónica: applyPalettes() ya corrió cuando
+    // generateNow() vuelve, que es lo que deja afirmar sin bombear el bucle.
+
+    void anInjectedSourceReplacesTheDBusRoundTrip()
+    {
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+
+        const QString image = solidImage(QStringLiteral("ca-lead.png"), QColor(200, 40, 40));
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [image] { return QHash<QString, QString>{{kLeadScreen, image}}; });
+
+        autoColors.generateNow();
+
+        // Un esquema en disco, el sistema marcado como nuestro, y la generación
+        // reconocida como manual (que es lo que impide que el rescate de arranque
+        // la deshaga en el próximo reinicio del dock).
+        QVERIFY(QFile::exists(schemePath(appliedSlot() == 0 ? AutoColorScheme::kSchemeIdA
+                                                            : AutoColorScheme::kSchemeIdB)));
+        QVERIFY(AutoColorScheme::applied());
+        QVERIFY(AutoColorScheme::manual());
+        // Y hay algo que mostrar en la vista previa de la solapa, que sale del
+        // esquema recién generado y no de leer el .colors del disco.
+        QVERIFY(!autoColors.previewEntry().isEmpty());
+    }
+
+    void generatingTwiceAlternatesTheTwoSchemeNames()
+    {
+        // La razón de que haya dos nombres y no uno: plasma-apply-colorscheme no
+        // hace nada si el nombre pedido ya es el puesto, así que reescribir el
+        // mismo .colors sería un no-op silencioso y la feature se congelaría en
+        // el primer fondo.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+
+        const QString image = solidImage(QStringLiteral("ca-ab.png"), QColor(40, 160, 90));
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [image] { return QHash<QString, QString>{{kLeadScreen, image}}; });
+
+        autoColors.generateNow();
+        const int first = appliedSlot();
+        autoColors.generateNow();
+        QVERIFY(appliedSlot() != first);
+    }
+
+    void anIdenticalAutomaticRunDoesNotReapply()
+    {
+        // El memo de applyPalettes(): mismos fondos y mismos ajustes quiere decir
+        // que lo que está puesto ya es la respuesta. Aplicar igual no es gratis
+        // ni inofensivo — reescribe el otro .colors, corre las herramientas de
+        // Plasma y hace re-resolver los íconos de todos los docks — y un disparo
+        // sin cambio de fondo es el caso normal, no la excepción.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+
+        const QString image = solidImage(QStringLiteral("ca-memo.png"), QColor(60, 90, 200));
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [image] { return QHash<QString, QString>{{kLeadScreen, image}}; });
+
+        autoColors.refreshNow();
+        const int first = appliedSlot();
+        autoColors.refreshNow();
+        QCOMPARE(appliedSlot(), first);
+
+        // Pero mover cualquier ajuste tiene que invalidarlo solo, sin que nadie
+        // se acuerde de limpiar el memo en cada setter: por eso optionsKey()
+        // viaja junto con las imágenes.
+        AutoColorScheme::setLightness(WallpaperColors::Options::ForceDark);
+        autoColors.refreshNow();
+        QVERIFY(appliedSlot() != first);
+    }
+
+    void aManualRunIsExemptFromThatMemo()
+    {
+        // "Generar Color" otra vez sobre el mismo fondo es exactamente el pedido
+        // de rehacerlo con la variante siguiente, así que el memo no lo frena.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+
+        const QString image = solidImage(QStringLiteral("ca-manual.png"), QColor(190, 120, 30));
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [image] { return QHash<QString, QString>{{kLeadScreen, image}}; });
+
+        autoColors.refreshNow();
+        const int automatic = appliedSlot();
+        autoColors.generateNow();
+        QVERIFY(appliedSlot() != automatic);
+    }
+
+    void anEmptySourceAppliesNothing()
+    {
+        // Lo que ve ColorAuto bajo LXQt cuando kdock no está dibujando los fondos
+        // (el fondo de PCManFM NO es respaldo, por decisión). Tiene que ser un
+        // no-op limpio: nada aplicado y nada en disco, para que apagar la solapa
+        // Wallpapers no le deje al usuario un esquema generado y sin dueño.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource([] { return QHash<QString, QString>(); });
+
+        autoColors.generateNow();
+
+        QVERIFY(!AutoColorScheme::applied());
+        QVERIFY(!QFile::exists(schemePath(AutoColorScheme::kSchemeIdA)));
+        QVERIFY(!QFile::exists(schemePath(AutoColorScheme::kSchemeIdB)));
+    }
+
+    void aNewImageResetsTheVariantCounter()
+    {
+        // Sin esto, después de cambiar de fondo seguirías viendo la variante 8
+        // —del fondo nuevo—, que se lee como "eligió un color raro" en vez de
+        // como el predominante. Se juzga por el monitor que manda el esquema del
+        // sistema, que es el color que el usuario está mirando.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+        writeShared(QStringLiteral("ColorAuto/enabled"), true);
+        writeShared(QStringLiteral("ColorAuto/defaultsSaved"), true);
+
+        const QString first = solidImage(QStringLiteral("ca-v1.png"), QColor(210, 60, 140));
+        const QString second = solidImage(QStringLiteral("ca-v2.png"), QColor(30, 170, 170));
+        QString current = first;
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [&current] { return QHash<QString, QString>{{kLeadScreen, current}}; });
+
+        autoColors.refreshNow(); // deja lastImage = first
+        writeShared(QStringLiteral("ColorAuto/variant"), 5);
+        current = second;
+        autoColors.refreshNow();
+
+        QCOMPARE(shared().value(QStringLiteral("ColorAuto/variant")).toInt(), 0);
+    }
+
+    void saveReturnsTheIdOnTheFirstPress()
+    {
+        // Con la fuente sincrónica ya no hace falta el "volvé a apretar Guardar":
+        // saveCurrentScheme() genera y, como la generación terminó antes de
+        // volver, escribe el permanente en la misma llamada. Bajo Plasma sigue
+        // haciendo falta, porque ahí la generación es un viaje por D-Bus.
+        Theme theme;
+        AppearanceControl appearance(&theme);
+        removeGeneratedSchemes();
+
+        const QString image = solidImage(QStringLiteral("ca-save.png"), QColor(120, 70, 200));
+        AutoColorScheme autoColors(&theme, &appearance, nullptr, nullptr);
+        autoColors.setWallpaperSource(
+            [image] { return QHash<QString, QString>{{kLeadScreen, image}}; });
+
+        const QString id = autoColors.saveCurrentScheme();
+
+        QVERIFY(!id.isEmpty());
+        QVERIFY(id.startsWith(QStringLiteral("kdock-")));
+        QVERIFY(QFile::exists(schemePath(id)));
+        // Y guardar suelta la propiedad del sistema: desde acá el esquema es del
+        // usuario y ni apagar ColorAuto ni el rescate de arranque lo pisan.
+        QVERIFY(!AutoColorScheme::applied());
     }
 };
 

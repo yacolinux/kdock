@@ -64,6 +64,11 @@ public:
     void showVideoTab();
     // Same for the ColorAuto tab (the colorauto widget's right-click).
     void showColorAutoTab();
+    // Same for the Modo QT and Wallpapers tabs. No widget right-click reaches
+    // these: they exist for the two jump buttons the ColorAuto tab grows under
+    // LXQt, where what those tabs are set to decides what ColorAuto can do.
+    void showQtCompatTab();
+    void showWallpapersTab();
     // Same for the Docks tab, also selecting the row of the given dockId
     // (used by the dock's right-click → Dock → Nombre).
     void showMonitorsTab(const QString &dockId);
@@ -391,6 +396,12 @@ private:
     // slider is under the pointer.
     int m_videoTabIndex = -1;
     int m_colorAutoTabIndex = -1;
+    // The two tabs the ColorAuto tab points at under LXQt, where its result
+    // depends on both of them: Wallpapers decides whether there is a wallpaper
+    // to sample at all, Modo QT whether the scheme reaches the session's Qt
+    // applications. Stored like the others so the jump buttons work.
+    int m_qtCompatTabIndex = -1;
+    int m_wallpapersTabIndex = -1;
     QVBoxLayout *m_videoBrightnessLayout = nullptr;
     QComboBox *m_videoWheelTarget = nullptr;
     QGroupBox *m_videoPowerGroup = nullptr;

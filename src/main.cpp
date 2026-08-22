@@ -525,9 +525,25 @@ int main(int argc, char *argv[])
     else
         desktopWallpapers.start();
 
-    // The wallpaper triggers kdock can see for itself. They are not enough on
-    // their own — the usual way to change a wallpaper never goes through kdock
-    // at all — which is why AutoColorScheme also watches Plasma's config.
+    // Under LXQt there is no plasmashell to ask what the wallpapers are: kdock
+    // painted them itself, so the engine that did is the source. Injected the
+    // same way WallpaperControl gets its alternate engine, and for the same
+    // reason — gate on isLxqt() and not on hasPlasmaShell(), so that this
+    // matches whichever engine start()ed a few lines above.
+    //
+    // Note this also decides the *only* source: PCManFM's own wallpaper is
+    // deliberately not a fallback, so with kdock's engine off ColorAuto has
+    // nothing to read and the ColorAuto tab says so.
+    if (Session::isLxqt()) {
+        autoColors.setWallpaperSource(
+            [&lxqtWallpapers] { return lxqtWallpapers.currentImages(); });
+    }
+
+    // The wallpaper triggers kdock can see for itself. Under Plasma they are
+    // not enough on their own — the usual way to change a wallpaper never goes
+    // through kdock at all — which is why AutoColorScheme also watches Plasma's
+    // config. Under LXQt the third one below is the whole story: kdock is the
+    // engine, so nothing changes a wallpaper without emitting it.
     QObject::connect(&wallpaperControl, &WallpaperControl::wallpaperAdvanced, &autoColors,
                      [&autoColors](const QString &) { autoColors.refresh(); });
     QObject::connect(&desktopWallpapers, &DesktopWallpapers::wallpapersApplied, &autoColors,

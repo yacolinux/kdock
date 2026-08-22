@@ -37,6 +37,22 @@ DockService::DockService(DockManager *manager, QObject *parent)
             emit darkModeChanged(now);
         });
     }
+
+    // Same idea for ColorAuto's switch. AutoColorScheme::changed covers every
+    // way it moves — the settings tab, the dock widget, and dark mode
+    // suspending and resuming it — but it also fires on things that leave the
+    // switch alone (a generation, a re-capture of the defaults), so the value
+    // is compared before announcing.
+    m_lastColorAuto = AutoColorScheme::enabled();
+    if (m_manager && m_manager->autoColorScheme()) {
+        connect(m_manager->autoColorScheme(), &AutoColorScheme::changed, this, [this] {
+            const bool now = AutoColorScheme::enabled();
+            if (now == m_lastColorAuto)
+                return;
+            m_lastColorAuto = now;
+            emit colorAutoChanged(now);
+        });
+    }
 }
 
 bool DockService::registerOnBus()
@@ -92,6 +108,28 @@ QString DockService::saveColorScheme()
     if (!m_manager || !m_manager->autoColorScheme())
         return {};
     return m_manager->autoColorScheme()->saveCurrentScheme();
+}
+
+bool DockService::colorAutoEnabled()
+{
+    return AutoColorScheme::enabled();
+}
+
+void DockService::setColorAutoEnabled(bool on)
+{
+    if (!m_manager || !m_manager->autoColorScheme())
+        return;
+    // Straight through, guards and all: switching on captures the defaults the
+    // first time (there has to be a way back) and applies immediately, and
+    // switching off restores them and clears the docks. Writing the key from
+    // the panel's process would do none of that.
+    m_manager->autoColorScheme()->setEnabled(on);
+}
+
+bool DockService::colorAutoCanRead()
+{
+    return m_manager && m_manager->autoColorScheme()
+           && m_manager->autoColorScheme()->canRead();
 }
 
 void DockService::setDarkMode(bool on)

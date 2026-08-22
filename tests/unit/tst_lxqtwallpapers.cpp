@@ -37,6 +37,7 @@ private slots:
     void folderNextStartsAtTheFirstImage();
     void configIsSharedWithTheKdeEngine();
     void engineIsInertWhileDisabled();
+    void currentImagesIsEmptyWhileNothingIsDrawn();
     void unconfiguredMonitorFallsBackToPcmanfm();
     void randomOtherAvoidsTheRecentOnes();
     void randomOtherDegradesOnASmallFolder();
@@ -138,6 +139,25 @@ void TestLxqtWallpapers::engineIsInertWhileDisabled()
     engine.apply(1);
     engine.advance();
     engine.quit();
+}
+
+void TestLxqtWallpapers::currentImagesIsEmptyWhileNothingIsDrawn()
+{
+    // This is ColorAuto's wallpaper source under LXQt, and "nothing to sample"
+    // has to be an empty hash rather than a guess: PCManFM's own wallpaper is
+    // deliberately NOT a fallback (one image for the whole session would make
+    // per-monitor colours a fiction), so with the engine off ColorAuto must get
+    // nothing and say so in its tab.
+    //
+    // The other half — that an active engine reports what is on each monitor —
+    // cannot be checked here: there is no layer-shell without a compositor, so
+    // no surface is ever created. See the header of this file.
+    QVERIFY(!LxqtWallpapers::enabled());
+    LxqtWallpapers engine(nullptr);
+    QVERIFY(engine.currentImages().isEmpty());
+    engine.start();
+    QVERIFY(!engine.active());
+    QVERIFY(engine.currentImages().isEmpty());
 }
 
 void TestLxqtWallpapers::unconfiguredMonitorFallsBackToPcmanfm()

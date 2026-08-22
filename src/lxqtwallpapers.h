@@ -83,6 +83,22 @@ public:
     // Take everything down and give the desktop back to PCManFM. Idempotent.
     void stop();
 
+    // connector name -> the image each monitor is showing **right now**.
+    //
+    // This is ColorAuto's wallpaper source under LXQt, in place of the
+    // plasmashell round trip it uses under Plasma (see
+    // AutoColorScheme::setWallpaperSource). It reads the live surfaces rather
+    // than recomputing from the config on purpose: in slideshow mode the choice
+    // is random and lives only in m_slideshowHistory, so asking imageFor()
+    // again could answer with a different picture than the one on screen.
+    //
+    // Empty while this engine is not the one drawing. That is a normal state,
+    // not an error: with the feature off PCManFM owns the desktop, and its
+    // wallpaper is deliberately NOT used as a fallback — it has one image for
+    // the whole session, so per-monitor colors would be a fiction (decision
+    // 2026-08-22). The ColorAuto tab says so instead.
+    QHash<QString, QString> currentImages() const;
+
     // Which picture a monitor would get on a desktop. Public only so a test can
     // ask without a compositor — the choice is the half of this class that can
     // be checked without one (tests/unit/tst_lxqtwallpapers.cpp).
