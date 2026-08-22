@@ -22,6 +22,7 @@
 #include "configarchive.h"
 #include "iconpickerdialog.h"
 #include "themepicker.h"
+#include "keyboardcontrol.h"
 #include "qtcompat.h"
 #include "kwinscripts.h"
 #include "previewslauncher.h"
@@ -354,6 +355,12 @@ void SettingsDialog::buildTabs()
     m_qtCompatForm = nullptr;
     m_qtCompatIcons = nullptr;
     m_qtCompatUiSettings = nullptr;
+    // Same reset for the keyboard group, which lives in that tab: its widgets
+    // are deleted with it, and the two helpers that refill them decide by
+    // whether these are null.
+    m_kbLayout = m_kbVariant = m_kbModel = nullptr;
+    m_kbOptions = nullptr;
+    m_kbStatus = nullptr;
     if (m_manager && m_manager->qtCompat())
         addTab(createQtCompatTab(), tr("Modo QT"));
     m_audioTabIndex = -1;
@@ -4343,6 +4350,249 @@ void SettingsDialog::addQtCompatFontRow(QFormLayout *form, QWidget *parent,
     refresh();
 }
 
+// Refill the variant combo for whatever layout is selected. Variants are
+// per-layout in the rules file ("nodeadkeys" exists for a dozen of them), so
+// this runs on every layout change and not once at build time.
+void SettingsDialog::rebuildKeyboardVariants()
+{
+    if (!m_kbVariant)
+        return;
+    const QString wanted = KeyboardControl::variant();
+    const QString layoutId = m_kbLayout ? m_kbLayout->currentData().toString() : QString();
+
+    m_kbFilling = true;
+    m_kbVariant->clear();
+    // "No variant" is a real choice, not the absence of one, and it is not a
+    // row of the rules file — hence the explicit entry with an empty id.
+    m_kbVariant->addItem(tr("(sin variante)"), QString());
+    for (const auto &v : KeyboardControl::availableVariants(layoutId))
+        m_kbVariant->addItem(QStringLiteral("%1 — %2").arg(v.id, v.name), v.id);
+    const int at = m_kbVariant->findData(wanted);
+    m_kbVariant->setCurrentIndex(at >= 0 ? at : 0);
+    m_kbFilling = false;
+}
+
+// The status line: what kxkbrc says and what KWin answers. Both, because the
+// interesting failure is them disagreeing — and because a line that only showed
+// the file would be green on exactly the bug this feature exists for.
+void SettingsDialog::reloadKeyboardStatus()
+{
+    if (!m_kbStatus)
+        return;
+    KeyboardControl *kb = m_manager ? m_manager->keyboard() : nullptr;
+
+    const QString file = KeyboardControl::configuredLayout();
+    const QString fileVariant = KeyboardControl::configuredVariant();
+    const QString fileDesc =
+        file.isEmpty() ? tr("(sin definir)")
+                       : (fileVariant.isEmpty() ? file : file + QLatin1Char('/') + fileVariant);
+
+    QString live;
+    if (!kb) {
+        live = tr("(sin backend)");
+    } else if (!kb->kwinAnswered()) {
+        live = tr("(consultando…)");
+    } else {
+        const auto active = kb->activeLayouts();
+        if (active.isEmpty()) {
+            live = tr("KWin no contesta (¿no hay KWin en esta sesión?)");
+        } else {
+            QStringList parts;
+            for (const auto &l : active) {
+                parts << (l.variant.isEmpty()
+                              ? tr("<b>%1</b> (%2)").arg(l.name, l.displayName)
+                              : tr("<b>%1/%2</b> (%3)").arg(l.name, l.variant, l.displayName));
+            }
+            live = parts.join(QStringLiteral(", "));
+        }
+    }
+
+    QString text = tr("En <tt>kxkbrc</tt>: <b>%1</b><br>KWin está usando: %2")
+                       .arg(fileDesc, live);
+    const QString sys = KeyboardControl::systemLayout();
+    if (!sys.isEmpty()) {
+        // The value everybody assumes is in effect, and the one that is not:
+        // /etc/default/keyboard is the X11 answer and Wayland never reads it.
+        text += tr("<br><i>/etc/default/keyboard dice <b>%1</b> — es la respuesta de X11, "
+                   "Wayland no la lee.</i>")
+                    .arg(sys);
+    }
+    m_kbStatus->setText(text);
+}
+
+void SettingsDialog::createKeyboardGroup(QVBoxLayout *parentLayout)
+{
+    QWidget *tab = parentLayout->parentWidget();
+    if (!tab)
+        tab = qobject_cast<QWidget *>(parentLayout->parent());
+    KeyboardControl *kb = m_manager ? m_manager->keyboard() : nullptr;
+
+    auto *box = new QGroupBox(tr("Teclado (KWin/Wayland)"), tab);
+    auto *outer = new QVBoxLayout(box);
+
+    auto *intro = new QLabel(
+        tr("Bajo Wayland la distribución de teclado la arma el compositor, y acá el "
+           "compositor es KWin: la saca del grupo <tt>[Layout]</tt> de <tt>kxkbrc</tt> e "
+           "<b>ignora</b> tanto <tt>/etc/default/keyboard</tt> como lo que aplique "
+           "lxqt-config-input (que usa <tt>setxkbmap</tt>, o sea X11). Por eso una sesión "
+           "configurada entera desde LXQt puede seguir escribiendo con otra distribución y "
+           "no haber forma de moverla desde el centro de control.<br><br>"
+           "kdock escribe ese archivo y le avisa a KWin por la notificación de KConfig, que "
+           "es lo único que le hace recompilar el mapa de teclas <b>en caliente</b> — el "
+           "método <tt>reconfigure</tt> de KWin no sirve para esto. Y lo vuelve a aplicar en "
+           "cada arranque, así que la elección sobrevive al login."),
+        box);
+    intro->setWordWrap(true);
+    outer->addWidget(intro);
+
+    auto *on = new QCheckBox(tr("Aplicar la distribución de teclado al arrancar"), box);
+    on->setToolTip(tr("Al destildarlo kdock deja de escribir <tt>kxkbrc</tt>, pero NO devuelve "
+                      "lo anterior: lo último que escribió queda puesto."));
+    on->setChecked(KeyboardControl::enabled());
+    connect(on, &QCheckBox::toggled, this, [this](bool checked) {
+        KeyboardControl *ctl = m_manager ? m_manager->keyboard() : nullptr;
+        if (!ctl)
+            return;
+        if (checked && KeyboardControl::layout().isEmpty() && m_kbLayout) {
+            // The combo can be showing a value nobody ever stored: with nothing
+            // in kdock.conf it falls back to kxkbrc and then to
+            // /etc/default/keyboard, so that it does not open on the first entry
+            // of an alphabetical list. Ticking the box has to apply *that* —
+            // otherwise the switch goes on, `layout()` is still empty, and
+            // apply() writes nothing at all. Which is the shape of a checkbox
+            // that does nothing (found driving the dialog from a probe,
+            // 2026-08-22: the combo said latam and the config said "").
+            ctl->setLayout(m_kbLayout->currentData().toString());
+        }
+        ctl->setEnabled(checked);
+    });
+    outer->addWidget(on);
+
+    auto *form = new QFormLayout;
+    outer->addLayout(form);
+
+    m_kbLayout = new QComboBox(box);
+    m_kbVariant = new QComboBox(box);
+    m_kbModel = new QComboBox(box);
+    m_kbOptions = new QLineEdit(box);
+
+    const auto layouts = KeyboardControl::availableLayouts();
+    m_kbFilling = true;
+    if (layouts.isEmpty()) {
+        // No rules file: rather than an empty combo that looks broken, keep
+        // whatever is configured so the user can at least see and re-apply it.
+        m_kbLayout->addItem(tr("(no se encontró el catálogo de xkb)"), QString());
+    }
+    for (const auto &l : layouts)
+        m_kbLayout->addItem(QStringLiteral("%1 — %2").arg(l.id, l.name), l.id);
+    {
+        // The starting value, in order of how much it is worth trusting: what
+        // kdock already stores, then what KWin is actually using, then what the
+        // X11 file says. Opening on the first entry of an alphabetical list
+        // would make an accidental OK switch the desktop to Albanian.
+        QString initial = KeyboardControl::layout();
+        if (initial.isEmpty())
+            initial = KeyboardControl::configuredLayout();
+        if (initial.isEmpty())
+            initial = KeyboardControl::systemLayout();
+        const int at = m_kbLayout->findData(initial);
+        if (at >= 0)
+            m_kbLayout->setCurrentIndex(at);
+    }
+    m_kbFilling = false;
+    form->addRow(tr("Distribución:"), m_kbLayout);
+
+    rebuildKeyboardVariants();
+    form->addRow(tr("Variante:"), m_kbVariant);
+
+    m_kbFilling = true;
+    m_kbModel->addItem(tr("(el que decida KWin)"), QString());
+    for (const auto &m : KeyboardControl::availableModels())
+        m_kbModel->addItem(QStringLiteral("%1 — %2").arg(m.id, m.name), m.id);
+    {
+        const int at = m_kbModel->findData(KeyboardControl::model());
+        m_kbModel->setCurrentIndex(at >= 0 ? at : 0);
+    }
+    m_kbFilling = false;
+    m_kbModel->setToolTip(tr("Vacío deja la clave <tt>Model</tt> fuera de kxkbrc, y ahí KWin "
+                             "usa su valor de fábrica (<tt>pc104</tt>), que no es "
+                             "necesariamente el de <tt>/etc/default/keyboard</tt>."));
+    form->addRow(tr("Modelo:"), m_kbModel);
+
+    m_kbOptions->setText(KeyboardControl::options());
+    m_kbOptions->setPlaceholderText(tr("p. ej. grp:alt_shift_toggle,terminate:ctrl_alt_bksp"));
+    m_kbOptions->setToolTip(tr("Opciones de xkb, separadas por comas. Vacío quita la clave "
+                               "<tt>Options</tt> de kxkbrc."));
+    form->addRow(tr("Opciones xkb:"), m_kbOptions);
+
+    connect(m_kbLayout, &QComboBox::currentIndexChanged, this, [this] {
+        if (m_kbFilling || !m_manager || !m_manager->keyboard())
+            return;
+        // The variant belongs to the layout, so a layout change invalidates it.
+        // Clearing first and rebuilding second means one apply(), not two.
+        m_manager->keyboard()->setVariant(QString());
+        m_manager->keyboard()->setLayout(m_kbLayout->currentData().toString());
+        rebuildKeyboardVariants();
+    });
+    connect(m_kbVariant, &QComboBox::currentIndexChanged, this, [this] {
+        if (m_kbFilling || !m_manager || !m_manager->keyboard())
+            return;
+        m_manager->keyboard()->setVariant(m_kbVariant->currentData().toString());
+    });
+    connect(m_kbModel, &QComboBox::currentIndexChanged, this, [this] {
+        if (m_kbFilling || !m_manager || !m_manager->keyboard())
+            return;
+        m_manager->keyboard()->setModel(m_kbModel->currentData().toString());
+    });
+    // editingFinished and not textChanged: this is a free-text field whose
+    // half-typed states are invalid xkb option lists, and every write recompiles
+    // the session's keymap.
+    connect(m_kbOptions, &QLineEdit::editingFinished, this, [this] {
+        if (!m_manager || !m_manager->keyboard())
+            return;
+        if (m_kbOptions->text() == KeyboardControl::options())
+            return;
+        m_manager->keyboard()->setOptions(m_kbOptions->text());
+    });
+
+    m_kbStatus = new QLabel(box);
+    m_kbStatus->setWordWrap(true);
+    m_kbStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    outer->addWidget(m_kbStatus);
+
+    auto *row = new QHBoxLayout;
+    auto *applyBtn = new QPushButton(tr("Aplicar ahora"), box);
+    applyBtn->setToolTip(tr("Escribe kxkbrc y le manda la notificación a KWin aunque el "
+                            "archivo ya estuviera bien. Es lo que hace falta cuando KWin y "
+                            "el archivo se fueron de sincro."));
+    connect(applyBtn, &QPushButton::clicked, this, [this] {
+        if (!m_manager || !m_manager->keyboard())
+            return;
+        m_manager->keyboard()->applyNow();
+        m_manager->keyboard()->refreshActive();
+    });
+    auto *refreshBtn =
+        new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")), tr("Refrescar"), box);
+    connect(refreshBtn, &QPushButton::clicked, this, [this] {
+        if (m_manager && m_manager->keyboard())
+            m_manager->keyboard()->refreshActive();
+        reloadKeyboardStatus();
+    });
+    row->addWidget(applyBtn);
+    row->addStretch();
+    row->addWidget(refreshBtn);
+    outer->addLayout(row);
+
+    if (kb) {
+        connect(kb, &KeyboardControl::activeChanged, box, [this] { reloadKeyboardStatus(); });
+        connect(kb, &KeyboardControl::changed, box, [this] { reloadKeyboardStatus(); });
+        kb->refreshActive();
+    }
+    reloadKeyboardStatus();
+
+    parentLayout->addWidget(box);
+}
+
 void SettingsDialog::createKWinScriptsGroup(QVBoxLayout *parentLayout)
 {
     QWidget *tab = parentLayout->parentWidget() ? qobject_cast<QWidget *>(parentLayout->parentWidget()) : nullptr;
@@ -4807,7 +5057,9 @@ QWidget *SettingsDialog::createQtCompatTab()
     });
     layout->addWidget(applyNow);
 
-    // --- KWin scripts (inside Modo QT because KWin is the WM under LXQt) ---
+    // --- Keyboard and KWin scripts: both here because KWin is the WM under
+    // LXQt, and both are things the LXQt control centre cannot reach. ---
+    createKeyboardGroup(layout);
     createKWinScriptsGroup(layout);
 
     // --- Diagnostics --------------------------------------------------------

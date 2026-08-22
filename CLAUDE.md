@@ -27,7 +27,7 @@ mano**, pero para verificar un cambio empezá por la suite. Tres cosas que impor
 - **Toda corrida es sandbox**: `XDG_DATA_HOME` descartable + herramientas falsas en el `PATH`
   (`tests/lib/`). Si escribís un test nuevo que arranca un binario, pasá por ahí o le vas a
   cambiar el brillo y el tema al usuario.
-- **Hay cinco costuras de test en producción**, las cinco apagadas por defecto y documentadas
+- **Hay seis costuras de test en producción**, las seis apagadas por defecto y documentadas
   en el código: `KDOCK_TEST_SCREENS` (lista de monitores, `src/dockmanager.cpp`),
   `KDOCK_DEBUG_DODGE` (transiciones de `windowsOverlap`, `src/dockwindow.cpp`),
   `KDOCK_DEBUG_STARTUP` (cuánto tarda en construirse cada dock, `src/dockmanager.cpp` — la
@@ -36,7 +36,10 @@ mano**, pero para verificar un cambio empezá por la suite. Tres cosas que impor
   `src/weathercontrol.cpp`) — esta última es lo que hace que `tst_weather` corra en CI, que no
   tiene internet — y `KDOCK_TEST_DISPLAYS` (la lista de monitores de PowerDevil como JSON,
   `src/screenbrightness.cpp`), que es lo que deja probar a qué monitor le habla la rueda del
-  brillo sin PowerDevil y sin atenuarle la pantalla a nadie. En esa última **manda que la
+  brillo sin PowerDevil y sin atenuarle la pantalla a nadie, y `KDOCK_TEST_XKB_RULES` (la ruta
+  del `evdev.lst` del que sale el catálogo de distribuciones de teclado,
+  `src/keyboardcontrol.cpp`), que es lo que hace que el parser corra en CI, donde no hay
+  `xkb-data`. Esta última es de **solo lectura**: solo decide qué lista muestran los combos. En esa última **manda que la
   variable esté puesta, no su contenido**: `[]` es como se dice "acá no hay PowerDevil", y
   decidir por la lista parseada mandaría ese caso al bus de sesión, donde contesta el PowerDevil
   de verdad y el test deja de ser un test.
@@ -655,6 +658,44 @@ y un `XDG_CONFIG_HOME` descartable (que es lo que aísla `kdeglobals`; `XDG_DATA
 alcanza), simulando la carrera a mano: escribir el valor oscuro en el `kdeglobals` falso entre
 paso y paso. El control positivo —sacar la guarda, recompilar, correr— pasa de `PASS` a
 `prev=DarkTest` en una corrida.
+
+### Probar el teclado sin dejar al usuario escribiendo en otro idioma
+
+`KeyboardControl` escribe `kxkbrc` y le manda a KWin la señal de KConfig que le hace
+recompilar el mapa de teclas **en caliente**. O sea que una sonda mal apuntada le cambia el
+teclado a la sesión de verdad, y **lo que aísla es `XDG_CONFIG_HOME`**, no `XDG_DATA_HOME`
+(`kxkbrc` sale de `QStandardPaths::GenericConfigLocation`). La notificación va igual al bus,
+así que para no hablarle al KWin del usuario hace falta además `dbus-run-session`.
+
+```bash
+env -i HOME=$HOME PATH=/tmp/fakebin:/usr/bin:/bin \
+    XDG_CONFIG_HOME=/tmp/kb/config XDG_DATA_HOME=/tmp/kb/data \
+    QT_QPA_PLATFORM=offscreen dbus-run-session -- ./sonda
+```
+
+Tres cosas, las tres costaron una corrida (2026-08-22):
+
+- **El `kwriteconfig6` falso no escribe el archivo**, así que una sonda con el `PATH` falso
+  nunca converge: cada `apply()` vuelve a "escribir" las mismas claves porque el archivo sigue
+  vacío. Para probar la convergencia hay que dejar correr el `kwriteconfig6` de verdad **con
+  `XDG_CONFIG_HOME` descartable**, que es inocuo porque `--file kxkbrc` escribe justo ahí.
+- **Una sonda contra un bus propio no prueba que la señal salga bien.** Con `QByteArrayList`
+  sin registrar, QtDBus la manda con firma vacía y el archivo igual queda perfecto: hay que
+  mirar el `dbus-monitor` (o afirmar sobre `msg.signature()`), no el `.conf`. Es el mismo
+  patrón que los fondos de pantalla — la config miente.
+- **`org.kde.KWin.reconfigure` no recarga el teclado.** Si estás diagnosticando "escribí el
+  archivo y no pasa nada", ese es el desvío; lo que sirve es la señal
+  `org.kde.kconfig.notify.ConfigChanged` sobre `/kxkbrc`.
+
+Y la prueba de punta a punta **sí se puede hacer contra el KWin de verdad sin riesgo**, porque
+es reversible en un comando: una sonda con `XDG_DATA_HOME` descartable (para no tocar el
+`kdock.conf` del usuario) pero el `XDG_CONFIG_HOME` real, pidiendo una distribución distinta y
+leyendo qué contesta KWin. Anotá el `LayoutList` de antes y devolvelo:
+
+```bash
+busctl --user call org.kde.KWin /Layouts org.kde.KeyboardLayouts getLayoutsList
+# a(sss) 1 "latam" "" "Spanish (Latin American)"
+```
 
 ### Probar el Modo QT (apariencia de LXQt) sin re-tematizarle la sesión al usuario
 
@@ -1284,6 +1325,9 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **El arnés de Xvfb del dock no sirve para clickear widgets con el motor de fondos encendido**: la superficie del fondo tapa el dock y se come los clics.
 - **El *scope* de una superficie layer-shell decide su `WindowType` en KWin**, y kdock lo tenía hardcodeado en `"dock"` para todas.
 - **Medir un "flicker" comparando dos capturas mide el contenido vivo de las ventanas**, no el bug.
+- **`org.kde.KWin.reconfigure` no recarga el mapa de teclas**, y `/etc/default/keyboard` es la respuesta de X11.
+- **Un metatipo de D-Bus registrado por el test le queda registrado al código de producción.**
+- **Un combo que abre en un valor de *fallback* no guarda ese valor**, y la casilla que lo aplica no aplica nada.
 
 ## Depurar un arranque que "no responde"
 

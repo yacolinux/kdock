@@ -1163,6 +1163,83 @@ tres diálogos vive.
 - Probado por `tests/unit/tst_qtcompat.cpp` (17 casos): el mapeo de las diez claves, el espejo del iconset (y que uno ausente no se escriba), que cada parte se apague sola sin arrastrar a las otras, que la fuente viaje verbatim y que `fontFor()` caiga a la de LXQt, que apagado no escriba, que la reescritura idéntica no toque el archivo (medido por mtime+tamaño), que apagar no restaure, que el resto del `lxqt.conf` sobreviva, que una edición externa se pise con *Aplicar ahora*, y la propagación de punta a punta `kdeglobals` → `Theme::changed` → `lxqt.conf`.
   - **Trampa de ese test: `lxqt.conf` es la SALIDA, no un ajuste de kdock, así que `init()` tiene que vaciarlo además del grupo `[QtCompat]`.** Sin eso, toda aserción de la forma "esta parte está apagada, así que su clave está vacía" ve lo que escribió la prueba anterior y falla señalando al producto (pasó con las tres casillas, 2026-08-20). Va con `QSettings::clear()` y no borrando el archivo, para que el caché del propio proceso quede coherente sin depender de la revalidación por (mtime, tamaño).
 
+### Teclado bajo Wayland (`src/keyboardcontrol.{h,cpp}`, 2026-08-22)
+
+En la misma solapa *Modo QT* y por la misma razón que los scripts de KWin: es algo que el
+centro de control de LXQt **no puede alcanzar**, porque quien manda es KWin.
+
+**El problema.** Bajo Wayland el mapa de teclas lo compila el compositor. KWin lo arma con
+`xkb_keymap_new_from_names()` a partir del grupo `[Layout]` de `kxkbrc` (`LayoutList`,
+`VariantList`, `Model`, `Options`) e **ignora las otras dos fuentes que todo el mundo supone
+que mandan**: `/etc/default/keyboard` (que es la respuesta de X11) y `lxqt-config-input`, que
+aplica su elección con `setxkbmap` — también X11, o sea que bajo Wayland no hace nada. En esta
+máquina el único archivo que decía `es` era `kxkbrc`, todos los demás decían `latam`, y el
+teclado escribía como español de España sin forma de moverlo desde LXQt.
+
+**Lo que dispara la recarga, que es la mitad no obvia.** Medido a mano el 2026-08-22:
+
+| se hace | KWin recompila el mapa |
+|---|---|
+| escribir `kxkbrc` y nada más | no (recién en el próximo arranque de KWin) |
+| escribir `kxkbrc` + `org.kde.KWin.reconfigure` | **no** — ese método reparsea `kwinrc` |
+| escribir `kxkbrc` + señal `org.kde.kconfig.notify.ConfigChanged` sobre `/kxkbrc` | **sí, en caliente** |
+
+KWin vigila `kxkbrc` con un `KConfigWatcher` (el símbolo está en `libkwin.so`), y ese watcher
+se suscribe a la señal de KConfig, no al método D-Bus. `kwriteconfig6 --notify` emite la misma
+señal, pero **solo cuando el valor que escribió realmente cambió**; kdock la emite él mismo por
+dos razones: quiere **una** notificación para el lote de claves (KWin recompila una vez y no
+cuatro) y quiere que *Aplicar ahora* pueda forzar la recarga cuando KWin y el archivo se fueron
+de sincro, que es justo el caso en que no hay nada que escribir.
+
+- **El argumento de esa señal es `a{saay}`** (`QHash<QString, QByteArrayList>`: grupo → claves
+  cambiadas) y hay que registrar **los dos** metatipos, el interior primero. Registrar solo el
+  `QHash` deja `QByteArrayList` sin registrar y QtDBus manda la señal con **firma vacía**: el
+  archivo queda perfecto y del otro lado es idéntico a no haberla mandado nunca.
+- **Qué significa "vacío" es distinto en cada clave.** `VariantList` vacío es un *valor* (lo que
+  limpia una variante vieja) y se escribe; `Model` y `Options` vacíos **borran** la clave
+  (`kwriteconfig6 --delete`), porque un `Options` en blanco no es lo mismo que no tener
+  `Options`. Sin distribución no se escribe nada: un `LayoutList` vacío dejaría a KWin sin
+  teclado.
+- **Solo se escriben las claves que difieren**, y las escrituras son **sincrónicas**
+  (`QProcess` + `waitForFinished`), por lo mismo que `QtCompat::syncKdeUiSettings()`: el punto
+  entero es que la distribución esté bien *antes* de que alguien escriba. `main()` llama a
+  `apply()` en cada arranque; sobre un archivo que ya dice lo correcto no escribe ni notifica,
+  así que no cuesta nada ni parpadea el mapa.
+- **Arranca en `false` y apagado es inerte.** `kxkbrc` vive en `XDG_CONFIG_HOME` y la
+  notificación va al bus de sesión: ninguna caja de arena de `XDG_DATA_HOME` frena esto, así
+  que la reja del `enabled` es lo único que impide que una sonda le cambie el teclado al que la
+  corre. Apagarlo deja de aplicar y **no restaura** (misma decisión que Modo QT).
+- **El catálogo sale de `evdev.lst`** (`/usr/share/X11/xkb/rules/`), el mismo archivo que leen
+  los paneles de KDE y GNOME: 99 distribuciones y 184 modelos en esta máquina. Las variantes se
+  filtran por el prefijo `"<layout>: "` de su descripción, porque el id solo es ambiguo
+  (`nodeadkeys` existe para una docena). La costura `KDOCK_TEST_XKB_RULES` apunta a un fixture,
+  que es lo que hace que el parser se pruebe en CI (donde no hay `xkb-data`).
+- **El combo de distribución nunca abre vacío**, y por eso hay una trampa: cae de lo guardado en
+  `kdock.conf` a lo que dice `kxkbrc` y de ahí a `/etc/default/keyboard`, para no abrirse en la
+  primera entrada de una lista alfabética (tildar la casilla ahí le pondría albanés al
+  escritorio). Pero ese valor es solo lo que se *muestra*, así que **tildar la casilla tiene que
+  guardarlo primero**: sin eso el interruptor se prendía con "latam" a la vista y `apply()` no
+  escribía nada, que es exactamente la forma de una casilla que no hace nada. Se encontró
+  manejando el diálogo desde una sonda; la captura se ve igual en las dos versiones.
+- **Solo el diálogo lo alcanza** (`DockManager::Shared::keyboard` →
+  `SettingsDialog::createKeyboardGroup()`); ningún dock ni QML lo usa.
+- **La línea de estado muestra las dos mitades** —lo que dice `kxkbrc` y lo que contesta
+  `org.kde.KeyboardLayouts.getLayoutsList`— porque el fallo interesante es que no coincidan. Esa
+  consulta va **asíncrona** (`QDBusPendingCallWatcher`), por lo de siempre: una llamada
+  bloqueante a un compositor ocupado es la forma del timeout de 25 s que congeló el arranque el
+  2026-08-21.
+- Probado por `tests/unit/tst_keyboard.cpp`, **envuelto en `dbus-run-session`** como
+  `tst_systray`: sin bus propio la señal saldría al bus real y le cambiaría el teclado al
+  desarrollador, y además el test no podría recibirla. Cubre el parser contra el fixture, las
+  cuatro semánticas de "vacío", que apagado no escriba ni notifique, que aplicar sobre un
+  archivo ya correcto sea no-op pero *Aplicar ahora* notifique igual, la firma `a{saay}` del
+  cable, y la casilla de la solapa.
+  - **Trampa de ese test: el spy NO puede registrar los metatipos.** El registro de QtDBus es
+    global al proceso, así que un spy que llame a `qDBusRegisterMetaType<QByteArrayList>()` para
+    recibir el tipo cómodo se lo registra también al código de producción y **tapa el bug que el
+    test existe para congelar** (pasó: sacar la línea de `keyboardcontrol.cpp` dejaba el test en
+    verde). Se recibe el `QDBusMessage` crudo y se afirma sobre `msg.signature()`.
+
 ### Detección de sesión (`src/session.{h,cpp}`, 2026-08-20)
 
 Un único lugar que responde **cuatro preguntas distintas**, y la distinción es el arreglo, no

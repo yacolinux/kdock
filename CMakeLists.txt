@@ -98,6 +98,7 @@ add_library(kdock_core OBJECT
     src/routesdialog.cpp        src/routesdialog.h
     src/appearancecontrol.cpp   src/appearancecontrol.h
     src/qtcompat.cpp            src/qtcompat.h
+    src/keyboardcontrol.cpp     src/keyboardcontrol.h
     src/kwinscripts.cpp         src/kwinscripts.h
     src/darkmodeappearance.cpp  src/darkmodeappearance.h
     src/translations.cpp        src/translations.h

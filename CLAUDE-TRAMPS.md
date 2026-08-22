@@ -1207,3 +1207,30 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   la respuesta real: 100 % de píxeles casi negros antes, 0 % después, y 0 % de variación entre
   capturas en los dos casos. Elegí la zona mirando la captura primero; un recuadro "razonable" a
   ojo cae encima de contenido que cambia solo.
+
+- **`org.kde.KWin.reconfigure` no recarga el mapa de teclas, y es el desvío obvio.**
+  Ese método reparsea `kwinrc`. El teclado sale de `kxkbrc`, que KWin vigila con un
+  `KConfigWatcher`, o sea que lo único que le hace recompilar el keymap en caliente es la señal
+  `org.kde.kconfig.notify.ConfigChanged` sobre el object path `/kxkbrc`, con el mapa
+  `{grupo: [claves]}` de argumento. Medido el 2026-08-22: escribir `LayoutList=latam` +
+  `reconfigure` deja a `getLayoutsList` contestando `"es"`; la misma escritura + la señal lo
+  pasa a `"latam"` sin reiniciar nada. Y ojo con la mitad de arriba: `/etc/default/keyboard` y
+  `lxqt-config-input` son las dos respuestas de **X11** (la segunda aplica con `setxkbmap`), así
+  que bajo Wayland pueden decir lo correcto mientras el teclado escribe otra cosa.
+
+- **Un metatipo de D-Bus registrado por el test le queda registrado al código de producción.**
+  `qDBusRegisterMetaType<T>()` es global al proceso. Un spy que lo llame para poder recibir el
+  tipo cómodo tapa el bug de que producción no lo registre: el test queda en verde con la línea
+  del `.cpp` comentada. Pasó tal cual con `QByteArrayList` en `tst_keyboard` (2026-08-22) — y el
+  síntoma en producción es de los peores, porque QtDBus emite la señal con **firma vacía** sin
+  fallar y el archivo que se escribió queda perfecto, así que cualquier aserción sobre el
+  `.conf` da verde sobre la mitad rota. La forma correcta es recibir el `QDBusMessage` crudo y
+  afirmar sobre `msg.signature()`, que es lo único que ve el receptor de verdad.
+
+- **Un combo que abre en un valor de *fallback* no guarda ese valor**, y una casilla que lo
+  aplica no aplica nada. El combo de distribución de teclado cae de `kdock.conf` a `kxkbrc` a
+  `/etc/default/keyboard`, justamente para no abrirse en la primera entrada de una lista
+  alfabética. Pero eso es solo lo que se *muestra*: al tildar el interruptor, `layout()` seguía
+  vacío y `apply()` no escribía nada teniendo "latam" a la vista (2026-08-22). Vale para
+  cualquier control con valor sugerido: **la captura se ve idéntica en las dos versiones**, esto
+  solo se encuentra manejando el diálogo desde código e imprimiendo lo que quedó en la config.

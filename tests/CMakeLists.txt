@@ -79,6 +79,29 @@ set_tests_properties(tst_systray PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PATH=${CMAKE_CURRENT_BINARY_DIR}/fakebin:$ENV{PATH}"
     SKIP_RETURN_CODE 77)
 
+# tst_keyboard va envuelto en `dbus-run-session` por las mismas dos razones, y
+# la segunda es la que importa. La feature termina en una señal al bus de sesión
+# (org.kde.kconfig.notify sobre /kxkbrc) que le hace recompilar el mapa de
+# teclas a KWin: en el bus real le cambiaría el teclado al desarrollador. Y la
+# mitad que hay que probar es justamente que esa señal salga bien marshalada,
+# para lo cual el test tiene que poder recibirla. Sin bus propio se saltea, no
+# se apunta al real.
+qt_add_executable(tst_keyboard ${CMAKE_CURRENT_SOURCE_DIR}/unit/tst_keyboard.cpp)
+target_link_libraries(tst_keyboard PRIVATE kdock_core Qt6::Test)
+target_include_directories(tst_keyboard PRIVATE ${KDOCK_TESTS_DIR}/unit)
+if(KDOCK_DBUS_RUN_SESSION)
+    add_test(NAME tst_keyboard
+             COMMAND ${KDOCK_DBUS_RUN_SESSION} -- $<TARGET_FILE:tst_keyboard>)
+else()
+    add_test(NAME tst_keyboard COMMAND ${CMAKE_COMMAND} -E echo
+             "dbus-run-session not found: skipping the keyboard test")
+    set_tests_properties(tst_keyboard PROPERTIES SKIP_REGULAR_EXPRESSION "skipping")
+endif()
+set_tests_properties(tst_keyboard PROPERTIES
+    LABELS "unit"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;PATH=${CMAKE_CURRENT_BINARY_DIR}/fakebin:$ENV{PATH};KDOCK_FIXTURES=${KDOCK_TESTS_DIR}/fixtures"
+    SKIP_RETURN_CODE 77)
+
 # tst_cmslider is registered by hand instead of through kdock_add_unit_test: it
 # runs once per QQC2 style, because QQuickStyle::setStyle() only takes effect
 # once per process and the bug it freezes (a Slider 0 px tall, see the file)

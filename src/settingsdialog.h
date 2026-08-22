@@ -29,6 +29,7 @@ class WeatherConfig;
 class TileMenuLauncher;
 class ControlManagerLauncher;
 class Theme;
+class KeyboardControl;
 class ThemePickerButton;
 class QButtonGroup;
 class QCheckBox;
@@ -445,4 +446,21 @@ private:
     bool m_kwinScriptsRebuilding = false;
     void rebuildKWinScriptsList();
     void createKWinScriptsGroup(QVBoxLayout *parentLayout);
+
+    // Keyboard group inside the Modo QT tab. The three combos are members
+    // because the variant list depends on the layout (so it is refilled from
+    // the layout combo's signal) and because the status line is answered
+    // asynchronously by KWin.
+    QComboBox *m_kbLayout = nullptr;
+    QComboBox *m_kbVariant = nullptr;
+    QComboBox *m_kbModel = nullptr;
+    QLineEdit *m_kbOptions = nullptr;
+    QLabel *m_kbStatus = nullptr;
+    // Guards the combos while they are being repopulated: filling a QComboBox
+    // fires currentIndexChanged, which would write the first entry of the new
+    // list to the config as if the user had picked it.
+    bool m_kbFilling = false;
+    void createKeyboardGroup(QVBoxLayout *parentLayout);
+    void rebuildKeyboardVariants();
+    void reloadKeyboardStatus();
 };

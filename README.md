@@ -175,6 +175,16 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Estilo Qt para todo kdock**: un desplegable en *General* elige el widget style del proceso
   — `Breeze`, `Fusion`…— para todos los docks y binarios a la vez. Vacío = el que Qt decida
   (Breeze en KDE, Fusion en otros escritorios). Se aplica al reiniciar.
+- **Distribución de teclado bajo Wayland** (solapa *Modo QT*). Bajo Wayland el mapa de teclas
+  lo compila el compositor, y si ese compositor es KWin lo saca de `kxkbrc` **ignorando**
+  `/etc/default/keyboard` y lo que aplique `lxqt-config-input` (que usa `setxkbmap`, o sea
+  X11). Resultado clásico: todos los archivos del sistema dicen `latam` y el teclado escribe
+  como español de España, sin forma de moverlo desde el centro de control. kdock escribe ese
+  archivo y le manda a KWin la notificación de KConfig, que es lo único que le hace recompilar
+  el mapa **en caliente** — el `reconfigure` de KWin no sirve para esto. Elegís distribución,
+  variante, modelo y opciones xkb de la lista de `evdev.lst` (la misma que leen los paneles de
+  KDE y GNOME), y kdock lo vuelve a aplicar en cada arranque, así que la elección sobrevive al
+  login. Apagado por defecto: mientras lo esté, no toca nada.
 - **Tooltips globales**: un casillero en *General* prende o apaga todos los tooltips de todos
   los docks a la vez, para no pagar sus ventanas si no los querés.
 - **Panel de configuración** en Qt Widgets, con una solapa por área y cada una teñida de un

@@ -1,0 +1,35 @@
+// Not a comment marker in the real format — xkb rules lists have no comments,
+// so this file is a faithful (small) copy of /usr/share/X11/xkb/rules/evdev.lst
+// with only the rows the parser is asserted against.
+//
+// Three things here exist to be traps for KeyboardControl::parseRules():
+//
+//   - the "! $nonlatin = ..." line, which starts with '!' but is a variable
+//     assignment and not a section header. Treating it as one would end the
+//     layout section early and lose every row after it.
+//   - "nodeadkeys" appearing under two different layouts, which is why a
+//     variant row is keyed by the "<layout>:" prefix of its description and not
+//     by its id.
+//   - descriptions with commas and parentheses, which must survive verbatim.
+! model
+  pc105           Generic 105-key PC
+  pc104           Generic 104-key PC
+  applealu_jis    Apple Aluminium (JIS)
+
+! layout
+  us              English (US)
+  es              Spanish
+! $nonlatin = am ara be bg
+  latam           Spanish (Latin American)
+  ara             Arabic
+
+! variant
+  nodeadkeys      es: Spanish (no dead keys)
+  winkeys         es: Spanish (Windows)
+  nodeadkeys      latam: Spanish (Latin American, no dead keys)
+  deadtilde       latam: Spanish (Latin American, dead tilde)
+  intl            us: English (US, intl., with dead keys)
+
+! option
+  grp             Switching to another layout
+  grp:alt_shift_toggle  Alt+Shift

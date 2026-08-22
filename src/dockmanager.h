@@ -63,6 +63,7 @@ class LxqtWallpapers;
 class AutoColorScheme;
 class QtCompat;
 class KWinScripts;
+class KeyboardControl;
 class AppPreviews;
 
 class DockManager : public QObject
@@ -116,6 +117,9 @@ public:
         // KWin scripts: list/enable/install. Lives in Modo QT tab alongside
         // QtCompat because KWin is the WM under this LXQt session.
         KWinScripts *kwinScripts = nullptr;
+        // The session's keyboard layout, which under Wayland only KWin owns.
+        // In the Modo QT tab for the same reason as the scripts above.
+        KeyboardControl *keyboard = nullptr;
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
@@ -274,6 +278,7 @@ public:
     void setAutoColorScheme(AutoColorScheme *autoColors) { m_shared.autoColors = autoColors; }
     QtCompat *qtCompat() const { return m_shared.qtCompat; }
     KWinScripts *kwinScripts() const { return m_shared.kwinScripts; }
+    KeyboardControl *keyboard() const { return m_shared.keyboard; }
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

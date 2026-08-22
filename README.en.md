@@ -169,6 +169,15 @@ The dock, across different edges and label layouts:
   each have their own, so a virtual desktop with its own docks doesn't end up without a tray.
 - **Widgets-only docks**: turning off app icons (General → *App icons*), a dock becomes a
   bar of widgets, tray and its own launchers, and shrinks to fit whatever's left.
+- **Keyboard layout under Wayland** (*Modo QT* tab). Under Wayland the key map is compiled by
+  the compositor, and when that compositor is KWin it takes it from `kxkbrc`, **ignoring**
+  `/etc/default/keyboard` and whatever `lxqt-config-input` applies (which uses `setxkbmap`,
+  i.e. X11). The classic result: every system file says `latam` and the keyboard types as
+  Spanish from Spain, with no way to move it from the control centre. kdock writes that file
+  and sends KWin the KConfig notification, which is the only thing that makes it recompile the
+  map **live** — KWin's `reconfigure` does not do it. You pick layout, variant, model and xkb
+  options from `evdev.lst` (the same list the KDE and GNOME panels read), and kdock re-applies
+  it on every start, so the choice survives a login. Off by default, and inert while off.
 - **Global tooltips**: a checkbox in *General* turns all tooltips on or off across every
   dock at once, so you don't pay for their windows if you don't want them.
 - **Settings panel** in Qt Widgets, with one tab per area, each tinted a different color so

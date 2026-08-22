@@ -70,13 +70,33 @@ prueba a mano con la sonda que linkea los `.o` (receta en `CLAUDE.md`), sin `dbu
 `kwriteconfig6` falso en el `PATH` y `XDG_CONFIG_HOME` descartable — si no, le escribe el `kwinrc`
 del usuario.
 
-`tst_systray` es el único que necesita un **bus de sesión propio**: `SystrayHost` toma
+`tst_systray` es uno de los **dos que necesitan un bus de sesión propio** (el otro es
+`tst_keyboard`, abajo): `SystrayHost` toma
 `org.kde.StatusNotifierWatcher`, así que en el bus de verdad le pelearía la bandeja al kdock
 del usuario. Por eso se registra a mano en `tests/CMakeLists.txt`, envuelto en
 `dbus-run-session`, y se saltea si esa herramienta no está. Congela el deadlock del 2026-08-21:
 un cliente de bandeja que exporta su ícono y después duerme sin bucle de eventos, y la pregunta
 de si el bucle del host sigue latiendo mientras tanto. El control positivo —una sola lectura de
 propiedad bloqueante— lo hace fallar con `registerItem() tardó 2455 ms`.
+
+`tst_keyboard` es el otro que va envuelto en `dbus-run-session`, y por una razón de más que
+`tst_systray`. La feature termina en una señal al bus (`org.kde.kconfig.notify.ConfigChanged`
+sobre `/kxkbrc`) que le hace recompilar el mapa de teclas a KWin: en el bus real **le cambiaría
+el teclado al que corre los tests**. Pero además la mitad que hay que probar es que esa señal
+salga bien marshalada, y para eso el test tiene que poder recibirla.
+
+Ahí está su trampa, y es general: **el registro de metatipos de QtDBus es global al proceso**,
+así que un spy que llame a `qDBusRegisterMetaType<QByteArrayList>()` para recibir el tipo cómodo
+se lo registra también al código de producción y **tapa el bug que el test existe para
+congelar** — con el registro adentro del spy, comentar la línea de `keyboardcontrol.cpp` dejaba
+el test en verde. Se recibe el `QDBusMessage` crudo y se afirma sobre `msg.signature()`
+(`a{saay}`), que es lo único que ve el receptor de verdad. El síntoma en producción es de los
+peores: QtDBus emite la señal con firma vacía **sin fallar** y el `kxkbrc` que se escribió queda
+perfecto, o sea que cualquier aserción sobre el archivo da verde sobre la mitad rota.
+
+El catálogo de distribuciones sale de un fixture (`fixtures/xkb/rules.lst`, vía la costura
+`KDOCK_TEST_XKB_RULES`) y no de `/usr/share/X11/xkb`: así el parser corre en CI, donde no hay
+`xkb-data`, y las aserciones no dependen de la versión instalada en la máquina de cada uno.
 
 `tst_qmlload` es el que más rinde por línea y conviene entender por qué existe: `qmllint` mira
 los archivos del árbol, no lo que quedó *dentro* del binario, y el smoke necesita Xvfb y

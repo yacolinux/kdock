@@ -51,6 +51,7 @@
 #include "appearancecontrol.h"
 #include "autocolorscheme.h"
 #include "qtcompat.h"
+#include "keyboardcontrol.h"
 #include "kwinscripts.h"
 #include "darkmodeappearance.h"
 #include "networkcontrol.h"
@@ -404,6 +405,12 @@ int main(int argc, char *argv[])
     // the desktop's Qt applications. Off by default and inert while off.
     QtCompat qtCompat(&theme);
     KWinScripts kwinScripts;
+    // The session's keyboard layout. Under Wayland the compositor owns the
+    // keymap and LXQt has no way to reach it (lxqt-config-input applies its
+    // choice with setxkbmap, which is X11), so kdock is what makes the layout
+    // the user picked survive a login. Off by default: applying writes kxkbrc
+    // and notifies the session bus, neither of which any sandbox isolates.
+    KeyboardControl keyboard;
     // …except in the session it was written for, where leaving it off means
     // every color scheme kdock applies stops at kdock's own window. Switched on
     // once, the first time kdock runs under LXQt, and never again: `configured()`
@@ -423,6 +430,13 @@ int main(int argc, char *argv[])
     // back to Fusion/Breeze Light even after kdeglobals was fixed.
     if (Session::isLxqt())
         QtCompat::updateActivationEnvironment();
+    // Re-assert the keyboard layout on every start. KWin builds its keymap from
+    // kxkbrc when *it* starts, so this only ever has work to do when something
+    // else moved the file (or when the user just configured it here) — but that
+    // is exactly the case the feature is for, and the writes are synchronous on
+    // purpose: the layout has to be right before anybody types. Costs nothing
+    // while off, and while on it only writes the keys that actually differ.
+    keyboard.apply();
     // The weather widget draws from the same backend the mini-app and the
     // control panel use; its own config file is watched, so a city picked in
     // kdock-weather reaches the dock without a restart.
@@ -461,6 +475,7 @@ int main(int argc, char *argv[])
     shared.appearance = &appearance;
     shared.qtCompat = &qtCompat;
     shared.kwinScripts = &kwinScripts;
+    shared.keyboard = &keyboard;
     shared.desktops = &virtualDesktops;
     shared.desktopWallpapers = &desktopWallpapers;
     shared.lxqtWallpapers = &lxqtWallpapers;
