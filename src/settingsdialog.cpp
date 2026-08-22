@@ -76,6 +76,7 @@
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStandardItemModel>
 #include <QTabWidget>
 #include <QTimer>
 #include <QToolButton>
@@ -3135,6 +3136,7 @@ QWidget *SettingsDialog::createAudioTab()
     makeSection(tr("Output devices"), m_audioOutGroup, m_audioOutLayout);
     makeSection(tr("Input devices"), m_audioInGroup, m_audioInLayout);
     makeSection(tr("Applications"), m_audioAppGroup, m_audioAppLayout);
+    makeSection(tr("Audio cards"), m_audioCardsGroup, m_audioCardsLayout);
     layout->addStretch(1);
 
     rebuildAudioTab();
@@ -3257,6 +3259,66 @@ void SettingsDialog::rebuildAudioTab()
     populate(m_audioOutLayout, m_audioOutGroup, m_audio->outputs(), true);
     populate(m_audioInLayout, m_audioInGroup, m_audio->inputs(), true);
     populate(m_audioAppLayout, m_audioAppGroup, m_audio->apps(), false);
+
+    clearLayout(m_audioCardsLayout);
+    const auto cards = m_audio->cards();
+    for (const AudioControl::Card &card : cards) {
+        auto *row = new QWidget(m_audioCardsGroup);
+        auto *h = new QHBoxLayout(row);
+        h->setContentsMargins(0, 0, 0, 0);
+        h->setSpacing(6);
+
+        auto *label = new QLabel(card.description, row);
+        label->setToolTip(card.name);
+        label->setMinimumWidth(150);
+        h->addWidget(label, 1);
+
+        auto *combo = new QComboBox(row);
+        combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+        // The active profile is what the sinks/sources above actually are. A
+        // profile whose ports are all unplugged is useless, so only the
+        // available ones are offered — except when the active profile itself is
+        // not available (a port got unplugged while selected), in which case it
+        // is shown disabled so the combo reflects reality instead of lying.
+        bool activeShown = false;
+        for (const AudioControl::Profile &p : card.profiles) {
+            if (!p.available && p.name != card.activeProfile)
+                continue;
+            const int idx = combo->count();
+            combo->addItem(p.description, p.name);
+            if (p.name == card.activeProfile) {
+                combo->setCurrentIndex(idx);
+                activeShown = true;
+            }
+        }
+        if (!activeShown && !card.activeProfile.isEmpty()) {
+            const int idx = combo->count();
+            combo->addItem(card.activeProfile);
+            combo->setItemData(idx, card.activeProfile, Qt::UserRole);
+            combo->setCurrentIndex(idx);
+            // Show it but grey it out: its port is gone, it is only the truth.
+            if (auto *m = qobject_cast<QStandardItemModel *>(combo->model()))
+                if (auto *item = m->item(idx))
+                    item->setEnabled(false);
+        }
+        if (combo->count() == 0) {
+            combo->addItem(tr("No profiles"));
+            combo->setEnabled(false);
+        }
+        combo->setToolTip(tr("Switch the card's active profile. Only ports that "
+                             "are physically connected are offered; the HDMI "
+                             "output of a plugged-in monitor is one of these."));
+        const int cardIndex = card.index;
+        connect(combo, &QComboBox::activated, this, [this, combo, cardIndex](int index) {
+            const QString name = combo->itemData(index, Qt::UserRole).toString();
+            if (m_audio && !name.isEmpty())
+                m_audio->setCardProfile(cardIndex, name);
+        });
+        h->addWidget(combo);
+
+        m_audioCardsLayout->addWidget(row);
+    }
+    m_audioCardsGroup->setVisible(!cards.isEmpty());
 }
 
 // Brightness of every monitor + the power profile, backed by ScreenBrightness

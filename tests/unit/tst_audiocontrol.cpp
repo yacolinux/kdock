@@ -20,6 +20,7 @@
 #include "sandbox.h"
 
 #include <QElapsedTimer>
+#include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
 
@@ -109,6 +110,44 @@ private slots:
         QVERIFY2(changes <= 3,
                  qPrintable(QStringLiteral("%1 changed() para 20 refrescos: no se fusionaron")
                                 .arg(changes)));
+    }
+
+    // El parser de perfiles: una tarjeta con dos perfiles disponibles (analógico
+    // y HDMI) y uno sin conectar. El punto entero de la feature es que el HDMI
+    // aparezca AUNQUE su sink todavía no exista — existe recién cuando el perfil
+    // se activa —, así que la disponibilidad sale del puerto, no de la lista de
+    // sinks. El fake de tests/lib/fakebin.sh emite esta tarjeta para `list cards`.
+    void cardsAndProfilesAreParsedFromPactl()
+    {
+        // Los tests de arriba corren con pactl deliberadamente lento; acá solo
+        // se necesita el parser, así que la demora se cae para este slot.
+        qunsetenv("KDOCK_FAKE_PACTL_DELAY");
+
+        AudioControl audio;
+        QSignalSpy spy(&audio, &AudioControl::changed);
+        QTRY_VERIFY_WITH_TIMEOUT(!audio.cards().isEmpty(), 5000);
+
+        const auto cards = audio.cards();
+        QCOMPARE(cards.size(), 1);
+        const AudioControl::Card &card = cards.first();
+        QCOMPARE(card.index, 1);
+        QCOMPARE(card.name, QStringLiteral("alsa_card.pci-0000_00_1f.3"));
+        QCOMPARE(card.description, QStringLiteral("Test Card"));
+        QCOMPARE(card.activeProfile, QStringLiteral("output:analog-stereo+input:analog-stereo"));
+
+        QCOMPARE(card.profiles.size(), 3);
+        QCOMPARE(card.profiles.at(0).name,
+                 QStringLiteral("output:analog-stereo+input:analog-stereo"));
+        QVERIFY(card.profiles.at(0).available);
+        QCOMPARE(card.profiles.at(1).name,
+                 QStringLiteral("output:hdmi-stereo+input:analog-stereo"));
+        QVERIFY(card.profiles.at(1).available); // el puerto HDMI está conectado
+        QCOMPARE(card.profiles.at(2).name, QStringLiteral("output:hdmi-stereo-extra1"));
+        QVERIFY(!card.profiles.at(2).available); // el puerto HDMI 2 no lo está
+        // La sección Ports: del listado no puede colarse como perfil.
+        for (const AudioControl::Profile &p : card.profiles)
+            QVERIFY2(!p.name.startsWith(QLatin1String("analog-input-mic")),
+                     qPrintable(QStringLiteral("el puerto %1 se parseó como perfil").arg(p.name)));
     }
 };
 

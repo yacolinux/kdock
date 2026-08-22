@@ -101,7 +101,7 @@ void AudioControl::refresh()
     }
     m_refreshInFlight = true;
     m_batch = RefreshBatch{};
-    m_batch.pending = 5;
+    m_batch.pending = 6;
 
     runAsync({QStringLiteral("get-default-sink")}, [this](const QString &out) {
         m_batch.defaultSink = out.trimmed();
@@ -123,6 +123,10 @@ void AudioControl::refresh()
         m_batch.sinkInputs = out;
         finishRefresh();
     });
+    runAsync({QStringLiteral("list"), QStringLiteral("cards")}, [this](const QString &out) {
+        m_batch.cards = out;
+        finishRefresh();
+    });
 }
 
 void AudioControl::finishRefresh()
@@ -137,6 +141,7 @@ void AudioControl::finishRefresh()
     m_outputs = parseDevices(Output, m_batch.sinks);
     m_inputs = parseDevices(Input, m_batch.sources);
     m_apps = parseDevices(Application, m_batch.sinkInputs);
+    m_cards = parseCards(m_batch.cards);
 
     m_available = true;
     m_refreshInFlight = false;
@@ -236,6 +241,104 @@ QVector<AudioControl::Device> AudioControl::parseDevices(DeviceType type, const 
     return list;
 }
 
+QVector<AudioControl::Card> AudioControl::parseCards(const QString &text) const
+{
+    QVector<Card> list;
+
+    static const QRegularExpression cardHead(QStringLiteral("^Card #(\\d+)"));
+    // A profile line is "<name>: <description> (sinks: N, sources: N, priority:
+    // N, available: yes|no)". The name itself contains colons but never a space,
+    // so the first space is the delimiter between name and description.
+    static const QRegularExpression availRe(QStringLiteral("\\(sinks: \\d+, sources: \\d+, priority: \\d+, available: (yes|no)\\)"));
+
+    Card cur;
+    bool have = false;
+    // Which double-tab section of the card we are in; profiles only parse in
+    // "Profiles:", properties only in "Properties:".
+    bool inProfiles = false;
+    bool inProperties = false;
+
+    const QStringList lines = text.split(QLatin1Char('\n'));
+    for (const QString &raw : lines) {
+        const auto hm = cardHead.match(raw);
+        if (hm.hasMatch()) {
+            if (have)
+                list.append(cur);
+            cur = Card{};
+            cur.index = hm.captured(1).toInt();
+            inProfiles = inProperties = false;
+            have = true;
+            continue;
+        }
+        if (!have)
+            continue;
+
+        if (raw == QLatin1String("\tProperties:")) {
+            inProperties = true;
+            inProfiles = false;
+            continue;
+        }
+        if (raw == QLatin1String("\tProfiles:")) {
+            inProfiles = true;
+            inProperties = false;
+            continue;
+        }
+        if (raw == QLatin1String("\tPorts:")) {
+            // The double-tab lines after this are ports, not profiles; leaving
+            // inProfiles on would swallow them into the profile list.
+            inProfiles = inProperties = false;
+            continue;
+        }
+
+        // Single-tab field lines of the card header (Name:, Active Profile:,
+        // Driver:, ...). Name: is the pactl id used by set-card-profile, and
+        // Active Profile: is the currently selected profile.
+        if (raw.startsWith(QLatin1Char('\t')) && !raw.startsWith(QLatin1String("\t\t"))) {
+            const QString line = raw.trimmed();
+            if (line.startsWith(QLatin1String("Name: ")))
+                cur.name = line.mid(6).trimmed();
+            else if (line.startsWith(QLatin1String("Active Profile: ")))
+                cur.activeProfile = line.mid(16).trimmed();
+            continue;
+        }
+
+        if (raw.startsWith(QLatin1String("\t\t"))) {
+            const QString line = raw.trimmed();
+            if (inProfiles) {
+                Profile p;
+                const int sp = line.indexOf(QLatin1Char(' '));
+                if (sp < 0)
+                    continue;
+                p.name = line.left(sp).trimmed();
+                if (p.name.endsWith(QLatin1Char(':')))
+                    p.name.chop(1);
+                if (p.name.isEmpty())
+                    continue;
+                const auto am = availRe.match(line);
+                if (am.hasMatch()) {
+                    p.available = (am.captured(1) == QLatin1String("yes"));
+                    p.description = line.mid(sp + 1, am.capturedStart() - sp - 1).trimmed();
+                } else {
+                    p.description = line.mid(sp + 1).trimmed();
+                }
+                cur.profiles.append(p);
+            } else if (inProperties) {
+                const int eq = line.indexOf(QStringLiteral(" = "));
+                if (eq > 0 && line.left(eq).trimmed() == QLatin1String("device.description")) {
+                    QString val = line.mid(eq + 3).trimmed();
+                    if (val.startsWith(QLatin1Char('"')) && val.endsWith(QLatin1Char('"')))
+                        val = val.mid(1, val.size() - 2);
+                    cur.description = val;
+                }
+            }
+            continue;
+        }
+    }
+    if (have)
+        list.append(cur);
+    return list;
+}
+
 QString AudioControl::setVolumeVerb(DeviceType type) const
 {
     switch (type) {
@@ -309,6 +412,20 @@ void AudioControl::setDefault(DeviceType type, const QString &name)
     emit changed();
 }
 
+void AudioControl::setCardProfile(int cardIndex, const QString &profileName)
+{
+    if (m_pactl.isEmpty() || cardIndex < 0 || profileName.isEmpty())
+        return;
+    QProcess::startDetached(m_pactl,
+                            {QStringLiteral("set-card-profile"), QString::number(cardIndex),
+                             profileName});
+    // Switching the profile changes the very set of sinks/sources the card
+    // exposes, so what we cached is stale by construction. The refresh through
+    // the debounce picks up the new graph; the subscriber confirms shortly
+    // after as well.
+    scheduleRefresh();
+}
+
 namespace {
 // One device as a QML-readable map. Kept here rather than in the header so the
 // Device struct stays a plain aggregate.
@@ -334,6 +451,25 @@ QVariantList devicesToList(const QVector<AudioControl::Device> &devices)
         out.append(deviceToMap(d));
     return out;
 }
+
+QVariantMap cardToMap(const AudioControl::Card &c)
+{
+    QVariantMap m;
+    m[QStringLiteral("index")] = c.index;
+    m[QStringLiteral("name")] = c.name;
+    m[QStringLiteral("description")] = c.description;
+    m[QStringLiteral("activeProfile")] = c.activeProfile;
+    QVariantList profiles;
+    for (const AudioControl::Profile &p : c.profiles) {
+        QVariantMap pm;
+        pm[QStringLiteral("name")] = p.name;
+        pm[QStringLiteral("description")] = p.description;
+        pm[QStringLiteral("available")] = p.available;
+        profiles.append(pm);
+    }
+    m[QStringLiteral("profiles")] = profiles;
+    return m;
+}
 } // namespace
 
 QVariantList AudioControl::outputList() const
@@ -349,6 +485,15 @@ QVariantList AudioControl::inputList() const
 QVariantList AudioControl::appList() const
 {
     return devicesToList(m_apps);
+}
+
+QVariantList AudioControl::cardList() const
+{
+    QVariantList out;
+    out.reserve(m_cards.size());
+    for (const Card &c : m_cards)
+        out.append(cardToMap(c));
+    return out;
 }
 
 void AudioControl::setMaxVolume(bool on)

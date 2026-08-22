@@ -385,9 +385,11 @@ private:
     QGroupBox *m_audioOutGroup = nullptr;
     QGroupBox *m_audioInGroup = nullptr;
     QGroupBox *m_audioAppGroup = nullptr;
+    QGroupBox *m_audioCardsGroup = nullptr;
     QVBoxLayout *m_audioOutLayout = nullptr;
     QVBoxLayout *m_audioInLayout = nullptr;
     QVBoxLayout *m_audioAppLayout = nullptr;
+    QVBoxLayout *m_audioCardsLayout = nullptr;
     bool m_audioSliderDown = false;
     bool m_audioRebuildQueued = false;
     // VideoEnergía tab, same shape as Audio: the brightness rows are rebuilt

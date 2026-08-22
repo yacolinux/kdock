@@ -45,12 +45,33 @@ public:
         bool isDefault = false;    // Output/Input only
     };
 
+    // One card profile. The name is the machine-readable pactl id
+    // ("output:hdmi-stereo+input:analog-stereo"); the description is the
+    // localized label ACP gives it. `available` is whether any of the ports the
+    // profile needs are physically connected — an HDMI monitor plugged in shows
+    // up here before its sink even exists, because the sink is only created
+    // once the profile becomes active.
+    struct Profile {
+        QString name;
+        QString description;
+        bool available = false;
+    };
+
+    struct Card {
+        int index = -1;            // pactl numeric index (used for set-card-profile)
+        QString name;              // e.g. alsa_card.pci-0000_00_1f.3
+        QString description;
+        QVector<Profile> profiles;
+        QString activeProfile;
+    };
+
     explicit AudioControl(QObject *parent = nullptr);
 
     bool available() const { return m_available; }
     QVector<Device> outputs() const { return m_outputs; }
     QVector<Device> inputs() const { return m_inputs; }
     QVector<Device> apps() const { return m_apps; }
+    QVector<Card> cards() const { return m_cards; }
 
     // The same three lists in a shape QML can read (the settings dialog uses the
     // QVector above; kdock-controlmanager draws them from QML). Each element is
@@ -59,6 +80,9 @@ public:
     Q_INVOKABLE QVariantList outputList() const;
     Q_INVOKABLE QVariantList inputList() const;
     Q_INVOKABLE QVariantList appList() const;
+    // Same shape as the device lists, but for cards: {index, name, description,
+    // profiles: [{name, description, available}], activeProfile}.
+    Q_INVOKABLE QVariantList cardList() const;
     // Highest volume a slider may offer (1.0, or 1.5 with the ceiling raised).
     Q_INVOKABLE qreal ceiling() const { return volumeCeiling(); }
 
@@ -74,6 +98,7 @@ public slots:
     void setMuted(AudioControl::DeviceType type, int index, bool muted);
     void toggleMute(AudioControl::DeviceType type, int index);
     void setDefault(AudioControl::DeviceType type, const QString &name);
+    void setCardProfile(int cardIndex, const QString &profileName);
     void refresh();
 
 signals:
@@ -94,10 +119,11 @@ private:
     void runAsync(const QStringList &args, std::function<void(QString)> onDone);
     void finishRefresh();
     QVector<Device> parseDevices(DeviceType type, const QString &text) const;
+    QVector<Card> parseCards(const QString &text) const;
     QString setVolumeVerb(DeviceType type) const;
     QString setMuteVerb(DeviceType type) const;
 
-    // The five queries of one refresh land in any order, so they are collected
+    // The six queries of one refresh land in any order, so they are collected
     // here and applied together — the defaults first, because parseDevices()
     // reads them to mark the default device.
     struct RefreshBatch {
@@ -107,6 +133,7 @@ private:
         QString sinks;
         QString sources;
         QString sinkInputs;
+        QString cards;
     };
 
     QString m_pactl;
@@ -115,6 +142,7 @@ private:
     QVector<Device> m_outputs;
     QVector<Device> m_inputs;
     QVector<Device> m_apps;
+    QVector<Card> m_cards;
     QString m_defaultSink;
     QString m_defaultSource;
     QProcess m_subscriber;
