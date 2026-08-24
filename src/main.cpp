@@ -575,9 +575,9 @@ int main(int argc, char *argv[])
     // start so that click is instant too.
     TileMenuLauncher::startIfPreloading();
     ControlManagerLauncher::startIfPreloading();
-    // The desktop-widget canvas, if the user asked for it to come up with the
-    // session (Configuración → Desktop → Iniciar con kdock).
-    DesktopLauncher::startIfPreloading();
+    // The desktop-widget canvases: one per enabled monitor, if the master
+    // switch is on (Configuración → Desktop).
+    DesktopLauncher::startEnabled();
 
     // And the one global shortcut kdock publishes of its own, with no default
     // key: the user assigns one in Preferencias del sistema → Atajos.

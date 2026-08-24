@@ -6,17 +6,19 @@
 #include <QDir>
 #include <QStandardPaths>
 
-QString CmConfig::settingsFilePath()
+QString CmConfig::settingsFilePath(const QString &screen)
 {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
                         + QStringLiteral("/kdock");
     QDir().mkpath(dir);
-    return dir + QStringLiteral("/desktop.conf");
+    return screen.isEmpty()
+               ? dir + QStringLiteral("/desktop.conf")
+               : dir + QStringLiteral("/desktop-") + screen + QStringLiteral(".conf");
 }
 
-CmConfig::CmConfig(QObject *parent)
+CmConfig::CmConfig(const QString &screen, QObject *parent)
     : QObject(parent)
-    , m_settings(settingsFilePath(), QSettings::IniFormat)
+    , m_settings(settingsFilePath(screen), QSettings::IniFormat)
 {
     load();
 }

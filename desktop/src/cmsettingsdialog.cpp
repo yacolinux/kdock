@@ -179,12 +179,9 @@ QWidget *CmSettingsDialog::createWindowGroup()
     connect(closeLeave, &QCheckBox::toggled, m_config, &CmConfig::setCloseOnLeave);
     form->addRow(tr("Puntero:"), closeLeave);
 
-    auto *preload = new QCheckBox(tr("Dejarlo cargado al iniciar kdock"), box);
-    preload->setChecked(CmConfig::preload());
-    preload->setToolTip(tr("Sin esto, el proceso arranca en el primer clic (medio segundo) y "
-                           "queda residente: las aperturas siguientes son instantáneas."));
-    connect(preload, &QCheckBox::toggled, this, [](bool on) { CmConfig::setPreload(on); });
-    form->addRow(tr("Precargar:"), preload);
+    // No "precargar" here anymore: per-monitor, autostart is the master switch on
+    // kdock's Desktop tab (DesktopLauncher::masterEnabled), not a per-instance
+    // preload. This dialog only configures the widgets of *this* monitor's canvas.
 
     return box;
 }

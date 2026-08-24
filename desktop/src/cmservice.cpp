@@ -9,9 +9,35 @@
 #include <QDBusMessage>
 #include <QVariant>
 
-QString CmService::serviceName()
+namespace {
+QString s_busScreen;
+
+// Bus name elements must match [A-Za-z0-9_]; connectors carry '-' (DP-1).
+QString sanitize(const QString &s)
+{
+    QString out = s;
+    for (QChar &c : out)
+        if (!c.isLetterOrNumber() && c != QLatin1Char('_'))
+            c = QLatin1Char('_');
+    return out;
+}
+} // namespace
+
+void CmService::setBusScreen(const QString &screen)
+{
+    s_busScreen = screen;
+}
+
+QString CmService::interfaceName()
 {
     return QStringLiteral("org.kdock.Desktop");
+}
+
+QString CmService::serviceName()
+{
+    return s_busScreen.isEmpty()
+               ? interfaceName()
+               : interfaceName() + QLatin1Char('.') + sanitize(s_busScreen);
 }
 
 QString CmService::objectPath()
@@ -30,7 +56,7 @@ void call(const QString &method, const QVariantList &args = {})
 {
     QDBusMessage msg = QDBusMessage::createMethodCall(CmService::serviceName(),
                                                       CmService::objectPath(),
-                                                      CmService::serviceName(), method);
+                                                      CmService::interfaceName(), method);
     if (!args.isEmpty())
         msg.setArguments(args);
     // asyncCall so a wedged instance cannot block the caller for the D-Bus

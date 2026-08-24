@@ -3122,30 +3122,30 @@ QWidget *SettingsDialog::createDesktopTab()
     auto *info = new QLabel(
         tr("Los widgets de escritorio son una capa transparente a pantalla completa, por "
            "debajo del dock y de las ventanas, donde se colocan tarjetas (reloj, clima, "
-           "sistema…). Es un binario aparte, kdock-desktop, con su propia configuración: el "
-           "botón de abajo abre su panel de ajustes."),
+           "sistema…). Corre un kdock-desktop por monitor, cada uno con su propia "
+           "configuración independiente. Marcá abajo en qué monitores querés uno."),
         tab);
     info->setWordWrap(true);
     layout->addWidget(info);
 
-    auto *form = new QFormLayout;
+    // --- master switch: off = ninguno corre ---
+    auto *master = new QCheckBox(tr("Activar widgets de escritorio"), tab);
+    master->setChecked(DesktopLauncher::masterEnabled());
+    master->setToolTip(tr("Interruptor general. Apagado, no corre ningún escritorio en ningún "
+                          "monitor, sin perder qué monitores tenés marcados."));
+    layout->addWidget(master);
 
-    auto *autostart = new QCheckBox(tr("Iniciar con kdock"), tab);
-    autostart->setChecked(DesktopLauncher::preload());
-    autostart->setToolTip(tr("Levanta el lienzo de widgets junto con la sesión, en vez de "
-                             "tener que lanzarlo a mano."));
-    connect(autostart, &QCheckBox::toggled, this, [](bool on) {
-        DesktopLauncher::setPreload(on);
-    });
-    form->addRow(tr("Autostart:"), autostart);
-
-    layout->addLayout(form);
+    // --- per-monitor list ---
+    layout->addWidget(new QLabel(tr("Monitores (marcá dónde querés un escritorio):"), tab));
+    auto *monitors = new QListWidget(tab);
+    monitors->setMaximumHeight(150);
+    layout->addWidget(monitors);
 
     auto *row = new QHBoxLayout;
     auto *configureBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("configure")),
-                                         tr("Configurar kdock-desktop…"), tab);
+                                         tr("Configurar este monitor…"), tab);
     auto *restartBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
-                                       tr("Reiniciar"), tab);
+                                       tr("Reiniciar este monitor"), tab);
     row->addWidget(configureBtn);
     row->addWidget(restartBtn);
     row->addStretch();
@@ -3155,25 +3155,103 @@ QWidget *SettingsDialog::createDesktopTab()
     status->setWordWrap(true);
     layout->addWidget(status);
 
-    const auto refreshStatus = [status, restartBtn] {
-        const bool up = DesktopLauncher::running();
-        status->setText(up ? tr("Estado: en ejecución (%1)").arg(DesktopLauncher::binaryPath())
-                           : tr("Estado: detenido (%1)").arg(DesktopLauncher::binaryPath()));
-        // "Reiniciar" reads odd when nothing is running; it still just launches.
-        restartBtn->setText(up ? tr("Reiniciar") : tr("Lanzar ahora"));
+    // The connectors to list: connected monitors only (an unplugged one has no
+    // canvas anyway). DockManager is the same source the Docks tab uses.
+    const auto connectors = [this]() -> QStringList {
+        if (m_manager)
+            return m_manager->connectedScreens();
+        QStringList names;
+        for (QScreen *s : QGuiApplication::screens())
+            names << s->name();
+        return names;
+    };
+
+    const auto selectedConnector = [monitors]() -> QString {
+        QListWidgetItem *it = monitors->currentItem();
+        return it ? it->data(Qt::UserRole).toString() : QString();
+    };
+
+    // Rebuild the checkable monitor rows from the config.
+    const auto reload = [this, monitors, master] {
+        const bool on = master->isChecked();
+        QSignalBlocker block(monitors);
+        const QString keep = monitors->currentItem()
+                                 ? monitors->currentItem()->data(Qt::UserRole).toString()
+                                 : QString();
+        monitors->clear();
+        const QStringList list = m_manager ? m_manager->connectedScreens() : QStringList();
+        QStringList names = list;
+        if (names.isEmpty())
+            for (QScreen *s : QGuiApplication::screens())
+                names << s->name();
+        for (const QString &c : names) {
+            auto *item = new QListWidgetItem(c, monitors);
+            item->setData(Qt::UserRole, c);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(DesktopLauncher::screenEnabled(c) ? Qt::Checked
+                                                                  : Qt::Unchecked);
+            if (keep == c)
+                monitors->setCurrentItem(item);
+        }
+        // Master off greys the list: the marks are kept, nothing runs.
+        monitors->setEnabled(on);
+    };
+    reload();
+
+    const auto refreshStatus = [status, restartBtn, configureBtn, selectedConnector] {
+        int n = 0;
+        for (QScreen *s : QGuiApplication::screens())
+            if (DesktopLauncher::runningOn(s->name()))
+                ++n;
+        status->setText(n == 0 ? tr("Estado: ningún escritorio en ejecución")
+                               : tr("Estado: %n escritorio(s) en ejecución", nullptr, n));
+        const QString c = selectedConnector();
+        const bool sel = !c.isEmpty();
+        configureBtn->setEnabled(sel);
+        restartBtn->setEnabled(sel);
+        restartBtn->setText(sel && DesktopLauncher::runningOn(c) ? tr("Reiniciar este monitor")
+                                                                 : tr("Lanzar este monitor"));
     };
     refreshStatus();
 
-    connect(configureBtn, &QPushButton::clicked, this, [this, refreshStatus] {
-        DesktopLauncher().openSettings();
-        QTimer::singleShot(600, this, refreshStatus);
-    });
-    connect(restartBtn, &QPushButton::clicked, this, [this, refreshStatus] {
-        DesktopLauncher().restart();
-        QTimer::singleShot(900, this, refreshStatus);
+    connect(master, &QCheckBox::toggled, this, [reload, refreshStatus](bool on) {
+        DesktopLauncher::setMasterEnabled(on);
+        DesktopLauncher::applyState();
+        reload();
+        refreshStatus();
     });
 
-    // Bound to `tab`, so the timer dies when buildTabs() deletes the tab.
+    connect(monitors, &QListWidget::itemChanged, this,
+            [refreshStatus](QListWidgetItem *item) {
+                const QString c = item->data(Qt::UserRole).toString();
+                DesktopLauncher::setScreenEnabled(c, item->checkState() == Qt::Checked);
+                // Reconcile just this monitor (the master gates it inside applyState).
+                DesktopLauncher::applyState();
+                QTimer::singleShot(600, item->listWidget(), refreshStatus);
+            });
+    connect(monitors, &QListWidget::currentRowChanged, tab,
+            [refreshStatus](int) { refreshStatus(); });
+
+    connect(configureBtn, &QPushButton::clicked, this,
+            [this, selectedConnector, refreshStatus] {
+                const QString c = selectedConnector();
+                if (c.isEmpty())
+                    return;
+                DesktopLauncher::openSettingsOn(c);
+                QTimer::singleShot(600, this, refreshStatus);
+            });
+    connect(restartBtn, &QPushButton::clicked, this,
+            [this, selectedConnector, refreshStatus] {
+                const QString c = selectedConnector();
+                if (c.isEmpty())
+                    return;
+                DesktopLauncher::restartOn(c);
+                QTimer::singleShot(900, this, refreshStatus);
+            });
+
+    // Bound to `tab`, so the timer dies when buildTabs() deletes the tab. Only
+    // the status polls; rebuilding the list under the user would flicker the
+    // selection. A monitor hot-plug is picked up on the next open of the tab.
     auto *poll = new QTimer(tab);
     poll->setInterval(2000);
     connect(poll, &QTimer::timeout, tab, refreshStatus);

@@ -17,7 +17,14 @@ class CmService : public QObject
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.kdock.Desktop")
 public:
+    // Per-monitor: the bus *service* name carries a connector suffix
+    // (org.kdock.Desktop.<connector>) so one instance per screen can each own its
+    // own single-instance lock. The D-Bus *interface* stays "org.kdock.Desktop"
+    // (fixed, matching Q_CLASSINFO). Call setBusScreen() before anything touches
+    // the bus; empty keeps the legacy shared name.
+    static void setBusScreen(const QString &screen);
     static QString serviceName();
+    static QString interfaceName();
     static QString objectPath();
 
     // Whether another instance already owns the bus name.

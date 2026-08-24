@@ -2104,6 +2104,52 @@ ajustes, que el widget `tilemenu` prende y apaga. Mismo reparto que `kdock-previ
   sección, contra **245 MB y 0,9 s** una vez compartidos. El menú vive en `TileMenu.qml` y se
   parametriza con `root.ctxTile`; el tooltip usa la API **adjunta**
   (`ToolTip.text`/`ToolTip.visible`), que ya comparte una sola instancia por ventana.
+- **Búsqueda (listado, orden, historial)** (2026-08-24): al escribir en el buscador los
+  resultados salen por omisión en un **listado vertical en filas** (`TileSearchList.qml`), no en
+  la grilla de mosaicos — un `ListView` que se dibuja en el mismo hueco que el lienzo
+  (`canvasCol` y la lista se excluyen por `visible`). La grilla de íconos sigue disponible: el
+  combo **Al buscar, mostrar** (`TileConfig::searchView`, `0` filas por omisión / `1` íconos)
+  elige. El **orden** de los resultados lo decide **Ordenar resultados por**
+  (`TileConfig::searchSort`): `0` alfabético, `1` frecuencia de uso, `2` uso reciente **(por
+  omisión)**. Frecuencia y recencia salen de un contador propio de kdock (`TileUsage`,
+  `~/.local/share/kdock/tilemenu-usage.conf`), **no** de KActivities/Plasma —que no corre bajo
+  LXQt—: `TileWindow::launch()` es el único punto por donde pasan los caminos de lanzamiento
+  (clic de mosaico, Enter de la búsqueda), así que ahí se llama a `recordLaunch(id)`. El orden lo
+  aplica `TileModel::sortedSearchApps()`, compartido por la grilla (`searchPlacement`) y la lista
+  (`searchResults()`), así las dos vistas coinciden.
+  - **Abrir siempre aterriza en la sección (Favoritos), nunca en una búsqueda ni en una tira de
+    "recientes"** (fix 2026-08-24, reportado por el usuario): `prepareForShow()` limpia la query
+    y enfoca el campo en **cada** apertura. Un intento previo mostraba una tira *Recientes* cuando
+    el campo vacío tenía el foco —que es justo el estado al abrir—, y tapaba la grilla: se leía
+    como "la búsqueda quedó abierta". El historial (`TileUsage::recentIds()`) **solo** ordena los
+    resultados (modo *uso reciente*), no se muestra como lista propia. `TileModel::recentApps()`
+    y `AppMenu::appById()` quedaron como accesores disponibles pero sin uso en la UI (el menú
+    contextual de la fila usa `AppMenu::isFavorite`/`toggleFavorite`, no éstos).
+  - **`prepareForShow()` se dispara desde C++, no desde `onVisibleChanged`** (fix 2026-08-24): al
+    reabrir desde el widget la ventana se re-muestra sin que el `visible` del Item raíz cambie, así
+    que `onVisibleChanged` solo corría en la **primera** construcción y las reaperturas no
+    enfocaban ni limpiaban. `TileWindow::showOn()` invoca `prepareForShow` por
+    `QMetaObject::invokeMethod(..., Qt::QueuedConnection)` en cada show —queued para correr una vez
+    que el compositor mapeó y activó la ventana, que es cuando un toplevel Wayland puede tomar el
+    teclado—.
+  - **Teclado**: el campo toma el foco al abrir; **Tab** autocompleta con el nombre del primer
+    resultado; **flecha abajo** baja de la caja a la lista y recorre las filas; **flecha arriba**
+    en la primera fila devuelve el foco al campo; **Enter** lanza; **Esc** cierra. Un **botón ✕**
+    al extremo derecho del campo (visible solo con texto) borra la query.
+  - **Menú contextual de la fila** (clic derecho, 2026-08-24): un `Menu` compartido en
+    `TileSearchList` (parametrizado por `menuId`, no uno por fila) con **Abrir nueva instancia**
+    (`list.launch(id)`) y **Agregar/Quitar de Favoritos** (etiqueta e ícono según
+    `appMenu.isFavorite(id)`, acción `appMenu.toggleFavorite(id)` — los mismos favoritos que el
+    menú del mosaico y el del dock). Se prueba de punta a punta bajo Xvfb con `xdotool ... click 3`
+    (el tilemenu es un toplevel normal), pero **ojo con el orden por uso reciente**: si en la
+    corrida anterior se lanzó algo, ese ítem salta a la fila 0 y el clic derecho cae en otra app —
+    verificá el id con la sonda (`searchResults()` + `isFavorite`) antes de leer la etiqueta.
+  - **Arnés**: el listado y el orden se prueban con una sonda de consola que linkea los `.o` del
+    tilemenu y llama `model.setQuery()` + `searchResults()` bajo los tres modos —
+    bajo Xvfb no hay foco de teclado, así que la UI de búsqueda no se puede tipear (misma trampa
+    que el resto). Para *ver* la lista, sembrá la query **dentro de `prepareForShow()`** (un
+    `Component.onCompleted` no alcanza: `prepareForShow`, que corre después por el invoke queued,
+    la pisa con `""`), capturá, y revertí (`grep -c TEMP-PROBE`).
 - **Geometría del lienzo**: `columns` fijas por config (default 10; `0` = ajustar al ancho) y
   la **celda** es lo que se estira para llenar el espacio, acotada por `cellMin`/`cellMax`. Las
   columnas fijas son lo que hace que una posición guardada valga igual en cualquier monitor: lo
@@ -2625,9 +2671,27 @@ binario limpio; el uso de la barra de solapas (visible arriba) viene después.
   - **Región de entrada por defecto (toda la superficie)**: los clics sobre zona vacía **no
     hacen nada** (no hay handler ahí), que es el comportamiento pedido; los clics sobre los
     widgets sí llegan. No pasa por `WindowTransparentForInput` como el wallpaper.
-- **Bus propio `org.kdock.Desktop` (`/Desktop`)** y **config propia `desktop.conf`**, así que
-  convive con el panel sin pisarlo. Candado de instancia única por el nombre del bus, igual que
-  los otros accesorios.
+- **Un binario por monitor conectado** (2026-08-24): en vez de una instancia única, corre un
+  `kdock-desktop` por monitor habilitado, cada uno atado a su output y con **config
+  independiente**. Las piezas:
+  - **Bus por monitor**: `org.kdock.Desktop.<conector>` (el conector saneado a `[A-Za-z0-9_]`,
+    p. ej. `DP-1` → `org.kdock.Desktop.DP_1`). La **interfaz** D-Bus sigue siendo
+    `org.kdock.Desktop` fija (matchea el `Q_CLASSINFO`); solo el *nombre de servicio* lleva el
+    sufijo. `CmService::setBusScreen()` lo fija en `main.cpp` **antes** de tocar el bus, y es el
+    candado de instancia única por monitor.
+  - **Config por monitor**: `desktop-<conector>.conf` (`CmConfig(screen)` →
+    `settingsFilePath(screen)`); el `desktop.conf` **compartido** guarda solo los dos
+    interruptores que lee kdock sin arrancar ningún proceso.
+  - **`--screen <conector>`** es lo que ata cada proceso a su output (ya existía para `showOn`;
+    ahora además elige bus y archivo de config).
+  - **Dos interruptores en `desktop.conf`** (`DesktopLauncher`, lado kdock): `enabled` (maestro
+    general; migra del viejo `preload`) y `enabledScreens` (lista de conectores). `applyState()`
+    reconcilia los procesos vivos con esos dos sobre los monitores conectados: lanza los que
+    deben correr y no están, baja los que no. Lo llaman la solapa Desktop, `startEnabled()` (en
+    `main.cpp`, al arranque) y cada toggle de la lista.
+  - **`running()`/`quitRunning()`** (usados por `apprestart.cpp`) ahora recorren
+    `registeredServiceNames()` con el prefijo `org.kdock.Desktop`, así abarcan **todas** las
+    instancias.
 - **Defaults de `desktop/src/cmconfig.cpp`**: `enabledSections`/`principalCards` **vacíos**
   (nada auto-encendido — se le sacó a `reconcileSections()` el auto-alta de secciones nuevas),
   `backgroundOpacity=0.0` con piso 0.0 (transparente; con el piso 0.10 del panel teñiría toda
@@ -2635,16 +2699,21 @@ binario limpio; el uso de la barra de solapas (visible arriba) viene después.
 - **Sin privilegios**: layer-shell no está en la lista restringida de KWin, así que su
   `.desktop` no necesita refresco de ksycoca — como el resto de los accesorios.
 - **Se maneja desde la solapa *Desktop* del diálogo de kdock** (`SettingsDialog::createDesktopTab`,
-  2026-08-23): un tilde *Iniciar con kdock* (autostart), un botón *Configurar kdock-desktop…* que
-  abre su propio diálogo de ajustes, y *Reiniciar*/*Lanzar ahora* con una línea de estado. Igual
-  patrón que el grupo del Control Manager, pero como **solapa** (después de *Previews*) y solo si
-  el binario está instalado (`DesktopLauncher::installed()`). El pegamento es
-  `src/desktoplauncher.{h,cpp}` —gemelo de `controlmanagerlauncher`, apuntando a `kdock-desktop`
-  / `org.kdock.Desktop` / `desktop.conf`—, con dos diferencias: el lienzo es **siempre visible**,
-  así que `startIfPreloading()` lo levanta *mostrándolo* (no `--hide` como el panel), y `restart()`
-  hace `quit` + arranque **diferido** (600 ms) porque el candado de instancia única es el nombre
-  del bus. `main.cpp` llama a `DesktopLauncher::startIfPreloading()` y `apprestart.cpp` lo baja y
-  lo vuelve a subir junto con los otros tres accesorios en *Dock → Reiniciar*.
+  reescrita 2026-08-24): un **checkbox maestro** *Activar widgets de escritorio* (apagado = ningún
+  monitor corre, sin perder las marcas), una **lista de monitores conectados con checkbox** (de
+  `DockManager::connectedScreens()` — solo conectados: un monitor desenchufado no tiene lienzo) que
+  marca en cuáles hay un Desktop, y para el monitor **seleccionado** un botón *Configurar este
+  monitor…* (abre el diálogo de ajustes de **esa** instancia) y *Reiniciar/Lanzar este monitor*,
+  con una línea de estado que cuenta cuántos corren. La lista se griséa mientras el maestro está
+  apagado. Solo aparece si el binario está instalado (`DesktopLauncher::installed()`), después de
+  *Previews*.
+  - El pegamento es `src/desktoplauncher.{h,cpp}`, ahora **por monitor**: `masterEnabled()`,
+    `enabledScreens()`/`setScreenEnabled()`, `serviceFor(conector)`, `runningOn`/`launchOn`/
+    `quitOn`/`restartOn`/`openSettingsOn(conector)` y `applyState()`. El lienzo es **siempre
+    visible**, así que no hay `--hide`; `restartOn()` hace `quit` + arranque **diferido** (600 ms)
+    porque el candado es el nombre del bus. `main.cpp` llama a `DesktopLauncher::startEnabled()`
+    (que hace `applyState()` si el maestro está prendido) y `apprestart.cpp` baja y vuelve a subir
+    todas las instancias junto con los otros accesorios en *Dock → Reiniciar*.
 - **Transparencia POR WIDGET** (2026-08-23, y portada a `kdock-controlmanager`): cada tarjeta
   tiene su propia opacidad de fondo, con un default general para todas y un override individual.
   - **Almacenamiento**: `CmCardRecord::opacity` (porcentaje 0..100, −1 = heredar), serializado
@@ -2977,9 +3046,10 @@ a checkable *Wi-Fi*.
 | `PreviewModel` | `previews` (model) | Roles `uuid`, **`thumbId`** (uuid sin llaves: el único que va en una URL), `title`, `appName`, `iconName`, `thumbRevision`, `aspect`, `active`, `minimized`; read-only `cardScale` (auto-fit); `activate(row)`, `closeWindow(row)`, `toggleMinimize(row)`, `refreshNow(row)` (no-op salvo en modo periódico), `setVisibleRange(first,last)`, `setAvailableLength(px)` (auto-fit) |
 | `PreviewWindow` | `previewWindow` | `setHidden(bool)`, `openSettings()`, `restart()`, `quit()` |
 | `TileMenuLauncher` | `tileLauncher` (en kdock) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-tilemenu`: si el proceso corre, D-Bus; si no, lo lanza |
-| `TileConfig` | `tileConfig.*` (binario `kdock-tilemenu`) | Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Apariencia: `sidebar` (0 izq/1 der/2 oculta), `sidebarWidth`, `showIcons`, `showLabels`, `iconScale` (%), `labelPosition`, `labelBold` (default **true**), `groupTabs` (borde de la barra de solapas), `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `presetColors` (read-only, los ocho colores rápidos del `kdock.conf` compartido). Comportamiento: `showSearch`, `showPower`, `showLetterIndex`, `closeOnLaunch`, `closeOnFocusLoss`, `keepOpen`, `rememberSection`, `lastSection`. **Una sola señal `settingsChanged` para todas** |
+| `TileConfig` | `tileConfig.*` (binario `kdock-tilemenu`) | Grilla: `columns` (0=según el ancho), `cellSize`, `cellStretch`, `cellMin`/`cellMax`, `cellSpacing`. Apariencia: `sidebar` (0 izq/1 der/2 oculta), `sidebarWidth`, `showIcons`, `showLabels`, `iconScale` (%), `labelPosition`, `labelBold` (default **true**), `groupTabs` (borde de la barra de solapas), `backgroundMode`, `backgroundColor`/`backgroundColorSet`, `backgroundOpacity`, `backgroundImage`/`backgroundImageUrl`, `presetColors` (read-only, los ocho colores rápidos del `kdock.conf` compartido). Comportamiento: `showSearch`, `searchView` (0 filas/1 íconos), `searchSort` (0 alfabético/1 frecuencia/2 reciente), `showPower`, `showLetterIndex`, `closeOnLaunch`, `closeOnFocusLoss`, `keepOpen`, `rememberSection`, `lastSection`. **Una sola señal `settingsChanged` para todas** |
 | `TileLayout` | `tileLayout` | El motor, todo `Q_INVOKABLE`: `groups(section)` (`{index, title, tiles, rows}` por solapa), `rowsOfGroup(section,group)`, `isCustomized(section)`, `dropKind(section,id,group,col,row)` (0 libre / 1 swap / 2 rechazo, **read-only**, para el fantasma), `moveTile(...)` (false = rechazado), **`moveTileToGroup(section,id,group)`**, `resizeTile(...)`, `setTileProperty(section,id,key,value)` (`bg`/`image`/`label`/`icon`/`showIcon`/`showLabel`), `resetTile`, `addGroup`/`renameGroup`/`moveGroup`/`removeGroup`, `resetSection`/`resetAll`, `exportToFile`/`importFromFile`, `setAutoColumns(n)` |
-| `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `currentGroup` (rw: la solapa visible), `searching`, `rows` (del grupo actual), `groups`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()` |
+| `TileModel` | `tiles` (model) | Roles `tileId`, `name`, `comment`, `icon`, `favorite`, `group`, `col`, `row`, `span`/`vspan`, `background`, `image`, `showIcon`/`showLabel`. Props `section` (rw), `query` (rw), `currentGroup` (rw: la solapa visible), `searching`, `rows` (del grupo actual), `groups`, `customized`; `get(row)`, `indexOfLetter(letra)`, `availableLetters()`, `searchResults()` (búsqueda ordenada por `searchSort`, para la lista en filas), `recentApps()` (historial de `TileUsage`, para la tira Recientes) |
+| `TileUsage` | `tileUsage` (binario `kdock-tilemenu`) | Contador de uso propio de kdock (`tilemenu-usage.conf`): `recordLaunch(id)` (llamado desde `TileWindow::launch`, único punto de lanzamiento), `count(id)`, `lastMs(id)`, `recentIds()` (10 últimas, más reciente primero). Es la fuente de la frecuencia/recencia y la tira Recientes — reemplaza a KActivities, que no corre bajo LXQt |
 | `TileWindow` | `win` | `hideMenu()`, `launch(id)`, `openSettings()`, `quitApp()` + los diálogos modales que el menú del mosaico necesita: `pickIcon`, `pickColor`, `pickImage`, `promptText`, `confirm` (cada uno bloquea el cierre por pérdida de foco mientras está arriba) |
 | `ControlManagerLauncher` | `cmLauncher` (en kdock) | `toggle(screenName)`, `showSection(id, screenName)`, `openSettings()`. Todo el acoplamiento del dock con `kdock-controlmanager`: si el proceso corre, D-Bus; si no, lo lanza |
 | `WeatherLauncher` | `weatherLauncher` (en kdock y en el panel) | `toggle(screenName)`, `openSettings()`. Todo el acoplamiento con `kdock-weather`: si el proceso corre, D-Bus; si no, lo lanza. A diferencia de los otros dos, ese proceso **no queda residente** |

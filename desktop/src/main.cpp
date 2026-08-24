@@ -216,6 +216,10 @@ int main(int argc, char *argv[])
         return runDumpSections(app);
 
     const QString screenName = argValue(args, QStringLiteral("--screen"));
+    // Per-monitor: the bus name and the config file both carry the connector, so
+    // one instance per screen each owns its own single-instance lock and its own
+    // independent widget layout. Must be set before anything touches the bus.
+    CmService::setBusScreen(screenName);
     const QString sectionArg = argValue(args, QStringLiteral("--section"));
     const bool wantSettings = args.contains(QStringLiteral("--settings"));
     const bool wantHide = args.contains(QStringLiteral("--hide"));
@@ -249,7 +253,7 @@ int main(int argc, char *argv[])
     Theme theme;
     DesktopEntryIndex apps;
 
-    CmConfig config;
+    CmConfig config(screenName);
     CmLayout layout(&config);
     CmModel model(&layout, &config);
 

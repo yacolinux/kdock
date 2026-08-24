@@ -104,11 +104,14 @@ public:
     enum Alignment { Start = 0, Center = 1, End = 2 };
     Q_ENUM(Alignment)
 
-    // Same directory as kdock's own settings; "preload" lives here too so kdock
-    // can read it without starting this process.
-    static QString settingsFilePath();
+    // Same directory as kdock's own settings. Per-monitor: each instance keeps
+    // its widget layout and appearance in desktop-<connector>.conf, so every
+    // screen's canvas is independent. An empty screen keeps the legacy shared
+    // desktop.conf (the master enable / enabled-screens list live there, read by
+    // DesktopLauncher without starting this process).
+    static QString settingsFilePath(const QString &screen = {});
 
-    explicit CmConfig(QObject *parent = nullptr);
+    explicit CmConfig(const QString &screen = {}, QObject *parent = nullptr);
 
     int edge() const { return m_edge; }
     int alignment() const { return m_alignment; }
