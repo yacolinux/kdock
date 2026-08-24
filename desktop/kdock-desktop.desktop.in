@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=kdock Desktop Widgets
+Comment=Desktop-widget canvas: a full-screen layer under the dock
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock-desktop
+Icon=preferences-desktop
+Categories=Utility;
+NoDisplay=true
+# No X-KDE-Wayland-Interfaces / X-KDE-DBUS-Restricted-Interfaces here: the canvas
+# is a layer-shell surface, and zwlr_layer_shell_v1 is *not* on KWin's
+# restricted-interface list (verified with wayland-info). The entry exists only so
+# the process carries a name and an icon, and so a KWin rule has an app id to match.

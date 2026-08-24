@@ -43,7 +43,17 @@ class CmConfig : public QObject
     Q_PROPERTY(QColor backgroundColor READ backgroundColor WRITE setBackgroundColor NOTIFY settingsChanged)
     // "Own color" with nothing picked yet must not paint the panel black.
     Q_PROPERTY(bool backgroundColorSet READ backgroundColorSet NOTIFY settingsChanged)
+    // General font colour, the mirror of the background one: 0 automatic (the
+    // luminance-derived contrast, the historic behaviour), 1 a colour of your
+    // own. A per-card font colour still wins over this. See CmCard.qml.
+    Q_PROPERTY(int foregroundMode READ foregroundMode WRITE setForegroundMode NOTIFY settingsChanged)
+    Q_PROPERTY(QColor foregroundColor READ foregroundColor WRITE setForegroundColor NOTIFY settingsChanged)
+    Q_PROPERTY(bool foregroundColorSet READ foregroundColorSet NOTIFY settingsChanged)
     Q_PROPERTY(qreal backgroundOpacity READ backgroundOpacity WRITE setBackgroundOpacity NOTIFY settingsChanged)
+    // General background opacity of every card/widget (0.0 transparent .. 1.0
+    // opaque, default 1.0). A card may override it from its right-click menu; see
+    // CmCardRecord::opacity and CmCard.qml.
+    Q_PROPERTY(qreal widgetOpacity READ widgetOpacity WRITE setWidgetOpacity NOTIFY settingsChanged)
     Q_PROPERTY(QString backgroundImage READ backgroundImage WRITE setBackgroundImage NOTIFY settingsChanged)
     Q_PROPERTY(QUrl backgroundImageUrl READ backgroundImageUrl NOTIFY settingsChanged)
     Q_PROPERTY(int cornerRadius READ cornerRadius WRITE setCornerRadius NOTIFY settingsChanged)
@@ -114,7 +124,11 @@ public:
     int backgroundMode() const { return m_backgroundMode; }
     QColor backgroundColor() const { return m_backgroundColor; }
     bool backgroundColorSet() const { return m_backgroundColor.isValid(); }
+    int foregroundMode() const { return m_foregroundMode; }
+    QColor foregroundColor() const { return m_foregroundColor; }
+    bool foregroundColorSet() const { return m_foregroundColor.isValid(); }
     qreal backgroundOpacity() const { return m_backgroundOpacity; }
+    qreal widgetOpacity() const { return m_widgetOpacity; }
     QString backgroundImage() const { return m_backgroundImage; }
     // Re-reads the file after somebody *else* wrote it (kdock's Fuentes tab
     // edits the panel's font size) and repaints. Not a watcher: the panel
@@ -178,7 +192,10 @@ public:
     void setCloseOnLeave(bool on);
     void setBackgroundMode(int mode);
     void setBackgroundColor(const QColor &color);
+    void setForegroundMode(int mode);
+    void setForegroundColor(const QColor &color);
     void setBackgroundOpacity(qreal opacity);
+    void setWidgetOpacity(qreal opacity);
     void setBackgroundImage(const QString &path);
     void setCornerRadius(int px);
     void setLabelBold(bool on);
@@ -240,7 +257,10 @@ private:
 
     int m_backgroundMode = 0;
     QColor m_backgroundColor;
+    int m_foregroundMode = 0; // 0 automatic, 1 own colour
+    QColor m_foregroundColor;
     qreal m_backgroundOpacity = 0.94;
+    qreal m_widgetOpacity = 1.0; // default: cards fully opaque (historic look)
     QString m_backgroundImage;
     int m_cornerRadius = 12;
     bool m_labelBold = true;

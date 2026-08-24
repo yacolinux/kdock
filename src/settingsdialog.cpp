@@ -27,6 +27,7 @@
 #include "kwinscripts.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
+#include "desktoplauncher.h"
 #include "weatherconfig.h"
 #include "weatherlauncher.h"
 #include "tilemenulauncher.h"
@@ -399,6 +400,10 @@ void SettingsDialog::buildTabs()
     // config, so this tab looks the same whichever dock is selected.
     if (PreviewsLauncher::available())
         addTab(createPreviewsTab(), tr("Previews"));
+    // The desktop-widget canvas: its own process, its own config, so like
+    // Previews the tab looks the same whichever dock is selected.
+    if (DesktopLauncher::installed())
+        addTab(createDesktopTab(), tr("Desktop"));
     // Audio and Redes last: neither is per-dock, and both are what the volume
     // and network widgets' right-click jump to.
     if (m_audio && m_audio->available()) {
@@ -3107,6 +3112,75 @@ QWidget *SettingsDialog::createControlManagerGroup(QWidget *parent)
     poll->start();
 
     return box;
+}
+
+QWidget *SettingsDialog::createDesktopTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+
+    auto *info = new QLabel(
+        tr("Los widgets de escritorio son una capa transparente a pantalla completa, por "
+           "debajo del dock y de las ventanas, donde se colocan tarjetas (reloj, clima, "
+           "sistema…). Es un binario aparte, kdock-desktop, con su propia configuración: el "
+           "botón de abajo abre su panel de ajustes."),
+        tab);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    auto *form = new QFormLayout;
+
+    auto *autostart = new QCheckBox(tr("Iniciar con kdock"), tab);
+    autostart->setChecked(DesktopLauncher::preload());
+    autostart->setToolTip(tr("Levanta el lienzo de widgets junto con la sesión, en vez de "
+                             "tener que lanzarlo a mano."));
+    connect(autostart, &QCheckBox::toggled, this, [](bool on) {
+        DesktopLauncher::setPreload(on);
+    });
+    form->addRow(tr("Autostart:"), autostart);
+
+    layout->addLayout(form);
+
+    auto *row = new QHBoxLayout;
+    auto *configureBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("configure")),
+                                         tr("Configurar kdock-desktop…"), tab);
+    auto *restartBtn = new QPushButton(QIcon::fromTheme(QStringLiteral("view-refresh")),
+                                       tr("Reiniciar"), tab);
+    row->addWidget(configureBtn);
+    row->addWidget(restartBtn);
+    row->addStretch();
+    layout->addLayout(row);
+
+    auto *status = new QLabel(tab);
+    status->setWordWrap(true);
+    layout->addWidget(status);
+
+    const auto refreshStatus = [status, restartBtn] {
+        const bool up = DesktopLauncher::running();
+        status->setText(up ? tr("Estado: en ejecución (%1)").arg(DesktopLauncher::binaryPath())
+                           : tr("Estado: detenido (%1)").arg(DesktopLauncher::binaryPath()));
+        // "Reiniciar" reads odd when nothing is running; it still just launches.
+        restartBtn->setText(up ? tr("Reiniciar") : tr("Lanzar ahora"));
+    };
+    refreshStatus();
+
+    connect(configureBtn, &QPushButton::clicked, this, [this, refreshStatus] {
+        DesktopLauncher().openSettings();
+        QTimer::singleShot(600, this, refreshStatus);
+    });
+    connect(restartBtn, &QPushButton::clicked, this, [this, refreshStatus] {
+        DesktopLauncher().restart();
+        QTimer::singleShot(900, this, refreshStatus);
+    });
+
+    // Bound to `tab`, so the timer dies when buildTabs() deletes the tab.
+    auto *poll = new QTimer(tab);
+    poll->setInterval(2000);
+    connect(poll, &QTimer::timeout, tab, refreshStatus);
+    poll->start();
+
+    layout->addStretch();
+    return tab;
 }
 
 QWidget *SettingsDialog::createAudioTab()

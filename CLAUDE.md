@@ -81,7 +81,7 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
    el estilo por omisión, medí `height()` de cada control custom, no alcanza con que el QML
    cargue.
 
-**Son seis binarios**, los seis los compila el mismo `cmake --build build`:
+**Son siete binarios**, los siete los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -102,6 +102,17 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
   `weather` del dock y el botón de la tarjeta *Clima* del panel. **Instancia única pero NO
   residente**: cerrar la ventana termina el proceso, así que nunca se queda con el binario
   viejo mapeado después de un `install`. Detalles en `AGENTS.md` → *Clima*.
+- `kdock-desktop` (`build/desktop/kdock-desktop`, árbol `desktop/`): **copia repropósito de
+  `kdock-controlmanager`** convertida en lienzo de widgets de escritorio. Misma UI, tarjetas y
+  backends, pero la ventana es una superficie layer-shell **a pantalla completa, siempre
+  presente y transparente**, en la capa `bottom` (debajo del dock y de toda ventana normal,
+  encima del fondo), con `exclusiveZone=-1` (borde a borde, ignora los struts de los docks) y
+  `scope="kdock-desktop"` (KWin la tipa **Normal**, o sea la tapan las ventanas). Bus propio
+  `org.kdock.Desktop` (`/Desktop`), config propia `desktop.conf`, y **arranca con todas las
+  solapas apagadas y el fondo transparente** a propósito (fase 1: repropósito limpio; el uso de
+  la barra de solapas viene después). Su `.desktop` no pide privilegios (layer-shell no está en
+  la lista restringida), así que no necesita refresco de ksycoca. Detalles en `AGENTS.md` →
+  *Widgets de escritorio*.
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -150,14 +161,14 @@ ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(
 Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
 y el bug "seguía" (2026-08-10).
 
-El install escribe **doce** cosas: los seis binarios y sus seis `.desktop`. Después de
+El install escribe **catorce** cosas: los siete binarios y sus siete `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
 tarjetas caen a ícono, y desde 2026-08-17 `kdock` se queda sin las vistas previas al hoverear
-un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager` y
-`kdock-weather` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
-el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos tres, saltealo
-y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las seis líneas
+un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager`,
+`kdock-weather` y `kdock-desktop` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos, saltealo
+y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las siete líneas
 de `.desktop` dicen `Up-to-date`, ksycoca ya los tiene y no hay nada que refrescar, sin importar
 cuántos binarios se hayan reemplazado. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier

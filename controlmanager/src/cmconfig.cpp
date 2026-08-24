@@ -43,8 +43,12 @@ void CmConfig::load()
 
     m_backgroundMode = readInt("backgroundMode", 0, 0, 1);
     m_backgroundColor = QColor(m_settings.value(QStringLiteral("backgroundColor")).toString());
+    m_foregroundMode = readInt("foregroundMode", 0, 0, 1);
+    m_foregroundColor = QColor(m_settings.value(QStringLiteral("foregroundColor")).toString());
     m_backgroundOpacity =
         qBound(0.10, m_settings.value(QStringLiteral("backgroundOpacity"), 0.94).toDouble(), 1.0);
+    m_widgetOpacity =
+        qBound(0.0, m_settings.value(QStringLiteral("widgetOpacity"), 1.0).toDouble(), 1.0);
     m_backgroundImage = m_settings.value(QStringLiteral("backgroundImage")).toString();
     m_cornerRadius = readInt("cornerRadius", 12, 0, 48);
     m_labelBold = readBool("labelBold", true);
@@ -364,6 +368,23 @@ void CmConfig::setBackgroundColor(const QColor &color)
     store(QStringLiteral("backgroundColor"), color.isValid() ? color.name() : QString());
 }
 
+void CmConfig::setForegroundMode(int mode)
+{
+    mode = qBound(0, mode, 1);
+    if (m_foregroundMode == mode)
+        return;
+    m_foregroundMode = mode;
+    store(QStringLiteral("foregroundMode"), mode);
+}
+
+void CmConfig::setForegroundColor(const QColor &color)
+{
+    if (m_foregroundColor == color)
+        return;
+    m_foregroundColor = color;
+    store(QStringLiteral("foregroundColor"), color.isValid() ? color.name() : QString());
+}
+
 void CmConfig::setBackgroundOpacity(qreal opacity)
 {
     opacity = qBound(0.10, opacity, 1.0);
@@ -371,6 +392,15 @@ void CmConfig::setBackgroundOpacity(qreal opacity)
         return;
     m_backgroundOpacity = opacity;
     store(QStringLiteral("backgroundOpacity"), opacity);
+}
+
+void CmConfig::setWidgetOpacity(qreal opacity)
+{
+    opacity = qBound(0.0, opacity, 1.0);
+    if (qFuzzyCompare(m_widgetOpacity, opacity))
+        return;
+    m_widgetOpacity = opacity;
+    store(QStringLiteral("widgetOpacity"), opacity);
 }
 
 void CmConfig::setBackgroundImage(const QString &path)

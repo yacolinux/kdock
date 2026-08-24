@@ -2596,6 +2596,105 @@ config y su panel de ajustes, que el widget `controlmanager` prende y apaga.
   brillo y al mezclador de verdad). Es a este binario lo que `--dump-layout` es al menú de
   mosaicos.
 
+### Widgets de escritorio — binario accesorio `kdock-desktop` (`desktop/`, 2026-08-23)
+
+Séptimo binario, y **copia repropósito de `kdock-controlmanager`**: mismo código de tarjetas,
+backends, modelo, layout y panel de ajustes (los `cm*` y los `../src` compartidos son
+idénticos, por pedido explícito de "una copia de su código con otro nombre"). Lo que cambia es
+**la ventana** y **los defaults de la config**, para que en vez de un panel que se abre y se
+cierra sea un **lienzo de widgets de escritorio**: una superficie a pantalla completa, siempre
+presente, transparente, que vive debajo del dock y de las ventanas. El usuario coloca ahí los
+widgets "para mejor visualización". Fase 1: se deja **todo apagado** para poder repurposear el
+binario limpio; el uso de la barra de solapas (visible arriba) viene después.
+
+- **La ventana es la diferencia entera** (`desktop/src/cmwindow.cpp`). Frente al panel:
+  - **Capa `bottom` (1)**, no `top`: debajo del dock (capa `top`) y de toda ventana normal, así
+    que **las ventanas la tapan** — pero encima del fondo (capa `background`, 0). Verificado con
+    `workspace.stackingOrder`: queda en el índice 1, justo sobre la superficie de wallpaper de
+    kdock y debajo de todas las ventanas y los tres docks.
+  - **`kdock.scope="kdock-desktop"`**, ni `"dock"` ni `"desktop"`: KWin la tipa **Normal**
+    (`scopeToType`, ver `src/layershell.h`), que es lo que la hace tapable y la mantiene fuera
+    del enredo del Overview y de la superficie de wallpaper (dos `desktop` chocarían). Confirmado
+    con un script de KWin: `desktop=false dock=false normal=true`.
+  - **Anclada a los cuatro bordes + `exclusiveZone=-1`**: borde a borde en todo el monitor,
+    **ignorando los struts de los docks** estén visibles u ocultos (con 0 el compositor la
+    encogería por cada panel). Misma receta que `WallpaperWindow`, una capa más arriba.
+  - **`keyboardInteractivity=2` (on-demand), nunca exclusiva, y sin `requestActivate()`**: un
+    widget puede tomar el teclado al hacerle clic, pero el lienzo no le roba el foco a la app en
+    la que el usuario está trabajando. El panel, en cambio, agarra el teclado en exclusiva.
+  - **Región de entrada por defecto (toda la superficie)**: los clics sobre zona vacía **no
+    hacen nada** (no hay handler ahí), que es el comportamiento pedido; los clics sobre los
+    widgets sí llegan. No pasa por `WindowTransparentForInput` como el wallpaper.
+- **Bus propio `org.kdock.Desktop` (`/Desktop`)** y **config propia `desktop.conf`**, así que
+  convive con el panel sin pisarlo. Candado de instancia única por el nombre del bus, igual que
+  los otros accesorios.
+- **Defaults de `desktop/src/cmconfig.cpp`**: `enabledSections`/`principalCards` **vacíos**
+  (nada auto-encendido — se le sacó a `reconcileSections()` el auto-alta de secciones nuevas),
+  `backgroundOpacity=0.0` con piso 0.0 (transparente; con el piso 0.10 del panel teñiría toda
+  la pantalla), y `keepOpen=true` + `closeOnFocusLoss=false` (nunca se auto-oculta).
+- **Sin privilegios**: layer-shell no está en la lista restringida de KWin, así que su
+  `.desktop` no necesita refresco de ksycoca — como el resto de los accesorios.
+- **Se maneja desde la solapa *Desktop* del diálogo de kdock** (`SettingsDialog::createDesktopTab`,
+  2026-08-23): un tilde *Iniciar con kdock* (autostart), un botón *Configurar kdock-desktop…* que
+  abre su propio diálogo de ajustes, y *Reiniciar*/*Lanzar ahora* con una línea de estado. Igual
+  patrón que el grupo del Control Manager, pero como **solapa** (después de *Previews*) y solo si
+  el binario está instalado (`DesktopLauncher::installed()`). El pegamento es
+  `src/desktoplauncher.{h,cpp}` —gemelo de `controlmanagerlauncher`, apuntando a `kdock-desktop`
+  / `org.kdock.Desktop` / `desktop.conf`—, con dos diferencias: el lienzo es **siempre visible**,
+  así que `startIfPreloading()` lo levanta *mostrándolo* (no `--hide` como el panel), y `restart()`
+  hace `quit` + arranque **diferido** (600 ms) porque el candado de instancia única es el nombre
+  del bus. `main.cpp` llama a `DesktopLauncher::startIfPreloading()` y `apprestart.cpp` lo baja y
+  lo vuelve a subir junto con los otros tres accesorios en *Dock → Reiniciar*.
+- **Transparencia POR WIDGET** (2026-08-23, y portada a `kdock-controlmanager`): cada tarjeta
+  tiene su propia opacidad de fondo, con un default general para todas y un override individual.
+  - **Almacenamiento**: `CmCardRecord::opacity` (porcentaje 0..100, −1 = heredar), serializado
+    como `"op"` en el layout JSON solo cuando ≥ 0 — mismo idioma −1-hereda que `showTitle`/`"st"`.
+    El rol `OpacityRole`/`cardOpacity` del modelo lo expone **crudo** (como `background`), para que
+    el menú distinga "propio" de "heredado".
+  - **General**, en el diálogo: `CmConfig::widgetOpacity` (0.0..1.0, default **1.0** = opaco, o
+    sea la apariencia histórica intacta). El diálogo lo muestra como *Transparencia de los
+    widgets* en % (transparencia = 1 − opacidad).
+  - **Individual**, en el clic derecho de la tarjeta: submenú *Transparencia* (10/20/40/80 %,
+    *Opaco*, *General*) al lado de *Color de fondo* — el nivel guarda `100 − transparencia`,
+    *Opaco* guarda 100 y *General* guarda −1 (hereda). Mismo patrón que *Color de fondo*.
+  - **Render** (`CmCard.qml`): `effectiveOpacity = cardOpacity ≥ 0 ? cardOpacity/100 :
+    cmConfig.widgetOpacity`, aplicada **solo al alfa del rectángulo de fondo** (`bg.color`), no al
+    borde ni al contenido: una tarjeta translúcida sigue siendo legible. Verificado renderizando
+    dos tarjetas rojas, una con `op=20` (rosa translúcida) y otra sin (roja sólida), con su texto
+    intacto en ambas.
+  - **NO es la transparencia del fondo-lienzo**: esa ya existía en el spin *Opacidad* del diálogo
+    (canvas para el lienzo, panel para el control). El único ajuste que quedó de esa área es que
+    el piso del spin *Opacidad* del **lienzo** bajó a **0.0** (el panel sigue en 0.10) para poder
+    llegar al transparente que es su default.
+- **La barra de solapas está deshabilitada** en `kdock-desktop` (2026-08-23): `CmTabs` va con
+  `visible: false` y el `body` ancla directo a `parent.top/bottom` en su `ControlManager.qml`
+  (solo el de `desktop/`; el del panel no se toca). Los controles de esquina
+  (Fijo/config/cerrar) siguen.
+- **La navegación entre secciones pasó al clic derecho** (2026-08-23, `kdock-desktop`): en vez de
+  la barra, el menú del lienzo tiene un submenú *Secciones* con *Principal* + **todas** las
+  secciones que tienen vista (`hasTab`, o sea todas menos `clock`), cada una con su ícono y una
+  tilde en la actual; al elegir una se pone `win.currentTab`. El modelo es `root.sectionMenuModel`
+  (independiente de qué solapas están habilitadas). Y como la `MouseArea` de botón derecho de la
+  grilla Principal no está cuando hay una sección a pantalla completa, el `body` lleva una
+  `MouseArea` de fondo (`z:-1`, `acceptedButtons: RightButton`) que abre el mismo menú desde
+  cualquier lado — así se puede volver a *Principal* estando dentro de una sección. Todo esto es
+  solo del `ControlManager.qml` de `desktop/`.
+- **Color de fuente general** (2026-08-23, en los DOS binarios): espejo del color de fondo.
+  `CmConfig::foregroundMode` (0 automático / 1 propio) + `foregroundColor`, con su combo y su botón
+  en el diálogo (*Fuente* / *Color de fuente*), replicando el control de fondo. La jerarquía de
+  color de texto es **por-tarjeta → general → automático**: `CmCard.qml` usa `foreground` de la
+  tarjeta si está, si no el general (`foregroundMode==1`), si no el contraste por luminancia de
+  siempre; y `panelTextColor` en `ControlManager.qml` antepone el general al contraste. El
+  automático (modo 0) es exactamente el comportamiento histórico. Verificado con un
+  `foregroundColor` verde: todo el texto de las tarjetas —incluido el de las que tienen fondo
+  propio— sale verde.
+- **Cómo se probó** (2026-08-23): el arnés de Xvfb de `kdock-controlmanager` sirve igual para
+  ver que el QML carga (bajo X es una ventana normal, no prueba la capa). Lo que sí prueba el
+  layer-shell es la sesión Wayland real: una instancia aislada (`XDG_DATA_HOME` descartable,
+  bus nuevo así que no hay conflicto) + dos scripts de KWin, uno que imprime tipo y geometría de
+  la ventana y otro que vuelca `stackingOrder`. Ahí se confirmó pantalla completa (0,0
+  1920×1080), tipo Normal, y el orden de apilado de arriba.
+
 ### Capa de traducciones (`src/translations.{h,cpp}`, `translations/*.md`, 2026-08-07)
 
 Los textos escritos en el código son la **capa nativa "capabase"** (ni inglés ni español: lo

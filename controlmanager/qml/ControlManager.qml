@@ -34,9 +34,11 @@ Item {
     // exactly what the user asked for.
     readonly property bool baseIsLight: root.isLight(root.baseColor)
     readonly property color panelTextColor:
-        (cmConfig.backgroundMode === 1 && cmConfig.backgroundColorSet)
-        ? (root.baseIsLight ? "#141414" : "#F2F2F2")
-        : theme.foreground
+        (cmConfig.foregroundMode === 1 && cmConfig.foregroundColorSet)
+        ? cmConfig.foregroundColor
+        : ((cmConfig.backgroundMode === 1 && cmConfig.backgroundColorSet)
+           ? (root.baseIsLight ? "#141414" : "#F2F2F2")
+           : theme.foreground)
 
     // Perceptual luminance, alpha ignored on purpose: a half-transparent white
     // is still a light surface, and blending it with whatever is behind would
@@ -291,7 +293,10 @@ Item {
             Item {
                 id: canvas
                 width: canvasArea.width
-                height: cards.rows * root.pitchH + root.pad
+                // At least the viewport height, so the empty-area right-click
+                // (the RightButton MouseArea below fills this item) covers the
+                // whole canvas — with few cards the content is short.
+                height: Math.max(canvasArea.height, cards.rows * root.pitchH + root.pad)
 
                 // Centered when the matrix is narrower than the space.
                 readonly property int gridW: root.columns * root.pitchW - root.gap
@@ -565,6 +570,45 @@ Item {
                 checkable: true
                 checked: cardMenu.c && cardMenu.c.foreground.length === 0
                 onTriggered: cmLayout.setCardProperty(cardMenu.cid, "fg", "")
+            }
+        }
+
+        // Background transparency of this one card. The levels are transparency
+        // (higher = more see-through); the stored value is the opposite opacity
+        // percentage (100 - level). "General" drops the override and follows the
+        // panel-wide setting (Configuración → Opacidad de los widgets).
+        Menu {
+            id: cardTransparencyMenu
+            title: qsTr("Transparencia")
+            popupType: Popup.Window
+            width: Math.max(implicitWidth + 64, 200)
+
+            Repeater {
+                model: [10, 20, 40, 80]
+                delegate: MenuItem {
+                    required property var modelData
+                    text: modelData + " %"
+                    checkable: true
+                    checked: cardMenu.c && cardMenu.c.cardOpacity >= 0
+                             && cardMenu.c.cardOpacity === (100 - modelData)
+                    onTriggered: cmLayout.setCardProperty(cardMenu.cid, "opacity",
+                                                          100 - modelData)
+                }
+            }
+
+            MenuSeparator {}
+            IconMenuItem {
+                text: qsTr("Opaco")
+                checkable: true
+                checked: cardMenu.c && cardMenu.c.cardOpacity === 100
+                onTriggered: cmLayout.setCardProperty(cardMenu.cid, "opacity", 100)
+            }
+            IconMenuItem {
+                text: qsTr("General")
+                iconName: "edit-undo"
+                checkable: true
+                checked: cardMenu.c && cardMenu.c.cardOpacity < 0
+                onTriggered: cmLayout.setCardProperty(cardMenu.cid, "opacity", -1)
             }
         }
 

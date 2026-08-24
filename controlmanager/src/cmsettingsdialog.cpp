@@ -216,12 +216,59 @@ QWidget *CmSettingsDialog::createAppearanceGroup()
     });
     form->addRow(tr("Color propio:"), colorBtn);
 
+    // Font colour, the mirror of the background control above: automatic (the
+    // luminance-derived contrast) or a colour of your own, applied to every
+    // widget unless a card overrides it from its own "Color de fuente" menu.
+    auto *fgMode = new QComboBox(box);
+    fgMode->addItems({tr("Automático"), tr("Color propio")});
+    fgMode->setCurrentIndex(m_config->foregroundMode());
+    connect(fgMode, &QComboBox::currentIndexChanged, m_config, &CmConfig::setForegroundMode);
+    form->addRow(tr("Fuente:"), fgMode);
+
+    auto *fgColorBtn = new QPushButton(box);
+    const auto refreshFgColor = [this, fgColorBtn] {
+        const QColor c = m_config->foregroundColor();
+        fgColorBtn->setText(c.isValid() ? c.name() : tr("(sin elegir)"));
+    };
+    refreshFgColor();
+    connect(fgColorBtn, &QPushButton::clicked, this, [this, refreshFgColor] {
+        const QColor c = QColorDialog::getColor(m_config->foregroundColor(), this,
+                                                tr("Color de fuente"));
+        if (c.isValid()) {
+            m_config->setForegroundColor(c);
+            refreshFgColor();
+        }
+    });
+    form->addRow(tr("Color de fuente:"), fgColorBtn);
+
     auto *opacity = new QDoubleSpinBox(box);
     opacity->setRange(0.10, 1.0);
     opacity->setSingleStep(0.05);
     opacity->setValue(m_config->backgroundOpacity());
     connect(opacity, &QDoubleSpinBox::valueChanged, m_config, &CmConfig::setBackgroundOpacity);
+    // Keep in step with the right-click "Transparencia" quick levels while the
+    // dialog is open.
+    connect(m_config, &CmConfig::settingsChanged, opacity, [this, opacity] {
+        if (!qFuzzyCompare(opacity->value(), m_config->backgroundOpacity()))
+            opacity->setValue(m_config->backgroundOpacity());
+    });
     form->addRow(tr("Opacidad:"), opacity);
+
+    // General transparency of every widget/card, as a percentage (0 = opaque).
+    // Stored as the opposite opacity (widgetOpacity = 1 - transparency); a card
+    // can override it from its right-click "Transparencia" submenu.
+    auto *widgetTransp = new QSpinBox(box);
+    widgetTransp->setRange(0, 100);
+    widgetTransp->setSuffix(tr(" %"));
+    widgetTransp->setValue(qRound((1.0 - m_config->widgetOpacity()) * 100));
+    connect(widgetTransp, &QSpinBox::valueChanged, m_config,
+            [this](int v) { m_config->setWidgetOpacity(1.0 - v / 100.0); });
+    connect(m_config, &CmConfig::settingsChanged, widgetTransp, [this, widgetTransp] {
+        const int v = qRound((1.0 - m_config->widgetOpacity()) * 100);
+        if (widgetTransp->value() != v)
+            widgetTransp->setValue(v);
+    });
+    form->addRow(tr("Transparencia de los widgets:"), widgetTransp);
 
     auto *imageRow = new QWidget(box);
     auto *imageLayout = new QHBoxLayout(imageRow);

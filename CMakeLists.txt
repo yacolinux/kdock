@@ -105,6 +105,7 @@ add_library(kdock_core OBJECT
     src/previewslauncher.cpp    src/previewslauncher.h
     src/tilemenulauncher.cpp    src/tilemenulauncher.h
     src/controlmanagerlauncher.cpp src/controlmanagerlauncher.h
+    src/desktoplauncher.cpp     src/desktoplauncher.h
     src/apprestart.cpp          src/apprestart.h
     src/dockservice.cpp         src/dockservice.h
     src/globalshortcut.cpp      src/globalshortcut.h
@@ -185,6 +186,9 @@ add_subdirectory(previews)
 add_subdirectory(tilemenu)
 add_subdirectory(calendar)
 add_subdirectory(controlmanager)
+# kdock-desktop: a repurposed copy of controlmanager as a full-screen, always-on
+# desktop-widget canvas under the dock (see desktop/CMakeLists.txt).
+add_subdirectory(desktop)
 add_subdirectory(weather)
 
 # Test suite (tests/README.md). Off by default so a plain build of the dock

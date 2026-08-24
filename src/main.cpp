@@ -44,6 +44,7 @@
 #include "powercontrol.h"
 #include "previewslauncher.h"
 #include "controlmanagerlauncher.h"
+#include "desktoplauncher.h"
 #include "dockservice.h"
 #include "globalshortcut.h"
 #include "tilemenulauncher.h"
@@ -574,6 +575,9 @@ int main(int argc, char *argv[])
     // start so that click is instant too.
     TileMenuLauncher::startIfPreloading();
     ControlManagerLauncher::startIfPreloading();
+    // The desktop-widget canvas, if the user asked for it to come up with the
+    // session (Configuración → Desktop → Iniciar con kdock).
+    DesktopLauncher::startIfPreloading();
 
     // And the one global shortcut kdock publishes of its own, with no default
     // key: the user assigns one in Preferencias del sistema → Atajos.

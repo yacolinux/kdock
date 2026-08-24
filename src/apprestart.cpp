@@ -1,6 +1,7 @@
 #include "apprestart.h"
 
 #include "controlmanagerlauncher.h"
+#include "desktoplauncher.h"
 #include "previewslauncher.h"
 #include "tilemenulauncher.h"
 
@@ -20,7 +21,7 @@ constexpr int kPollMs = 25;
 bool anyAccessoryRunning()
 {
     return PreviewsLauncher::running() || TileMenuLauncher::running()
-           || ControlManagerLauncher::running();
+           || ControlManagerLauncher::running() || DesktopLauncher::running();
 }
 } // namespace
 
@@ -29,6 +30,7 @@ void kdock::restartAll(const QStringList &extraArgs)
     PreviewsLauncher::quitRunning();
     TileMenuLauncher::quitRunning();
     ControlManagerLauncher::quitRunning();
+    DesktopLauncher::quitRunning();
 
     // Waiting is not politeness, it is the whole trick: the relaunched kdock
     // brings the accessories back through startIfEnabled()/startIfPreloading(),

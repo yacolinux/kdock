@@ -106,6 +106,10 @@ private:
     // Same shape, in the Widgets tab: kdock only owns the widget, everything
     // about the panel lives in its own settings dialog.
     QWidget *createControlManagerGroup(QWidget *parent);
+    // The desktop-widget canvas (kdock-desktop): a launcher tab — autostart it,
+    // open its own settings dialog, restart it. Everything about the canvas lives
+    // in its own settings dialog, like the control panel.
+    QWidget *createDesktopTab();
     QWidget *createAudioTab();
     // Brightness of every detected monitor plus the power profile. Not
     // per-dock: the machine's screens look the same whichever dock is selected.
