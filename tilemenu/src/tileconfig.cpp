@@ -51,6 +51,8 @@ void TileConfig::load()
         qBound(0.10, m_settings.value(QStringLiteral("backgroundOpacity"), 0.92).toDouble(), 1.0);
     m_backgroundImage = m_settings.value(QStringLiteral("backgroundImage")).toString();
     m_showSearch = readBool("showSearch", true);
+    m_searchSort = readInt("searchSort", 2, 0, 2);
+    m_searchView = readInt("searchView", 0, 0, 1);
     m_showPower = readBool("showPower", true);
     m_showLetterIndex = readBool("showLetterIndex", true);
     m_closeOnLaunch = readBool("closeOnLaunch", true);
@@ -246,6 +248,24 @@ void TileConfig::setShowSearch(bool on)
         return;
     m_showSearch = on;
     store(QStringLiteral("showSearch"), on);
+}
+
+void TileConfig::setSearchSort(int mode)
+{
+    mode = qBound(0, mode, 2);
+    if (m_searchSort == mode)
+        return;
+    m_searchSort = mode;
+    store(QStringLiteral("searchSort"), mode);
+}
+
+void TileConfig::setSearchView(int mode)
+{
+    mode = qBound(0, mode, 1);
+    if (m_searchView == mode)
+        return;
+    m_searchView = mode;
+    store(QStringLiteral("searchView"), mode);
 }
 
 void TileConfig::setShowPower(bool on)

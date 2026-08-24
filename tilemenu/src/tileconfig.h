@@ -48,6 +48,12 @@ class TileConfig : public QObject
     Q_PROPERTY(QStringList presetColors READ presetColors NOTIFY settingsChanged)
     // --- behavior ---
     Q_PROPERTY(bool showSearch READ showSearch WRITE setShowSearch NOTIFY settingsChanged)
+    // How the search results are ordered: 0 alfabético, 1 frecuencia de uso,
+    // 2 uso reciente (por omisión). Only the search hit list honours this.
+    Q_PROPERTY(int searchSort READ searchSort WRITE setSearchSort NOTIFY settingsChanged)
+    // How the search results are shown: 0 en filas (lista vertical, por omisión),
+    // 1 con íconos (la grilla de mosaicos de siempre).
+    Q_PROPERTY(int searchView READ searchView WRITE setSearchView NOTIFY settingsChanged)
     Q_PROPERTY(bool showPower READ showPower WRITE setShowPower NOTIFY settingsChanged)
     Q_PROPERTY(bool showLetterIndex READ showLetterIndex WRITE setShowLetterIndex NOTIFY settingsChanged)
     Q_PROPERTY(bool closeOnLaunch READ closeOnLaunch WRITE setCloseOnLaunch NOTIFY settingsChanged)
@@ -88,6 +94,8 @@ public:
     // palette. Read-only here: they are edited from the dock's settings dialog.
     QStringList presetColors() const;
     bool showSearch() const { return m_showSearch; }
+    int searchSort() const { return m_searchSort; }
+    int searchView() const { return m_searchView; }
     bool showPower() const { return m_showPower; }
     bool showLetterIndex() const { return m_showLetterIndex; }
     bool closeOnLaunch() const { return m_closeOnLaunch; }
@@ -115,6 +123,8 @@ public:
     void setBackgroundOpacity(qreal opacity);
     void setBackgroundImage(const QString &path);
     void setShowSearch(bool on);
+    void setSearchSort(int mode);
+    void setSearchView(int mode);
     void setShowPower(bool on);
     void setShowLetterIndex(bool on);
     void setCloseOnLaunch(bool on);
@@ -159,6 +169,8 @@ private:
     qreal m_backgroundOpacity = 0.92;
     QString m_backgroundImage;
     bool m_showSearch = true;
+    int m_searchSort = 2;
+    int m_searchView = 0;
     bool m_showPower = true;
     bool m_showLetterIndex = true;
     bool m_closeOnLaunch = true;

@@ -17,6 +17,7 @@ qt_add_executable(kdock-tilemenu
     src/tileconfig.cpp          src/tileconfig.h
     src/tilelayout.cpp          src/tilelayout.h
     src/tilemodel.cpp           src/tilemodel.h
+    src/tileusage.cpp           src/tileusage.h
     src/tilewindow.cpp          src/tilewindow.h
     src/tilesettingsdialog.cpp  src/tilesettingsdialog.h
     src/tilemenuservice.cpp     src/tilemenuservice.h
@@ -45,6 +46,7 @@ qt_add_resources(kdock-tilemenu "tilemenu-qml"
         qml/TileMenu.qml
         qml/TileMenuTile.qml
         qml/TileGroupTabs.qml
+        qml/TileSearchList.qml
         qml/TileSidebar.qml
         qml/TileSizeMenu.qml
 )

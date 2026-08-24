@@ -35,6 +35,10 @@ public:
     // Each entry is a map { id, name, icon, comment, favorite }.
     Q_INVOKABLE QVariantList appsInCategory(const QString &category) const;
     Q_INVOKABLE QVariantList search(const QString &query) const;
+    // The same map for a single id, or an empty map if the index no longer knows
+    // it. Lets a caller (the tile menu's recent-apps strip) turn a stored id back
+    // into a name and icon without reaching into DesktopEntryIndex itself.
+    Q_INVOKABLE QVariantMap appById(const QString &id) const;
     Q_INVOKABLE QVariantList favorites() const;
 
     Q_INVOKABLE void launch(const QString &id) const;

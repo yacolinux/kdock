@@ -23,13 +23,14 @@ class TileConfig;
 class TileLayout;
 class TileModel;
 class TileSettingsDialog;
+class TileUsage;
 
 class TileWindow : public QQuickView
 {
     Q_OBJECT
 public:
     TileWindow(TileConfig *config, Theme *theme, DesktopEntryIndex *apps, AppMenu *menu,
-               TileLayout *layout, TileModel *model, PowerControl *power);
+               TileLayout *layout, TileModel *model, PowerControl *power, TileUsage *usage);
 
     // screenName is the connector of the dock that asked. Wayland does not let a
     // client place a toplevel, so this is a hint: it is applied through
@@ -70,6 +71,7 @@ private:
     TileLayout *m_layout;
     TileModel *m_model;
     PowerControl *m_power;
+    TileUsage *m_usage;
     TileSettingsDialog *m_settingsDialog = nullptr;
     int m_modalDepth = 0;
     // Deactivations right after show() are the compositor still handing focus

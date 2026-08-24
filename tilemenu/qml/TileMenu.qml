@@ -45,6 +45,21 @@ Item {
         : tileConfig.cellSize
     readonly property int pitch: cell + gap
 
+    // --- search results view ------------------------------------------------
+    // "En filas" (searchView 0) swaps the tile canvas for a vertical list while
+    // searching; "con íconos" (1) keeps the icon grid. Opening the menu always
+    // lands on the section grid (Favoritos), never on a leftover search: the
+    // recent-use history still orders the results, it just is not shown as its
+    // own strip on open.
+    readonly property bool searchListMode: tileConfig.searchView === 0
+    readonly property var resultEntries: {
+        tiles.query; tileConfig.searchSort // re-evaluate on either change
+        return (root.searchListMode && tiles.searching) ? tiles.searchResults() : []
+    }
+    readonly property bool showResultsList: root.searchListMode && tiles.searching
+    readonly property bool listShown: showResultsList
+    readonly property var listEntries: resultEntries
+
     // One tab says nothing and eats the space, so the bar shows up only once
     // there is a second group. A search crosses every group, so it hides too.
     readonly property bool tabsVisible: tiles.groups.length > 1 && !tiles.searching
@@ -202,6 +217,8 @@ Item {
                 color: theme.foreground
                 placeholderTextColor: Qt.rgba(theme.foreground.r, theme.foreground.g,
                                               theme.foreground.b, 0.5)
+                // Keep the text from running under the clear button.
+                rightPadding: clearBtn.visible ? clearBtn.width + 20 : leftPadding
                 background: Rectangle {
                     radius: 6
                     color: Qt.rgba(theme.foreground.r, theme.foreground.g,
@@ -210,9 +227,61 @@ Item {
                     border.color: theme.highlight
                 }
                 onTextChanged: tiles.query = text
-                Keys.onDownPressed: canvas.selectFirst()
-                Keys.onReturnPressed: canvas.launchSelected()
-                Keys.onEnterPressed: canvas.launchSelected()
+
+                // Clear-all: wipe the query and keep the caret in the field.
+                Text {
+                    id: clearBtn
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.right: parent.right
+                    anchors.rightMargin: 10
+                    visible: searchField.text.length > 0
+                    text: "✕"
+                    font.pixelSize: 14
+                    color: clearMouse.containsMouse
+                           ? theme.highlight
+                           : Qt.rgba(theme.foreground.r, theme.foreground.g,
+                                     theme.foreground.b, 0.6)
+                    MouseArea {
+                        id: clearMouse
+                        anchors.fill: parent
+                        anchors.margins: -6
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            searchField.text = ""
+                            searchField.forceActiveFocus()
+                        }
+                    }
+                }
+
+                // Tab completes the query with the first result's name — the
+                // fastest way to "the thing I obviously meant".
+                Keys.onTabPressed: (event) => {
+                    if (root.showResultsList && root.resultEntries.length > 0) {
+                        searchField.text = root.resultEntries[0].name
+                        searchField.cursorPosition = searchField.text.length
+                    }
+                    event.accepted = true
+                }
+                // Down drops into whichever results view is on screen.
+                Keys.onDownPressed: {
+                    if (root.listShown)
+                        searchList.forceActiveFocus()
+                    else
+                        canvas.selectFirst()
+                }
+                Keys.onReturnPressed: {
+                    if (root.listShown)
+                        searchList.launchCurrent()
+                    else
+                        canvas.launchSelected()
+                }
+                Keys.onEnterPressed: {
+                    if (root.listShown)
+                        searchList.launchCurrent()
+                    else
+                        canvas.launchSelected()
+                }
             }
 
             Item {
@@ -271,6 +340,7 @@ Item {
                 // three-way conditional over sidebar side and A-Z rail.
                 Item {
                     id: canvasCol
+                    visible: !root.listShown
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     anchors.left: root.sidebarLeft ? parent.left : rail.right
@@ -501,6 +571,20 @@ Item {
                     }
                 }
                 } // canvasCol
+
+                // The vertical "en filas" results / recent strip. Occupies the
+                // same slot as canvasCol; only one of the two is ever visible.
+                TileSearchList {
+                    id: searchList
+                    visible: root.listShown
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.left: root.sidebarLeft ? parent.left : rail.right
+                    anchors.right: root.sidebarLeft ? rail.left : parent.right
+                    entries: root.listEntries
+                    onLaunch: (id) => win.launch(id)
+                    onAtTop: searchField.forceActiveFocus()
+                }
             }
 
             // --- session / power row -------------------------------------
@@ -806,14 +890,21 @@ Item {
     Keys.onReturnPressed: canvas.launchSelected()
     Keys.onEnterPressed: canvas.launchSelected()
 
-    onVisibleChanged: {
-        if (!visible)
-            return
+    // Reset the query and hand focus to the search box. Called from onVisibleChanged
+    // (first construction) AND from C++ showOn() on every reopen: reopening from the
+    // widget re-shows the same window without the root Item's `visible` ever changing,
+    // so onVisibleChanged does not fire the second time around.
+    function prepareForShow() {
         searchField.text = ""
         canvas.selectedId = ""
         if (tileConfig.showSearch)
             searchField.forceActiveFocus()
         else
             root.forceActiveFocus()
+    }
+
+    onVisibleChanged: {
+        if (visible)
+            prepareForShow()
     }
 }

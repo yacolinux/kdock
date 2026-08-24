@@ -21,6 +21,7 @@
 
 class AppMenu;
 class TileConfig;
+class TileUsage;
 
 class TileModel : public QAbstractListModel
 {
@@ -52,7 +53,8 @@ public:
         ShowLabelRole,
     };
 
-    TileModel(TileLayout *layout, AppMenu *menu, TileConfig *config, QObject *parent = nullptr);
+    TileModel(TileLayout *layout, AppMenu *menu, TileConfig *config, TileUsage *usage,
+              QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -78,6 +80,15 @@ public:
     // gray out the rest.
     Q_INVOKABLE QStringList availableLetters() const;
 
+    // The current search hits as a flat, ordered array of { tileId, name, icon,
+    // comment }, honouring TileConfig::searchSort. This is what the vertical
+    // "en filas" results list binds to; the icon grid keeps using the model
+    // rows. Empty when not searching.
+    Q_INVOKABLE QVariantList searchResults() const;
+    // The recently launched apps (TileUsage), same shape, for the strip that
+    // shows when the empty search box has focus. Newest first, capped.
+    Q_INVOKABLE QVariantList recentApps() const;
+
 signals:
     void sectionChanged();
     void queryChanged();
@@ -90,10 +101,14 @@ private:
     // Search results are a plain auto grid: there is no section to persist a
     // hand-made position into.
     QList<TileRecord> searchPlacement() const;
+    // The search hits ordered per TileConfig::searchSort. Both the grid and the
+    // list read this, so the two views always agree on the order.
+    QVariantList sortedSearchApps() const;
 
     TileLayout *m_layout;
     AppMenu *m_menu;
     TileConfig *m_config;
+    TileUsage *m_usage;
 
     QString m_section;
     QString m_query;

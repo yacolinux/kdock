@@ -2,14 +2,19 @@
 
 #include "appmenu.h"
 #include "tileconfig.h"
+#include "tileusage.h"
 
 #include <QVariantMap>
 
-TileModel::TileModel(TileLayout *layout, AppMenu *menu, TileConfig *config, QObject *parent)
+#include <algorithm>
+
+TileModel::TileModel(TileLayout *layout, AppMenu *menu, TileConfig *config, TileUsage *usage,
+                     QObject *parent)
     : QAbstractListModel(parent)
     , m_layout(layout)
     , m_menu(menu)
     , m_config(config)
+    , m_usage(usage)
 {
     connect(m_layout, &TileLayout::changed, this, [this](const QString &section) {
         if (section.isEmpty() || section == m_section)
@@ -132,7 +137,7 @@ void TileModel::reloadApps()
     m_apps.clear();
     if (!m_menu)
         return;
-    const QVariantList apps = searching() ? m_menu->search(m_query)
+    const QVariantList apps = searching() ? sortedSearchApps()
                                           : m_menu->appsInCategory(m_section);
     for (const QVariant &v : apps) {
         const QVariantMap m = v.toMap();
@@ -140,15 +145,86 @@ void TileModel::reloadApps()
     }
 }
 
+QVariantList TileModel::sortedSearchApps() const
+{
+    if (!m_menu)
+        return {};
+    QVariantList apps = m_menu->search(m_query);
+
+    const auto nameOf = [](const QVariant &v) {
+        return v.toMap().value(QStringLiteral("name")).toString();
+    };
+    const auto idOf = [](const QVariant &v) {
+        return v.toMap().value(QStringLiteral("id")).toString();
+    };
+    const auto byName = [&nameOf](const QVariant &a, const QVariant &b) {
+        return QString::localeAwareCompare(nameOf(a), nameOf(b)) < 0;
+    };
+
+    const int mode = m_config ? m_config->searchSort() : 2;
+    if (mode == 1 && m_usage) { // frequency of use
+        std::stable_sort(apps.begin(), apps.end(), [&](const QVariant &a, const QVariant &b) {
+            const int ca = m_usage->count(idOf(a));
+            const int cb = m_usage->count(idOf(b));
+            return ca != cb ? ca > cb : byName(a, b);
+        });
+    } else if (mode == 2 && m_usage) { // recent use
+        std::stable_sort(apps.begin(), apps.end(), [&](const QVariant &a, const QVariant &b) {
+            const qint64 ta = m_usage->lastMs(idOf(a));
+            const qint64 tb = m_usage->lastMs(idOf(b));
+            return ta != tb ? ta > tb : byName(a, b);
+        });
+    } else { // alphabetical (mode 0, or no usage backend)
+        std::stable_sort(apps.begin(), apps.end(), byName);
+    }
+    return apps;
+}
+
+QVariantList TileModel::searchResults() const
+{
+    if (!searching())
+        return {};
+    QVariantList out;
+    for (const QVariant &v : sortedSearchApps()) {
+        const QVariantMap m = v.toMap();
+        out.append(QVariantMap{
+            {QStringLiteral("tileId"), m.value(QStringLiteral("id"))},
+            {QStringLiteral("name"), m.value(QStringLiteral("name"))},
+            {QStringLiteral("icon"), m.value(QStringLiteral("icon"))},
+            {QStringLiteral("comment"), m.value(QStringLiteral("comment"))},
+        });
+    }
+    return out;
+}
+
+QVariantList TileModel::recentApps() const
+{
+    QVariantList out;
+    if (!m_usage || !m_menu)
+        return out;
+    for (const QString &id : m_usage->recentIds()) {
+        const QVariantMap m = m_menu->appById(id);
+        if (m.isEmpty())
+            continue; // uninstalled since it was last launched
+        out.append(QVariantMap{
+            {QStringLiteral("tileId"), m.value(QStringLiteral("id"))},
+            {QStringLiteral("name"), m.value(QStringLiteral("name"))},
+            {QStringLiteral("icon"), m.value(QStringLiteral("icon"))},
+            {QStringLiteral("comment"), m.value(QStringLiteral("comment"))},
+        });
+    }
+    return out;
+}
+
 QList<TileRecord> TileModel::searchPlacement() const
 {
-    // Results keep the order AppMenu returned them in and fill the matrix
-    // row-major at 1x1 — a hit list, not an arrangement.
+    // Results fill the matrix row-major at 1x1 — a hit list, not an arrangement.
+    // The order is TileConfig::searchSort, shared with the list view.
     QList<TileRecord> out;
     if (!m_menu)
         return out;
     const int cols = qMax(1, m_layout->columns());
-    const QVariantList apps = m_menu->search(m_query);
+    const QVariantList apps = sortedSearchApps();
     int i = 0;
     for (const QVariant &v : apps) {
         TileRecord r;

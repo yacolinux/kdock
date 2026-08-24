@@ -229,6 +229,13 @@ QVariantMap AppMenu::entryToMap(const QString &id) const
     return m;
 }
 
+QVariantMap AppMenu::appById(const QString &id) const
+{
+    if (!m_apps->byId(id).isValid())
+        return {};
+    return entryToMap(id);
+}
+
 QVariantList AppMenu::appsInCategory(const QString &category) const
 {
     if (category == kFavoritesKey)

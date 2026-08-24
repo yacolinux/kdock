@@ -320,6 +320,25 @@ QWidget *TileSettingsDialog::createBehaviorGroup()
 
     addCheck(tr("Buscador:"), tr("Campo de búsqueda arriba"), m_config->showSearch(),
              &TileConfig::setShowSearch);
+
+    auto *searchView = new QComboBox(box);
+    searchView->addItem(tr("En filas (lista vertical)"));
+    searchView->addItem(tr("Con íconos (grilla)"));
+    searchView->setCurrentIndex(m_config->searchView());
+    searchView->setToolTip(tr("Cómo se muestran las aplicaciones al escribir en el buscador."));
+    connect(searchView, &QComboBox::currentIndexChanged, m_config, &TileConfig::setSearchView);
+    form->addRow(tr("Al buscar, mostrar:"), searchView);
+
+    auto *searchSort = new QComboBox(box);
+    searchSort->addItem(tr("Orden alfabético"));
+    searchSort->addItem(tr("Frecuencia de uso"));
+    searchSort->addItem(tr("Uso reciente"));
+    searchSort->setCurrentIndex(m_config->searchSort());
+    searchSort->setToolTip(tr("Cómo se ordenan los resultados de la búsqueda. La frecuencia y el "
+                              "uso reciente los lleva kdock, no dependen de KDE."));
+    connect(searchSort, &QComboBox::currentIndexChanged, m_config, &TileConfig::setSearchSort);
+    form->addRow(tr("Ordenar resultados por:"), searchSort);
+
     addCheck(tr("Apagado:"), tr("Fila de sesión / apagado abajo"), m_config->showPower(),
              &TileConfig::setShowPower);
     addCheck(tr("Índice A-Z:"), tr("Barra de letras al costado"), m_config->showLetterIndex(),

@@ -11,6 +11,7 @@
 #include "tilelayout.h"
 #include "tilemenuservice.h"
 #include "tilemodel.h"
+#include "tileusage.h"
 #include "tilewindow.h"
 #include "translations.h"
 
@@ -121,10 +122,11 @@ int main(int argc, char *argv[])
     PowerControl power;
 
     TileConfig config;
+    TileUsage usage;
     TileLayout layout(&config, &menu);
-    TileModel model(&layout, &menu, &config);
+    TileModel model(&layout, &menu, &config, &usage);
 
-    TileWindow window(&config, &theme, &apps, &menu, &layout, &model, &power);
+    TileWindow window(&config, &theme, &apps, &menu, &layout, &model, &power, &usage);
     QObject::connect(&translations, &Translations::changed, &window,
                      [&window] { window.retranslate(); });
     TileMenuService service(&window);

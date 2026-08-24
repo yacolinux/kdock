@@ -10,6 +10,7 @@
 #include "tilelayout.h"
 #include "tilemodel.h"
 #include "tilesettingsdialog.h"
+#include "tileusage.h"
 
 #include <QColorDialog>
 #include <QCoreApplication>
@@ -21,6 +22,7 @@
 #include <QMessageBox>
 #include <QQmlContext>
 #include <QQmlEngine>
+#include <QQuickItem>
 #include <QScreen>
 
 namespace {
@@ -29,7 +31,7 @@ constexpr qint64 kFocusGraceMs = 400;
 } // namespace
 
 TileWindow::TileWindow(TileConfig *config, Theme *theme, DesktopEntryIndex *apps, AppMenu *menu,
-                       TileLayout *layout, TileModel *model, PowerControl *power)
+                       TileLayout *layout, TileModel *model, PowerControl *power, TileUsage *usage)
     : m_config(config)
     , m_theme(theme)
     , m_apps(apps)
@@ -37,6 +39,7 @@ TileWindow::TileWindow(TileConfig *config, Theme *theme, DesktopEntryIndex *apps
     , m_layout(layout)
     , m_model(model)
     , m_power(power)
+    , m_usage(usage)
 {
     setTitle(QStringLiteral("kdock Tile Menu"));
     // Frameless because a menu has no business carrying a title bar; the
@@ -56,6 +59,7 @@ TileWindow::TileWindow(TileConfig *config, Theme *theme, DesktopEntryIndex *apps
     rootContext()->setContextProperty(QStringLiteral("tileLayout"), m_layout);
     rootContext()->setContextProperty(QStringLiteral("tiles"), m_model);
     rootContext()->setContextProperty(QStringLiteral("power"), m_power);
+    rootContext()->setContextProperty(QStringLiteral("tileUsage"), m_usage);
     rootContext()->setContextProperty(QStringLiteral("win"), this);
 
     setSource(QUrl(QStringLiteral("qrc:/qml/TileMenu.qml")));
@@ -108,6 +112,14 @@ void TileWindow::showOn(const QString &screenName)
     showMaximized();
     raise();
     requestActivate();
+
+    // Reopening from the widget re-shows the same window, so the root Item's
+    // onVisibleChanged (which resets the query and focuses the search box) only
+    // fires on the very first construction. Drive it from here on every show.
+    // Queued so it runs once the compositor has mapped and activated the window,
+    // which is when a Wayland toplevel can actually take the keyboard.
+    if (QQuickItem *root = rootObject())
+        QMetaObject::invokeMethod(root, "prepareForShow", Qt::QueuedConnection);
 }
 
 void TileWindow::hideMenu()
@@ -141,6 +153,11 @@ void TileWindow::launch(const QString &id)
 {
     if (m_menu)
         m_menu->launch(id);
+    // Every launch feeds the frequency/recency counters and the recent strip;
+    // this is the single choke point every route (tile click, search Enter,
+    // recent click) funnels through.
+    if (m_usage)
+        m_usage->recordLaunch(id);
     if (m_config->closeOnLaunch() && !m_config->keepOpen())
         hideMenu();
 }
