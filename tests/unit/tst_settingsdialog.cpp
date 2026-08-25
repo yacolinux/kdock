@@ -145,7 +145,7 @@ private slots:
         DockConfig *firstCfg = manager.configFor(first);
         QVERIFY(firstCfg);
 
-        SettingsDialog dlg(firstCfg, &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(firstCfg, &apps, nullptr, &manager, &theme);
         // El salto de dock: destruye todas las solapas y las rehace para el otro
         // dock. Todo lo que la solapa vieja haya conectado tiene que morir acá.
         dlg.showMonitorsTab(second);
@@ -186,7 +186,7 @@ private slots:
         QVERIFY(cfg);
         cfg->setPinned({});
 
-        SettingsDialog dlg(cfg, &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(cfg, &apps, nullptr, &manager, &theme);
 
         QListWidget *pinned = pinnedListOf(&dlg);
         QVERIFY2(pinned, "no se encontro la lista de anclados de la solapa Widgets");
@@ -221,7 +221,7 @@ private slots:
         m_shared.apps = &apps;
         DockManager manager(m_shared);
 
-        SettingsDialog dlg(manager.configFor(first), &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(manager.configFor(first), &apps, nullptr, &manager, &theme);
 
         QComboBox *monitor = monitorSelectorOf(&dlg);
         QComboBox *slot = slotSelectorOf(&dlg);
@@ -268,7 +268,7 @@ private slots:
         DockConfig *secondCfg = manager.configFor(second);
         QVERIFY(firstCfg && secondCfg);
 
-        SettingsDialog dlg(firstCfg, &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(firstCfg, &apps, nullptr, &manager, &theme);
         for (int i = 0; i < 3; ++i) {
             dlg.showMonitorsTab(second);
             dlg.showMonitorsTab(first);
@@ -295,7 +295,7 @@ private slots:
         m_shared.apps = &apps;
         DockManager manager(m_shared);
 
-        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, &manager, &theme);
 
         QLineEdit *search = dlg.findChild<QLineEdit *>(QStringLiteral("settingsSearch"));
         QTabWidget *tabs = dlg.findChild<QTabWidget *>(QStringLiteral("settingsTabs"));
@@ -399,7 +399,7 @@ private slots:
         m_shared.apps = &apps;
         DockManager manager(m_shared);
 
-        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, &manager, &theme);
 
         QCheckBox *master = checkBoxNamed(&dlg, QStringLiteral("Vista previa de la ventana al pasar el mouse"));
         QCheckBox *buttons = checkBoxNamed(&dlg, QStringLiteral("Minimizar, maximizar y cerrar"));

@@ -30,8 +30,7 @@
 #include "powercontrol.h"
 #include "windowmonitor.h"
 #include "settingsdialog.h"
-#include "systraymodel.h"
-#include "systrayimageprovider.h"
+#include "systraylauncher.h"
 #include "thumbnailimageprovider.h"
 #include "controlmanagerlauncher.h"
 #include "weathercontrol.h"
@@ -68,7 +67,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        DesktopControl *desktopControl, MonitorControl *monitorControl,
                        MaxMinControl *maxmin, ActiveWindowControl *activeWindow,
                        WallpaperControl *wallpaperControl, PowerControl *power,
-                       SystrayModel *systrayModel, SystrayHost *systrayHost,
                        RelanzadoresManager *relanzadores,
                        ScriptRunnersManager *scriptRunners,
                        ClipboardHistory *clipboardHistory,
@@ -80,7 +78,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_theme(theme)
     , m_model(model)
     , m_apps(apps)
-    , m_systrayHost(systrayHost)
     , m_relanzadores(relanzadores)
     , m_scriptRunners(scriptRunners)
     , m_clipboardHistory(clipboardHistory)
@@ -138,9 +135,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     applyScreen();
 
     engine()->addImageProvider(QStringLiteral("icon"), new IconProvider);
-    if (m_systrayHost)
-        engine()->addImageProvider(QStringLiteral("systray"),
-                                   new SystrayImageProvider(m_systrayHost));
     // Window captures for the apps block's hover previews. One provider per
     // engine (the engine takes ownership), all of them over the one shared cache.
     if (m_appPreviews)
@@ -163,7 +157,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("activeWindow"), m_activeWindow);
     rootContext()->setContextProperty(QStringLiteral("wallpaperControl"), m_wallpaperControl);
     rootContext()->setContextProperty(QStringLiteral("power"), m_power);
-    rootContext()->setContextProperty(QStringLiteral("systray"), systrayModel);
     rootContext()->setContextProperty(QStringLiteral("relanzadores"), m_relanzadores);
     rootContext()->setContextProperty(QStringLiteral("scriptRunners"), m_scriptRunners);
     rootContext()->setContextProperty(QStringLiteral("clipboardHistory"), m_clipboardHistory);
@@ -188,6 +181,10 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // binary, so it is built here instead of travelling through Shared.
     m_cmLauncher = new ControlManagerLauncher(this);
     rootContext()->setContextProperty(QStringLiteral("cmLauncher"), m_cmLauncher);
+    // Same shape again: the system tray is its own resident binary now, and the
+    // "systray" widget is a button that toggles its window.
+    m_systrayLauncher = new SystrayLauncher(this);
+    rootContext()->setContextProperty(QStringLiteral("systrayLauncher"), m_systrayLauncher);
     // The weather window is another binary, but its *data* is this process':
     // the widget draws the temperature from the shared WeatherControl and only
     // uses the launcher when clicked.
@@ -584,7 +581,6 @@ void DockWindow::openSettings()
 {
     if (!m_dialog)
         m_dialog = new SettingsDialog(m_config, m_apps,
-                m_manager ? m_manager->systrayHost() : m_systrayHost,
                 m_manager ? m_manager->relanzadores() : m_relanzadores,
                 m_manager, m_theme,
                 m_manager ? m_manager->audio() : nullptr, m_appearance);

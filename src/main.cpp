@@ -64,8 +64,7 @@
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
 #include "screenshotsource.h"
-#include "systray.h"
-#include "systraymodel.h"
+#include "systraylauncher.h"
 #include "thumbnailcache.h"
 #include "thumbnailsource.h"
 #include "theme.h"
@@ -394,7 +393,6 @@ int main(int argc, char *argv[])
     QObject::connect(&lxqtWallpapers, &LxqtWallpapers::activeChanged, &wallpaperControl,
                      [&wallpaperControl] { wallpaperControl.refreshAvailability(); });
     PowerControl power;
-    SystrayHost systray;
     RelanzadoresManager relanzadores(&apps);
     ScriptRunnersManager scriptRunners;
     ClipboardHistory clipboardHistory;
@@ -466,7 +464,6 @@ int main(int argc, char *argv[])
     shared.activeWindow = &activeWindow;
     shared.wallpaperControl = &wallpaperControl;
     shared.power = &power;
-    shared.systrayHost = &systray;
     shared.relanzadores = &relanzadores;
     shared.scriptRunners = &scriptRunners;
     shared.clipboardHistory = &clipboardHistory;
@@ -575,6 +572,10 @@ int main(int argc, char *argv[])
     // start so that click is instant too.
     TileMenuLauncher::startIfPreloading();
     ControlManagerLauncher::startIfPreloading();
+    // The system tray host/watcher must be resident to keep collecting items:
+    // bring it up (hidden) at startup, before the session's tray clients look
+    // for a watcher. Defaults to on (see SystrayLauncher::preload()).
+    SystrayLauncher::startIfPreloading();
     // The desktop-widget canvases: one per enabled monitor, if the master
     // switch is on (Configuración → Desktop).
     DesktopLauncher::startEnabled();

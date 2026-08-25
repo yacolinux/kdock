@@ -418,7 +418,7 @@ private slots:
         shared.qtCompat = &qtCompat;
         DockManager manager(shared);
 
-        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, nullptr, &manager, &theme);
+        SettingsDialog dlg(manager.configFor(id), &apps, nullptr, &manager, &theme);
 
         QGroupBox *box = nullptr;
         for (QGroupBox *g : dlg.findChildren<QGroupBox *>()) {

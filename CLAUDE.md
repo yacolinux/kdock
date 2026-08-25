@@ -81,7 +81,7 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
    el estilo por omisión, medí `height()` de cada control custom, no alcanza con que el QML
    cargue.
 
-**Son siete binarios**, los siete los compila el mismo `cmake --build build`:
+**Son ocho binarios**, los ocho los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -113,6 +113,20 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
   la barra de solapas viene después). Su `.desktop` no pide privilegios (layer-shell no está en
   la lista restringida), así que no necesita refresco de ksycoca. Detalles en `AGENTS.md` →
   *Widgets de escritorio*.
+- `kdock-systray` (`build/systray/kdock-systray`, árbol `systray/`): la **bandeja del sistema**.
+  Es dueño del **host y del watcher de StatusNotifierItem de toda la sesión** (el código de
+  `systray.{h,cpp}`, `systraymodel.{h,cpp}`, `systrayimageprovider.{h,cpp}` y `dbusmenu.{h,cpp}`
+  que **antes vivía en `src/` y ahora está en `systray/src/`**) y dibuja los íconos y sus menús
+  DBusMenu en su propia ventana. Superficie **layer-shell** anclada al borde del dock, estilo
+  panel de control (`CmWindow`): redimensionable por config, `exclusiveZone=0`, se oculta al
+  perder foco / Esc. Bus propio `org.kdock.Systray` (`/Systray`), config propia `systray.conf`.
+  **Instancia única y RESIDENTE**: la ventana se esconde, el proceso sigue vivo — un host SNI
+  tiene que seguir corriendo para juntar los ítems de la sesión, así que NO sirve el modelo
+  "cerrar = terminar" de weather. El widget `systray` del dock es solo un botón que togglea la
+  ventana (`SystrayLauncher`, `src/systraylauncher.{h,cpp}`, como el de weather/controlmanager).
+  Su `.desktop` no pide privilegios (layer-shell no está restringido y SNI es D-Bus de sesión),
+  así que **no necesita refresco de ksycoca**. Detalles en `AGENTS.md` → *Bandeja del sistema*.
+  Ojo con el watcher zombi de kded6, más abajo (*Arnés de `kdock-systray`*).
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -161,14 +175,14 @@ ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(
 Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
 y el bug "seguía" (2026-08-10).
 
-El install escribe **catorce** cosas: los siete binarios y sus siete `.desktop`. Después de
+El install escribe **dieciséis** cosas: los ocho binarios y sus ocho `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
 tarjetas caen a ícono, y desde 2026-08-17 `kdock` se queda sin las vistas previas al hoverear
 un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager`,
-`kdock-weather` y `kdock-desktop` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+`kdock-weather`, `kdock-desktop` y `kdock-systray` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
 el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos, saltealo
-y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las siete líneas
+y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las ocho líneas
 de `.desktop` dicen `Up-to-date`, ksycoca ya los tiene y no hay nada que refrescar, sin importar
 cuántos binarios se hayan reemplazado. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier
@@ -875,6 +889,58 @@ Cuatro cosas:
 - **El clic del widget del dock también se prueba de punta a punta** bajo Xvfb: dock con
   `showWeather=true`, `xdotool click` sobre el ícono, y la ventana del clima aparece en la
   misma captura (verificado 2026-08-11). También necesita `dbus-run-session`, por lo mismo.
+
+### Arnés de `kdock-systray` (y el watcher zombi de kded6)
+
+La lógica del **host SNI** ya la congela `tests/unit/tst_systray.cpp` (bajo `dbus-run-session`,
+con un cliente `QSystemTrayIcon` de verdad): registrar un ícono no puede colgar la GUI, y el
+host junta el ítem. Ese test **no** ejercita la ventana ni el endurecimiento del watcher.
+
+**`--dump` es la herramienta inocua**: levanta el host, espera a que asienten los viajes al
+watcher, imprime si somos el watcher y qué ítems ve, y sale sin abrir ventana. Pero **compite
+por el watcher**, así que corré en un bus propio o vas a pelearle la bandeja al kdock del
+usuario:
+
+```bash
+dbus-run-session -- env QT_QPA_PLATFORM=offscreen ./build/systray/kdock-systray --dump
+# -> "we are the watcher  kde: true fdo: true"  (bus vacío: nadie más lo tiene)
+```
+
+Y el arnés gráfico, igual que el del panel de control (bajo X **no** hay layer-shell, así que
+prueba que el QML carga y dibuja, no el anclaje ni el cierre por foco):
+
+```bash
+rm -rf /tmp/sys-w && mkdir -p /tmp/sys-w/kdock && ln -s ~/.local/share/icons /tmp/sys-w/icons
+printf '[General]\ncloseOnFocusLoss=false\n' > /tmp/sys-w/kdock/systray.conf
+timeout 40 xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- bash -c '
+  env -u WAYLAND_DISPLAY XDG_DATA_HOME=/tmp/sys-w QT_QPA_PLATFORM=xcb QT_QUICK_BACKEND=software \
+      ./build/systray/kdock-systray --show > /tmp/sys-w.log 2>&1 &
+  APP=$!; sleep 7; import -window root /tmp/systray.png; kill $APP'
+```
+
+Con el bus propio sale la bandeja vacía ("La bandeja está vacía"); para ver íconos hay que
+levantar un cliente de bandeja en ese mismo bus (como hace `tst_systray`).
+
+**El watcher zombi de kded6 (la causa del bug original, 2026-08-24).** En esta sesión mixta
+(LXQt + KDE de `/opt/kde`) el `kded6` de Ubuntu **acapara el nombre `org.kde.StatusNotifierWatcher`
+pero no sirve ningún objeto** en `/StatusNotifierWatcher` (su plugin `kf6/kded/statusnotifierwatcher.so`
+registra el nombre y no exporta el objeto). Por eso el viejo `SystrayHost` quedaba dueño solo del
+watcher `org.freedesktop` con **0 ítems**, mientras `blueman-tray` se registraba contra el watcher
+muerto de kded6, y el widget se ocultaba (`count == 0`). Diagnóstico read-only:
+
+```bash
+busctl --user call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus \
+    GetNameOwner s org.kde.StatusNotifierWatcher            # quién lo tiene
+qdbus6 org.kde.StatusNotifierWatcher /StatusNotifierWatcher # "No such object path" = zombi
+```
+
+`ensureWatcher()` (en `systray/src/systray.cpp`) ahora **no confía en el nombre**: prueba el
+objeto con un `Get` de `RegisteredStatusNotifierItems`; si da error, `becomeWatcher()` toma FDO
+(y KDE si puede). **No se le puede robar el nombre a kded6 en caliente** (no pidió
+`AllowReplacement`): para que `kdock-systray` sea el watcher de verdad hay que **ganarle el
+arranque** (autostart temprano) o **liberar el nombre** desactivando el módulo roto de kded6
+(`~/.kde-opt/config/kded6rc` → `[Module-statusnotifierwatcher]\nautoload=false`). Es un cambio de
+sesión: preguntá antes.
 
 ### Arnés del portapapeles en la sesión real (klipper como control)
 

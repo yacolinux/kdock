@@ -73,10 +73,7 @@ add_library(kdock_core OBJECT
     src/brightnesscontrol.cpp src/brightnesscontrol.h
     src/screenbrightness.cpp  src/screenbrightness.h
     src/batterycontrol.cpp    src/batterycontrol.h
-    src/systray.cpp           src/systray.h
-    src/dbusmenu.cpp          src/dbusmenu.h
-    src/systraymodel.cpp      src/systraymodel.h
-    src/systrayimageprovider.cpp src/systrayimageprovider.h
+    src/systraylauncher.cpp   src/systraylauncher.h
     src/relanzadorconfig.cpp  src/relanzadorconfig.h
     src/relanzadormodel.cpp   src/relanzadormodel.h
     src/relanzadoresmanager.cpp src/relanzadoresmanager.h
@@ -124,7 +121,7 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
 
 qt_add_resources(kdock_core "qml"
     PREFIX "/"
-    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/SystrayMenu.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
 
 # Shipped translation layers. They are copied to
@@ -190,6 +187,8 @@ add_subdirectory(controlmanager)
 # desktop-widget canvas under the dock (see desktop/CMakeLists.txt).
 add_subdirectory(desktop)
 add_subdirectory(weather)
+# kdock-systray: the system tray host+watcher and its window (see systray/CMakeLists.txt).
+add_subdirectory(systray)
 
 # Test suite (tests/README.md). Off by default so a plain build of the dock
 # needs neither Qt6::Test nor the extra targets; tests/run.sh turns it on.

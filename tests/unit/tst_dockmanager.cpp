@@ -48,7 +48,7 @@ private:
     // eso es lo que vuelca el .conf a disco. Sembrar a través del DockManager
     // dejaría las claves en el buffer y el rename a .tmp del move no encontraría
     // el archivo (reja 2 de la cabecera).
-    static QString seedDock(const QString &alias, int iconSize, bool systray = false)
+    static QString seedDock(const QString &alias, int iconSize)
     {
         const QString id = DockConfig::makeDockId(QStringLiteral("VIRT-1"), 0);
         DockConfig::addKnownDock(id);
@@ -58,7 +58,6 @@ private:
             cfg.setDockDesktops({kOtherDesktop});
             cfg.setAlias(alias);
             cfg.setIconSize(iconSize);
-            cfg.setShowSystray(systray);
         }
         return id;
     }
@@ -76,9 +75,9 @@ private slots:
         s.sync();
     }
 
-    void copyKeepsTheOriginalAndDropsTheTray()
+    void copyKeepsTheOriginal()
     {
-        const QString src = seedDock(QStringLiteral("Original"), 37, /*systray=*/true);
+        const QString src = seedDock(QStringLiteral("Original"), 37);
         DockManager mgr(m_shared);
 
         const QString copy = mgr.copyDockToNextMonitor(src);
@@ -93,12 +92,6 @@ private slots:
         // Los settings viajaron, apuntados al monitor nuevo.
         QCOMPARE(mgr.configFor(copy)->iconSize(), 37);
         QCOMPARE(mgr.configFor(copy)->screenName(), QStringLiteral("VIRT-9"));
-
-        // La bandeja no: origen y copia se ven a la vez (mismo escritorio), así
-        // que la copia la cede o los ítems se dibujarían dos veces.
-        QVERIFY(mgr.configFor(src)->showSystray());
-        QVERIFY2(!mgr.configFor(copy)->showSystray(),
-                 "la copia no puede quedarse con la bandeja del original");
 
         // El alias es del original, por diseño de copySettingsTo().
         QVERIFY(mgr.configFor(copy)->alias().isEmpty());
@@ -146,33 +139,6 @@ private slots:
         qputenv("KDOCK_TEST_SCREENS", "VIRT-1,VIRT-9");
     }
 
-    void docksOnDisjointDesktopsMayBothHostTheTray()
-    {
-        // La exclusividad de la bandeja es por grupo: dos docks que nunca están
-        // juntos en pantalla no duplican nada.
-        //
-        // Van en un monitor que NO está en KDOCK_TEST_SCREENS a propósito:
-        // wantedDocks() filtra por pantalla conectada, así que acá se les puede
-        // vaciar la lista de escritorios (el caso "dock base") sin que sync()
-        // les arme una ventana y se lleve puesto el proceso — reja 1.
-        DockManager mgr(m_shared);
-        const QString a = DockConfig::makeDockId(QStringLiteral("VIRT-7"), 0);
-        const QString b = DockConfig::makeDockId(QStringLiteral("VIRT-7"), 1);
-        for (const QString &id : {a, b}) {
-            DockConfig::addKnownDock(id);
-            DockConfig::setDockEnabled(id, true);
-        }
-        mgr.configFor(a)->setDockDesktops({2});
-        mgr.configFor(b)->setDockDesktops({3});
-        QVERIFY2(!mgr.canCoexist(a, b), "escritorios disjuntos no coexisten");
-
-        mgr.configFor(b)->setDockDesktops({2});
-        QVERIFY2(mgr.canCoexist(a, b), "mismo escritorio: sí coexisten");
-
-        // Un dock base (sin escritorios propios) comparte todos.
-        mgr.configFor(b)->setDockDesktops({});
-        QVERIFY(mgr.canCoexist(a, b));
-    }
 };
 
 KDOCK_TEST_MAIN(TestDockManager)

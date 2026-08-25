@@ -33,7 +33,7 @@
 #include "tilemenulauncher.h"
 #include "scriptrunnerconfig.h"
 #include "scriptrunnersmanager.h"
-#include "systray.h"
+#include "systraylauncher.h"
 #include "translations.h"
 
 #include <QAbstractButton>
@@ -108,7 +108,7 @@ void selectComboData(QComboBox *box, const QString &id)
 
 } // namespace
 
-SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray,
+SettingsDialog::SettingsDialog(DockConfig *config, DesktopEntryIndex *apps,
                                RelanzadoresManager *relanzadores, DockManager *manager,
                                Theme *theme, AudioControl *audio,
                                AppearanceControl *appearance, QWidget *parent)
@@ -2175,74 +2175,30 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showColorAuto, &QCheckBox::toggled, m_config, &DockConfig::setShowColorAuto);
     form->addRow(tr("Generar Color:"), showColorAuto);
 
-    // The tray can live in any dock, but in only one at a time: several docks
-    // drawing the same StatusNotifierItems would duplicate every icon and open
-    // two menus for one click. While another dock holds it, the checkbox is
-    // disabled and says where to go turn it off (the state is recomputed by
-    // buildTabs() whenever the edited dock changes).
+    // The system tray now lives in its own resident process (kdock-systray): the
+    // "systray" widget is a button that opens that window near the dock. This
+    // checkbox is **per-dock** — it decides which docks draw the button (no
+    // exclusivity: several buttons harmlessly toggle the one shared window).
     auto *showSystray = new QCheckBox(tr("Mostrar la bandeja del sistema"), tab);
     showSystray->setChecked(m_config->showSystray());
-    // Only docks that can be on screen at the same time collide: a dock bound
-    // to another virtual desktop may host its own tray. When taken elsewhere the
-    // checkbox stays enabled but checking it asks for confirmation to move the
-    // tray here (irreversible except by re-enabling it from the other dock).
-    const QString systrayOwner = m_manager ? m_manager->systrayDockIdFor(m_dockId) : QString();
-    const bool takenElsewhere = !systrayOwner.isEmpty() && systrayOwner != m_dockId;
-    // Keep enabled so the user can request the move; the toggled handler will
-    // confirm before stealing the tray from the other dock.
-    showSystray->setEnabled(true);
-    if (takenElsewhere)
-        showSystray->setToolTip(tr("La bandeja ya está activa en \"%1\". Al marcarla acá se pedirá "
-                                   "confirmación para quitarla de allí y activarla aquí.")
-                                    .arg(dockLabel(systrayOwner)));
-    connect(showSystray, &QCheckBox::toggled, this, [this, showSystray](bool checked) {
-        if (!checked) {
-            m_config->setShowSystray(false);
-            return;
-        }
-        const QString owner = m_manager ? m_manager->systrayDockIdFor(m_dockId) : QString();
-        const bool taken = !owner.isEmpty() && owner != m_dockId;
-        if (taken) {
-            const auto reply = QMessageBox::question(
-                this, tr("Mover bandeja del sistema"),
-                tr("La bandeja del sistema ya está activa en \"%1\".\n\n"
-                   "¿Quitarla de allí y activarla en \"%2\"?\n"
-                   "Este cambio quitará la bandeja del otro dock y solo podrá "
-                   "revertirse volviendo a activarla desde ese dock.")
-                    .arg(dockLabel(owner), dockLabel(m_dockId)),
-                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-            if (reply == QMessageBox::Yes) {
-                if (DockConfig *other = m_manager->configFor(owner))
-                    other->setShowSystray(false);
-                m_config->setShowSystray(true);
-            } else {
-                const QSignalBlocker block(showSystray);
-                showSystray->setChecked(false);
-            }
-        } else {
-            m_config->setShowSystray(true);
-        }
-    });
+    connect(showSystray, &QCheckBox::toggled, m_config, &DockConfig::setShowSystray);
     form->addRow(tr("System tray:"), showSystray);
 
-    if (takenElsewhere) {
-        auto *note = new QLabel(tr("La bandeja ya está activa en \"%1\". Al marcar la casilla se "
-                                   "pedirá confirmación para moverla aquí (se quitará del otro dock).")
-                                    .arg(dockLabel(systrayOwner)),
-                                tab);
-        note->setWordWrap(true);
-        note->setStyleSheet(QStringLiteral("color: gray; font-style: italic;"));
-        form->addRow(QString(), note);
-    }
+    // The remaining two are process-wide (they live in systray.conf): whether
+    // kdock brings the resident tray up at startup, and a shortcut to its own
+    // settings dialog (window size, edge, icons).
+    auto *systrayPreload = new QCheckBox(tr("Precargar la bandeja al iniciar"), tab);
+    systrayPreload->setChecked(SystrayLauncher::preload());
+    systrayPreload->setToolTip(tr("La bandeja debe estar residente para juntar los íconos de la "
+                                  "sesión; se recomienda dejarlo activado."));
+    connect(systrayPreload, &QCheckBox::toggled, this,
+            [](bool on) { SystrayLauncher::setPreload(on); });
+    form->addRow(QString(), systrayPreload);
 
-    auto *systrayScale = new QSpinBox(tab);
-    systrayScale->setRange(20, 100);
-    systrayScale->setSingleStep(5);
-    systrayScale->setSuffix(QStringLiteral("%"));
-    systrayScale->setValue(m_config->systrayIconScale());
-    systrayScale->setToolTip(tr("Size of system tray icons as a percentage of the base icon size."));
-    connect(systrayScale, &QSpinBox::valueChanged, m_config, &DockConfig::setSystrayIconScale);
-    form->addRow(tr("Systray icon scale:"), systrayScale);
+    auto *systraySettings = new QPushButton(tr("Configurar bandeja…"), tab);
+    connect(systraySettings, &QPushButton::clicked, this,
+            [] { SystrayLauncher().openSettings(); });
+    form->addRow(QString(), systraySettings);
 
     auto *group = new QCheckBox(tr("Group windows of the same application"), tab);
     group->setChecked(m_config->groupWindows());

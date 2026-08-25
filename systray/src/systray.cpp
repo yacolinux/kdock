@@ -417,108 +417,156 @@ void SystrayHost::ensureWatcher()
     const bool kdeExists = dbus->isServiceRegistered(KDE_WATCHER_SERVICE);
     const bool fdoExists = dbus->isServiceRegistered(FDO_WATCHER_SERVICE);
 
-    if (kdeExists) {
-        m_watcherService = KDE_WATCHER_SERVICE;
-    } else if (fdoExists) {
-        m_watcherService = FDO_WATCHER_SERVICE;
-    } else {
-        // No watcher present (LXQt, bare wlroots): become one ourselves, under
-        // both bus names AND both interface names. Exporting only one interface
-        // while talking to ourselves through the other is what used to break
-        // the whole tray here — see SniWatcherAdaptor.
-        new SniWatcherKdeAdaptor(this, &m_watcherObject);
-        new SniWatcherFdoAdaptor(this, &m_watcherObject);
-        bus.registerObject(WATCHER_PATH, &m_watcherObject, QDBusConnection::ExportAdaptors);
-        bus.registerService(KDE_WATCHER_SERVICE);
-        bus.registerService(FDO_WATCHER_SERVICE);
-        m_watcherService = KDE_WATCHER_SERVICE;
-        m_isWatcher = true;
-    }
-    qInfo() << "kdock: systray using watcher" << m_watcherService
-            << "(kde:" << kdeExists << "fdo:" << fdoExists
-            << "ours:" << m_isWatcher << ")";
-
+    // Our host name + object first: valid whether we end up a host or the
+    // watcher, and needed before either register call.
     m_hostService = QStringLiteral("org.kde.StatusNotifierHost-%1")
                         .arg(QCoreApplication::applicationPid());
     bus.registerService(m_hostService);
     bus.registerObject(QStringLiteral("/StatusNotifierHost"), this,
                         QDBusConnection::ExportAdaptors);
 
-    if (m_isWatcher) {
-        // Registering with ourselves over the bus would be a round trip whose
-        // only possible outcomes are "it worked" and "the tray is dead": there
-        // is nothing asynchronous to wait for, and a failure here (which is
-        // exactly what happened) leaves m_active false and the watcher signals
-        // unconnected, so no item is ever picked up. Take the short path.
-        //
-        // No connectWatcherSignals() either: those signals would be our own,
-        // and items reach us directly through registerItem(). Nor is there an
-        // initial list to read — we have just come up, so there is none.
-        m_active = true;
-        emit watcherHostRegistered(m_hostService);
-        qInfo() << "kdock: systray host registered (we are the watcher)";
+    if (!kdeExists && !fdoExists) {
+        // No watcher present (LXQt, bare wlroots): become one ourselves.
+        becomeWatcher();
         return;
     }
 
+    // A watcher name is taken — but a name is not an object. On this mixed KF6
+    // session kded6 owns org.kde.StatusNotifierWatcher yet serves *nothing* at
+    // /StatusNotifierWatcher (its Plasma module never exports the object), which
+    // left the tray permanently empty: we registered as a host against a dead
+    // watcher and every item registered there too, so the list was always zero.
+    // Trust the name only after its object actually answers a property read.
+    m_watcherService = kdeExists ? KDE_WATCHER_SERVICE : FDO_WATCHER_SERVICE;
+    qInfo() << "kdock: systray probing watcher" << m_watcherService
+            << "(kde:" << kdeExists << "fdo:" << fdoExists << ")";
+    QDBusMessage probe = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
+        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+    probe.setArguments({m_watcherService, QStringLiteral("RegisteredStatusNotifierItems")});
+    QDBusPendingReply<QDBusVariant> reply = bus.asyncCall(probe);
+    auto *watcher = new QDBusPendingCallWatcher(reply, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, reply] {
+        watcher->deleteLater();
+        if (reply.isError()) {
+            qWarning() << "kdock: systray watcher" << m_watcherService
+                       << "holds the name but serves no object:" << reply.error().message()
+                       << "— trying to revive it";
+            tryReviveKdedWatcher();
+            return;
+        }
+        // Alive: adopt it as our watcher, and seed from the ids it just gave us
+        // instead of a second round trip.
+        setupAsHost(reply.value().variant().toStringList());
+    });
+}
+
+void SystrayHost::tryReviveKdedWatcher()
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    // Ask kded6 to load its statusnotifierwatcher module. On this mixed KF6
+    // session kded6 reserves org.kde.StatusNotifierWatcher but does not serve the
+    // object until the module is loaded — and it keeps the name reserved even when
+    // the module is unloaded, so becoming a competing watcher only ever gets us
+    // the freedesktop name (a split brain: real clients use the org.kde one). The
+    // fix is to revive kded's own watcher and host it.
+    QDBusMessage load = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.kded6"), QStringLiteral("/kded"),
+        QStringLiteral("org.kde.kded6"), QStringLiteral("loadModule"));
+    load.setArguments({QStringLiteral("statusnotifierwatcher")});
+    auto *loadWatcher = new QDBusPendingCallWatcher(bus.asyncCall(load), this);
+    connect(loadWatcher, &QDBusPendingCallWatcher::finished, this, [this, loadWatcher] {
+        loadWatcher->deleteLater();
+        // Re-probe regardless of the loadModule reply: on a session with no kded6
+        // (bare wlroots) the call errors and the re-probe just confirms there is
+        // still nothing, so we fall through to becoming the watcher ourselves.
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        QDBusMessage probe = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
+            QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
+        probe.setArguments({m_watcherService, QStringLiteral("RegisteredStatusNotifierItems")});
+        QDBusPendingReply<QDBusVariant> reply = bus.asyncCall(probe);
+        auto *probeWatcher = new QDBusPendingCallWatcher(reply, this);
+        connect(probeWatcher, &QDBusPendingCallWatcher::finished, this, [this, probeWatcher, reply] {
+            probeWatcher->deleteLater();
+            if (reply.isError()) {
+                qWarning() << "kdock: could not revive" << m_watcherService
+                           << "(no kded module to load):" << reply.error().message()
+                           << "— becoming the watcher ourselves";
+                becomeWatcher();
+                return;
+            }
+            qInfo() << "kdock: revived kded's statusnotifierwatcher; hosting it";
+            setupAsHost(reply.value().variant().toStringList());
+        });
+    });
+}
+
+void SystrayHost::becomeWatcher()
+{
+    if (m_isWatcher)
+        return;
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    // Export the object under BOTH interface names: exporting only one while
+    // talking to ourselves through the other is what used to break the whole
+    // tray here — see SniWatcherAdaptor.
+    new SniWatcherKdeAdaptor(this, &m_watcherObject);
+    new SniWatcherFdoAdaptor(this, &m_watcherObject);
+    bus.registerObject(WATCHER_PATH, &m_watcherObject, QDBusConnection::ExportAdaptors);
+    // Grab both names. KDE may be squatted by a dead kded6 watcher we cannot
+    // evict at runtime (it never asked for AllowReplacement); FDO is normally
+    // free. Own whichever we can and point m_watcherService at it.
+    const bool gotKde = bus.registerService(KDE_WATCHER_SERVICE);
+    const bool gotFdo = bus.registerService(FDO_WATCHER_SERVICE);
+    m_watcherService = gotKde ? KDE_WATCHER_SERVICE
+                       : gotFdo ? FDO_WATCHER_SERVICE
+                                : KDE_WATCHER_SERVICE;
+    m_isWatcher = true;
+    // Registering with ourselves over the bus would be a round trip whose only
+    // outcomes are "it worked" and "the tray is dead": nothing to await. Items
+    // reach us directly through registerItem(), and there is no initial list —
+    // we have just come up.
+    m_active = true;
+    emit watcherHostRegistered(m_hostService);
+    qInfo() << "kdock: systray host registered (we are the watcher) kde:" << gotKde
+            << "fdo:" << gotFdo;
+    if (!gotKde) {
+        qWarning() << "kdock: could NOT take org.kde.StatusNotifierWatcher (held by another "
+                      "process, likely a dead kded6 module). Tray clients that prefer that "
+                      "name may not appear until it is freed (disable kded6's "
+                      "statusnotifierwatcher module and restart the session).";
+    }
+}
+
+void SystrayHost::setupAsHost(const QStringList &initialIds)
+{
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    m_active = true;
+    qInfo() << "kdock: systray adopting watcher" << m_watcherService
+            << "with" << initialIds.size() << "initial item(s)";
+    // Connect signals before seeding so an item that registers during setup is
+    // not missed.
+    connectWatcherSignals();
+    for (const QString &id : initialIds) {
+        QString svc, pth;
+        splitItemId(id, svc, pth);
+        addItem(svc, pth);
+    }
+    // Tell the watcher we host, so items know to publish. Best effort: the probe
+    // already proved the object is alive, and the signals + seed above are what
+    // actually populate us, but a well-behaved watcher wants to hear it.
     QDBusMessage msg = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
         m_watcherService, QStringLiteral("RegisterStatusNotifierHost"));
     msg.setArguments({m_hostService});
     QDBusPendingReply<> reply = bus.asyncCall(msg);
-
-    QDBusPendingCallWatcher *watcher = new QDBusPendingCallWatcher(reply, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, reply]() {
+    auto *watcher = new QDBusPendingCallWatcher(reply, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, reply] {
         watcher->deleteLater();
         if (reply.isError()) {
-            qWarning() << "kdock: failed to register systray host:" << reply.error().message();
-            // Watcher claimed to exist at ensureWatcher() time but its object
-            // vanished by the time we called RegisterStatusNotifierHost (stale
-            // name, crashing watcher, race on restart). Fall back to becoming
-            // the watcher ourselves instead of leaving m_active false forever
-            // (reported 2026-08-21: systray stayed empty though showSystray=true
-            // after an intense tooltip flicker + restart).
-            if (!m_isWatcher && reply.error().message().contains(QStringLiteral("No such object path"))) {
-                qInfo() << "kdock: systray watcher vanished, becoming watcher ourselves";
-                QDBusConnection bus = QDBusConnection::sessionBus();
-                new SniWatcherKdeAdaptor(this, &m_watcherObject);
-                new SniWatcherFdoAdaptor(this, &m_watcherObject);
-                bus.registerObject(WATCHER_PATH, &m_watcherObject, QDBusConnection::ExportAdaptors);
-                bus.registerService(KDE_WATCHER_SERVICE);
-                bus.registerService(FDO_WATCHER_SERVICE);
-                m_watcherService = KDE_WATCHER_SERVICE;
-                m_isWatcher = true;
-                m_active = true;
-                emit watcherHostRegistered(m_hostService);
-                qInfo() << "kdock: systray host registered (we are the watcher, fallback)";
-                return;
-            }
-            return;
+            // The watcher's object answered the probe but vanished before this
+            // call (crash, restart race). Take over ourselves.
+            qWarning() << "kdock: RegisterStatusNotifierHost failed:" << reply.error().message()
+                       << "— becoming the watcher ourselves";
+            becomeWatcher();
         }
-        m_active = true;
-        qInfo() << "kdock: systray host registered successfully";
-        connectWatcherSignals();
-        // RegisteredStatusNotifierItems is a *property* of the real watcher
-        // (our own scriptable method only mattered when we were the watcher),
-        // so read it via org.freedesktop.DBus.Properties.Get.
-        QDBusMessage listMsg = QDBusMessage::createMethodCall(m_watcherService, WATCHER_PATH,
-            QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"));
-        listMsg.setArguments({m_watcherService, QStringLiteral("RegisteredStatusNotifierItems")});
-        QDBusPendingReply<QDBusVariant> listReply = QDBusConnection::sessionBus().asyncCall(listMsg);
-        QDBusPendingCallWatcher *listWatcher = new QDBusPendingCallWatcher(listReply, this);
-        connect(listWatcher, &QDBusPendingCallWatcher::finished, this, [this, listWatcher, listReply]() {
-            listWatcher->deleteLater();
-            if (listReply.isError()) {
-                qWarning() << "kdock: failed to get registered systray items:" << listReply.error().message();
-                return;
-            }
-            const QStringList ids = listReply.value().variant().toStringList();
-            qInfo() << "kdock: systray initial items count:" << ids.size();
-            for (const QString &id : ids) {
-                qInfo() << "kdock: systray initial item:" << id;
-                QString svc, pth;
-                splitItemId(id, svc, pth);
-                addItem(svc, pth);
-            }
-        });
     });
 }
 

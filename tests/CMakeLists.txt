@@ -62,9 +62,16 @@ kdock_add_unit_test(tst_kwinscripts)
 # real session bus it would fight the running kdock for the session's tray (and
 # on a KDE session, plasmashell). Without the wrapper the test does not run at
 # all — it is skipped, not silently pointed at the real bus.
-qt_add_executable(tst_systray ${CMAKE_CURRENT_SOURCE_DIR}/unit/tst_systray.cpp)
-target_link_libraries(tst_systray PRIVATE kdock_core Qt6::Test)
-target_include_directories(tst_systray PRIVATE ${KDOCK_TESTS_DIR}/unit)
+# The SNI host + DBusMenu client moved out of kdock_core into the kdock-systray
+# binary (systray/src), so the test compiles those two sources directly.
+qt_add_executable(tst_systray
+    ${CMAKE_CURRENT_SOURCE_DIR}/unit/tst_systray.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../systray/src/systray.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../systray/src/dbusmenu.cpp)
+target_link_libraries(tst_systray PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::DBus Qt6::Test)
+target_include_directories(tst_systray PRIVATE
+    ${KDOCK_TESTS_DIR}/unit ${CMAKE_CURRENT_SOURCE_DIR}/../systray/src)
 find_program(KDOCK_DBUS_RUN_SESSION dbus-run-session)
 if(KDOCK_DBUS_RUN_SESSION)
     add_test(NAME tst_systray

@@ -5,7 +5,6 @@
 #include "dockconfig.h"
 #include "dockmodel.h"
 #include "dockwindow.h"
-#include "systraymodel.h"
 #include "translations.h"
 #include "virtualdesktops.h"
 
@@ -30,7 +29,6 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
     , m_shared(shared)
 {
     migrateFirstRun();
-    normalizeSystrayOwner();
 
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { sync(); });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { sync(); });
@@ -79,60 +77,6 @@ QString DockManager::primaryDockId() const
     return docks.isEmpty() ? QString() : docks.first();
 }
 
-QString DockManager::systrayDockId()
-{
-    // Only one dock draws the tray at a time (see normalizeSystrayOwner): the
-    // first configured dock that claims it wins, so the answer is stable even if
-    // a hand-edited config flags several.
-    for (const QString &id : configuredDocks())
-        if (configFor(id)->showSystray())
-            return id;
-    return QString();
-}
-
-QString DockManager::systrayDockIdFor(const QString &dockId)
-{
-    // Docks that are never on screen together (different virtual desktops) may
-    // each host a tray: without this, a desktop with its own docks would have
-    // no way to show one.
-    for (const QString &id : configuredDocks()) {
-        if (id == dockId || !configFor(id)->showSystray())
-            continue;
-        if (canCoexist(id, dockId))
-            return id;
-    }
-    return QString();
-}
-
-void DockManager::normalizeSystrayOwner()
-{
-    // The tray used to be drawn by the primary dock only, so "showSystray" could
-    // be left true in several per-dock files without any visible effect. Now
-    // every dock honours its own flag, which would show the same items twice, so
-    // the extra claims are dropped once at startup. The primary dock keeps the
-    // tray when it has it, to preserve the pre-change appearance.
-    //
-    // "Extra" is scoped to docks that can be on screen together: two docks on
-    // different virtual desktops never duplicate anything, so both keep their
-    // claim.
-    QStringList owners;
-    const QString preferred = primaryDockId();
-    if (!preferred.isEmpty() && configFor(preferred)->showSystray())
-        owners << preferred;
-    for (const QString &id : configuredDocks()) {
-        DockConfig *cfg = configFor(id);
-        if (!cfg->showSystray() || owners.contains(id))
-            continue;
-        bool collides = false;
-        for (const QString &owner : std::as_const(owners))
-            collides = collides || canCoexist(owner, id);
-        if (collides)
-            cfg->setShowSystray(false);
-        else
-            owners << id;
-    }
-}
-
 int DockManager::currentDesktop() const
 {
     return m_shared.desktops ? m_shared.desktops->currentPosition() : 0;
@@ -179,18 +123,6 @@ QStringList DockManager::wantedDocks(int desktop)
         wanted += own.isEmpty() ? basePerScreen.value(screen) : own;
     }
     return wanted;
-}
-
-bool DockManager::canCoexist(const QString &dockIdA, const QString &dockIdB)
-{
-    const QList<int> a = configFor(dockIdA)->dockDesktops();
-    const QList<int> b = configFor(dockIdB)->dockDesktops();
-    if (a.isEmpty() || b.isEmpty())
-        return true; // a base dock shares every desktop
-    for (int position : a)
-        if (b.contains(position))
-            return true;
-    return false;
 }
 
 QString DockManager::createEmptyDock(const QString &screenName, QString *error)
@@ -321,13 +253,7 @@ QString DockManager::cloneToNextMonitor(const QString &dockId, bool keepSource)
     if (!configFor(dockId)->copySettingsTo(dstDockId))
         return {};
 
-    if (keepSource) {
-        // Both docks are on screen now, so the copy cannot keep a tray its
-        // source still claims — it would draw every item twice. Docks bound to
-        // disjoint desktops never collide, and there both keep it.
-        if (configFor(dstDockId)->showSystray() && canCoexist(dockId, dstDockId))
-            configFor(dstDockId)->setShowSystray(false);
-    } else {
+    if (!keepSource) {
         // The old dock disappears from the Docks tab: it is disabled, dropped
         // from knownDocks and its config file renamed to .tmp (see the sweep
         // above).
@@ -758,12 +684,6 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     // selectable-apps widgets are created by DockWindow::appsModelFor().
     auto *model = new DockModel(cfg, m_shared.apps, m_shared.monitor, m_shared.desktops,
                                 QString(), this);
-    // Every dock gets its own view of the shared tray host: the model is a
-    // filtered list over SystrayHost::items(), so several are harmless. Which
-    // dock actually draws it is the per-dock "showSystray" flag, gated in QML —
-    // keeping it out of the instance role means toggling the tray never has to
-    // tear down and rebuild a dock window.
-    auto *systrayModel = new SystrayModel(m_shared.systrayHost, cfg, this);
 
     // Per-dock clocks, bound to this monitor's format settings.
     auto *clock = new ClockWidget(this);
@@ -789,7 +709,7 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
     auto *window = new DockWindow(
         cfg, m_shared.theme, model, m_shared.apps, m_shared.volume, clock,
         clock2, m_shared.brightness, m_shared.battery, m_shared.overview, m_shared.desktopControl,
-        m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power, systrayModel, m_shared.systrayHost,
+        m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power,
         m_shared.relanzadores, m_shared.scriptRunners, m_shared.clipboardHistory,
         m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor,
         m_shared.desktops, m_shared.weather, m_shared.autoColors, m_shared.appPreviews);
@@ -801,14 +721,13 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
         qInfo("kdock: startup dock %s built in %lld ms", qPrintable(dockId),
               qlonglong(buildTimer.elapsed()));
 
-    return {model, systrayModel, clock, clock2, window, primary};
+    return {model, clock, clock2, window, primary};
 }
 
 void DockManager::teardownInstance(Instance &inst)
 {
     // Delete the per-instance objects we created explicitly.
     delete inst.window;
-    delete inst.systrayModel;
     delete inst.clock2;
     delete inst.clock;
     delete inst.model;

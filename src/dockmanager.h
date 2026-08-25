@@ -8,10 +8,9 @@
 // Shared services (volume, clock, brightness, overview, window monitor, ...)
 // are singletons passed to every dock's QML context. The relanzadores manager
 // is attached only to the primary dock: the lowest-slot enabled dock on the
-// primary monitor (see primaryDockId()). The systray host goes to every dock —
-// which one draws the tray is its own "showSystray" flag, kept exclusive among
-// docks that can be on screen together by systrayDockIdFor()/
-// normalizeSystrayOwner().
+// primary monitor (see primaryDockId()). The system tray is no longer one of
+// these: it lives in the separate, resident kdock-systray process (each dock's
+// "systray" widget is just a button that toggles its window).
 //
 // Docks are also filtered by KWin's current **virtual desktop**: each dock
 // carries a (possibly empty) list of desktops in DockConfig::dockDesktops(),
@@ -31,7 +30,6 @@
 class DockConfig;
 class DockModel;
 class DockWindow;
-class SystrayModel;
 class Theme;
 class DesktopEntryIndex;
 class WindowMonitor;
@@ -49,7 +47,6 @@ class MaxMinControl;
 class ActiveWindowControl;
 class WallpaperControl;
 class PowerControl;
-class SystrayHost;
 class RelanzadoresManager;
 class ScriptRunnersManager;
 class ClipboardHistory;
@@ -89,7 +86,6 @@ public:
         ActiveWindowControl *activeWindow = nullptr;
         WallpaperControl *wallpaperControl = nullptr;
         PowerControl *power = nullptr;
-        SystrayHost *systrayHost = nullptr;
         RelanzadoresManager *relanzadores = nullptr;
         ScriptRunnersManager *scriptRunners = nullptr;
         ClipboardHistory *clipboardHistory = nullptr;
@@ -187,12 +183,6 @@ public:
     // Current desktop (1-based), 0 when unknown.
     int currentDesktop() const;
 
-    // Whether two docks can be on screen at the same time, i.e. whether their
-    // desktop sets overlap (an empty set means "every desktop"). Used to scope
-    // the systray's exclusivity: two docks that are never visible together may
-    // both host a tray.
-    bool canCoexist(const QString &dockIdA, const QString &dockIdB);
-
     // Create a dock with the factory defaults in the first free slot of a
     // monitor and enable it (right-click → Dock → Crear dock vacío). Unlike
     // duplicateDockForDesktop() nothing is copied: any config file left over
@@ -218,24 +208,13 @@ public:
 
     // Same, but the original stays where it is and enabled: the next monitor
     // gets a copy (right-click → Dock → Copiar a Sig. Monitor). The two share
-    // every setting except the tray, which the copy gives up when it would be
-    // on screen next to its source (see canCoexist). Returns the new dockId,
-    // or empty on the same conditions as the move.
+    // every setting. Returns the new dockId, or empty on the same conditions as
+    // the move.
     QString copyDockToNextMonitor(const QString &dockId);
 
     // The dockId that defaults relanzadores to shown: the lowest-slot enabled
     // dock on the primary monitor.
     QString primaryDockId() const;
-
-    // The dock that currently claims the system tray, or empty when no dock
-    // does. Any dock can host it, but only one at a time *among docks that can
-    // be on screen together* (the settings dialog disables the checkbox on the
-    // others). Not const: it reads the other docks' configs through configFor().
-    QString systrayDockId();
-    // Same, restricted to the docks that would collide with `dockId` — i.e. the
-    // owner the settings dialog has to point at when it greys out the checkbox.
-    // Empty when `dockId` may claim the tray itself.
-    QString systrayDockIdFor(const QString &dockId);
 
     // The item model of a shown dock, or nullptr when that dock isn't running.
     // The settings dialog reads the app icon names out of it to tint its tabs.
@@ -265,7 +244,6 @@ public:
     // which dock opened it.
     RelanzadoresManager *relanzadores() const { return m_shared.relanzadores; }
     ScriptRunnersManager *scriptRunners() const { return m_shared.scriptRunners; }
-    SystrayHost *systrayHost() const { return m_shared.systrayHost; }
     AudioControl *audio() const { return m_shared.audio; }
     // The three backends of the VideoEnergía tab (see SettingsDialog).
     BrightnessControl *brightness() const { return m_shared.brightness; }
@@ -288,7 +266,6 @@ signals:
 private:
     struct Instance {
         DockModel *model = nullptr;
-        SystrayModel *systrayModel = nullptr;
         // Per-dock clocks: the time format is a per-monitor config setting.
         ClockWidget *clock = nullptr;
         ClockWidget2 *clock2 = nullptr;
@@ -304,9 +281,6 @@ private:
     // Body of moveDockToNextMonitor()/copyDockToNextMonitor(): the two differ
     // only in what happens to the source once the copy is in place.
     QString cloneToNextMonitor(const QString &dockId, bool keepSource);
-    // Drops every systray claim but one (see the .cpp): configs written while
-    // the tray was primary-only may flag several docks.
-    void normalizeSystrayOwner();
     void sync();
     // Map/unmap an existing dock's surface without destroying the instance.
     void setInstanceOnScreen(const QString &dockId, bool onScreen);

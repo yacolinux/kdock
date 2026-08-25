@@ -7,7 +7,7 @@
 #include <QStringList>
 
 class SystrayHost;
-class DockConfig;
+class SystrayConfig;
 
 class SystrayModel : public QAbstractListModel
 {
@@ -24,7 +24,7 @@ public:
         ItemIsMenuRole, // left click must open the menu, not activate
     };
 
-    explicit SystrayModel(SystrayHost *host, DockConfig *config, QObject *parent = nullptr);
+    explicit SystrayModel(SystrayHost *host, SystrayConfig *config, QObject *parent = nullptr);
 
     int rowCount(const QModelIndex &parent = {}) const override;
     QVariant data(const QModelIndex &index, int role) const override;
@@ -66,7 +66,7 @@ private:
     void trackItemActivateFallback(class SystrayItem *item);
 
     SystrayHost *m_host;
-    DockConfig *m_config;
+    SystrayConfig *m_config;
     QList<int> m_visible; // indices into m_host->items()
     // Items whose menu signals are already connected (a menu client is created
     // lazily and replaced if the item moves its Menu path).

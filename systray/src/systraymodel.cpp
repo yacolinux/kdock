@@ -2,12 +2,12 @@
 
 #include "dbusmenu.h"
 #include "systray.h"
-#include "dockconfig.h"
+#include "systrayconfig.h"
 
 #include <QIcon>
 #include <QPixmap>
 
-SystrayModel::SystrayModel(SystrayHost *host, DockConfig *config, QObject *parent)
+SystrayModel::SystrayModel(SystrayHost *host, SystrayConfig *config, QObject *parent)
     : QAbstractListModel(parent)
     , m_host(host)
     , m_config(config)
@@ -34,7 +34,7 @@ SystrayModel::SystrayModel(SystrayHost *host, DockConfig *config, QObject *paren
             endResetModel();
         });
     }
-    connect(m_config, &DockConfig::systrayHiddenItemsChanged, this, [this] {
+    connect(m_config, &SystrayConfig::hiddenItemsChanged, this, [this] {
         beginResetModel();
         rebuild();
         endResetModel();
@@ -48,7 +48,7 @@ void SystrayModel::rebuild()
     if (!m_host)
         return;
     const auto items = m_host->items();
-    const QStringList hidden = m_config->systrayHiddenItems();
+    const QStringList hidden = m_config->hiddenItems();
     for (int i = 0; i < items.size(); ++i) {
         if (!hidden.contains(items.at(i)->service))
             m_visible.append(i);

@@ -141,6 +141,19 @@ signals:
 
 private:
     void ensureWatcher();
+    // The watcher name is owned but serves no object. On a kded session the name
+    // is *reserved* by kded6 for its statusnotifierwatcher module (which may not
+    // be loaded), and kded keeps it reserved no matter what — so we can never grab
+    // it. Ask kded to load the module (revives the real watcher) and, if that
+    // produces a live object, host it; otherwise become the watcher ourselves.
+    void tryReviveKdedWatcher();
+    // Claim the watcher role ourselves: export the object under both interfaces
+    // and grab both bus names. Used when no watcher exists, and when reviving a
+    // dead one failed (bare wlroots, a crashed watcher whose name will free).
+    void becomeWatcher();
+    // Register as a host with the (verified alive) watcher in m_watcherService,
+    // wire its signals and seed the list from the ids the probe already fetched.
+    void setupAsHost(const QStringList &initialIds);
     void connectWatcherSignals();
     void onServiceUnregistered(const QString &service);
     void addItem(const QString &service, const QString &path);

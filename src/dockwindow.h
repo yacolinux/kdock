@@ -27,8 +27,7 @@ class ActiveWindowControl;
 class WallpaperControl;
 class PowerControl;
 class DockManager;
-class SystrayModel;
-class SystrayHost;
+class SystrayLauncher;
 class RelanzadoresManager;
 class ScriptRunnersManager;
 class ClipboardHistory;
@@ -61,7 +60,6 @@ public:
                 DesktopControl *desktopControl, MonitorControl *monitorControl,
                 MaxMinControl *maxmin, ActiveWindowControl *activeWindow,
                 WallpaperControl *wallpaperControl, PowerControl *power,
-                SystrayModel *systrayModel, SystrayHost *systrayHost = nullptr,
                RelanzadoresManager *relanzadores = nullptr,
                ScriptRunnersManager *scriptRunners = nullptr,
                ClipboardHistory *clipboardHistory = nullptr,
@@ -102,8 +100,8 @@ public:
     // The manager backing the settings dialog's per-monitor selector.
     void setManager(DockManager *manager) { m_manager = manager; }
 
-    // Whether this is the primary dock (hosts systray; relanzadores default to
-    // shown here). Exposed to QML as the `dockIsPrimary` context property.
+    // Whether this is the primary dock (relanzadores default to shown here).
+    // Exposed to QML as the `dockIsPrimary` context property.
     void setPrimary(bool primary);
 
     Q_INVOKABLE void openSettings();
@@ -186,7 +184,6 @@ private:
     // token -> model of that selectable-apps widget (see appsModelFor).
     QHash<QString, DockModel *> m_appsModels;
     DesktopEntryIndex *m_apps;
-    SystrayHost *m_systrayHost;
     RelanzadoresManager *m_relanzadores;
     ScriptRunnersManager *m_scriptRunners = nullptr;
     ClipboardHistory *m_clipboardHistory = nullptr;
@@ -211,6 +208,8 @@ private:
     ControlManagerLauncher *m_cmLauncher = nullptr;
     // Same, for kdock-weather (context property "weatherLauncher").
     WeatherLauncher *m_weatherLauncher = nullptr;
+    // Same, for kdock-systray (context property "systrayLauncher").
+    SystrayLauncher *m_systrayLauncher = nullptr;
     bool m_hidden = false;
     bool m_windowsOverlap = false;
     QList<QRect> m_gapRects; // transparent separators, see setGapRects()

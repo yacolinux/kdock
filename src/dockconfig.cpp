@@ -891,8 +891,6 @@ void DockConfig::load()
     m_showAppIcons = m_settings.value(QStringLiteral("showAppIcons"), true).toBool();
     m_showVolume = m_settings.value(QStringLiteral("showVolume"), true).toBool();
     m_showSystray = m_settings.value(QStringLiteral("showSystray"), false).toBool();
-    m_systrayIconScale = m_settings.value(QStringLiteral("systrayIconScale"), 100).toInt();
-    m_systrayHiddenItems = m_settings.value(QStringLiteral("systrayHiddenItems")).toStringList();
     m_relanzadoresHidden = m_settings.value(QStringLiteral("relanzadoresHidden")).toStringList();
     m_relanzadoresShown = m_settings.value(QStringLiteral("relanzadoresShown")).toStringList();
     m_scriptRunnersHidden = m_settings.value(QStringLiteral("scriptRunnersHidden")).toStringList();
@@ -1475,15 +1473,6 @@ void DockConfig::setShowSystray(bool show)
     m_showSystray = show;
     m_settings.setValue(QStringLiteral("showSystray"), show);
     emit showSystrayChanged();
-}
-
-void DockConfig::setSystrayHiddenItems(const QStringList &items)
-{
-    if (m_systrayHiddenItems == items)
-        return;
-    m_systrayHiddenItems = items;
-    m_settings.setValue(QStringLiteral("systrayHiddenItems"), items);
-    emit systrayHiddenItemsChanged();
 }
 
 void DockConfig::setRelanzadoresHidden(const QStringList &ids)
@@ -2219,7 +2208,6 @@ void DockConfig::setIconSize(int size)
     m_settings.setValue(QStringLiteral("iconSize"), size);
     emit iconSizeChanged();
     emit widgetIconSizeChanged();
-    emit systrayIconSizeChanged();
     emit dockThicknessChanged();
 }
 
@@ -2554,17 +2542,6 @@ void DockConfig::setWidgetIconThemeDarkBg(const QString &themeId)
     m_widgetIconThemeDarkBg = themeId;
     m_settings.setValue(QStringLiteral("widgetIconThemeDarkBg"), themeId);
     emit widgetIconThemeChanged();
-}
-
-void DockConfig::setSystrayIconScale(int percent)
-{
-    percent = qBound(20, percent, 100);
-    if (m_systrayIconScale == percent)
-        return;
-    m_systrayIconScale = percent;
-    m_settings.setValue(QStringLiteral("systrayIconScale"), percent);
-    emit systrayIconScaleChanged();
-    emit systrayIconSizeChanged();
 }
 
 void DockConfig::setSpacing(int spacing)

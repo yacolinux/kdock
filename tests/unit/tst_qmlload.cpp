@@ -43,7 +43,6 @@ private:
             QStringLiteral("qrc:/qml/ScriptRunnerWidget.qml"),
             QStringLiteral("qrc:/qml/IconMenuItem.qml"),
             QStringLiteral("qrc:/qml/SubMenuDelegate.qml"),
-            QStringLiteral("qrc:/qml/SystrayMenu.qml"),
             QStringLiteral("qrc:/qml/BackgroundColorMenu.qml"),
             QStringLiteral("qrc:/qml/ModeMenu.qml"),
             QStringLiteral("qrc:/qml/IconLabelMenu.qml"),

@@ -14,7 +14,6 @@
 class DockConfig;
 class DockManager;
 class DesktopEntryIndex;
-class SystrayHost;
 class RelanzadoresManager;
 class ScriptRunnersManager;
 class AudioControl;
@@ -50,7 +49,7 @@ class SettingsDialog : public QDialog
 {
     Q_OBJECT
 public:
-    SettingsDialog(DockConfig *config, DesktopEntryIndex *apps, SystrayHost *systray = nullptr,
+    SettingsDialog(DockConfig *config, DesktopEntryIndex *apps,
                    RelanzadoresManager *relanzadores = nullptr, DockManager *manager = nullptr,
                    Theme *theme = nullptr, AudioControl *audio = nullptr,
                    AppearanceControl *appearance = nullptr, QWidget *parent = nullptr);

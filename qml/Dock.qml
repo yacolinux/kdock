@@ -392,7 +392,6 @@ Item {
 
     readonly property int appIconPx: Math.max(8, Math.round(config.iconSize * fitScale))
     readonly property int widgetIconPx: Math.max(8, Math.round(config.widgetIconSize * fitScale))
-    readonly property int systrayIconPx: Math.max(8, Math.round(config.systrayIconSize * fitScale))
     // Gaps and the clock font shrink too: they are a large part of what a dock
     // full of sections is made of, and leaving them fixed keeps the content
     // over the edge no matter how small the icons get.
@@ -1111,7 +1110,7 @@ Item {
         case "colorauto": return config.showColorAuto && autoColors
         case "autohide": return config.showAutohideToggle
         case "showdesktop": return config.showDesktopButton && showdesktop && showdesktop.showDesktopSupported
-        case "systray": return systray && config.showSystray && systray.count > 0
+        case "systray": return systrayLauncher && config.showSystray
         case "relanzadores": return relanzadores && root.visibleRelanzadorIds.length > 0
         case "scriptrunners": return scriptRunners && root.visibleScriptRunnerIds.length > 0
         case "session": return config.showSessionButton && power && power.available
@@ -1170,7 +1169,7 @@ Item {
         case "colorauto": return colorAutoComp
         case "autohide": return autohideComp
         case "showdesktop": return showDesktopComp
-        case "systray": return systrayComp
+        case "systray": return systrayButtonComp
         case "relanzadores": return relanzadoresComp
         case "scriptrunners": return scriptRunnersComp
         case "session": return sessionComp
@@ -3681,134 +3680,69 @@ Item {
         }
     }
 
-    // Systray block: several icons, each with its own mouse handling.
+    // System tray. A block like the control panel: it owns its own mouse
+    // handling and there is no popup here — the tray is a layer-shell window of
+    // the separate kdock-systray process, and this widget just toggles it. The
+    // process also owns the StatusNotifierItem host/watcher for the session.
     Component {
-        id: systrayComp
-        Row {
-            spacing: root.spacingPx
-            Repeater {
-                id: systrayRepeater
-                model: systray
-                Item {
-                    id: systrayItem
-                    width: root.systrayIconPx
-                    height: root.systrayIconPx
+        id: systrayButtonComp
+        Item {
+            id: sysRoot
+            implicitWidth: root.appIconPx
+            implicitHeight: root.appIconPx
 
-                    ToolTip {
-                        popupType: Popup.Window
-                        visible: config.showTooltips && !root.menuOpen && systrayMouse.containsMouse
-                        delay: 400
-                            text: model.tooltip || model.service
-                                                onVisibleChanged: root.tooltipVisible = visible
-                        }
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && !root.menuOpen && sysMouse.containsMouse
+                delay: 400
+                text: qsTr("Bandeja del sistema")
+                onVisibleChanged: root.tooltipVisible = visible
+            }
 
-                    Image {
-                        anchors.centerIn: parent
-                        width: Math.round(root.systrayIconPx * 0.75)
-                        height: width
-                        // Themed icon when the item provides one; otherwise fall
-                        // back to its raw IconPixmap via the systray provider.
-                        source: model.iconName
-                            ? "image://icon/" + model.iconName + "@" + theme.revision
-                            : "image://systray/" + model.service + "@" + model.iconSerial
-                        sourceSize: Qt.size(root.systrayIconPx * Screen.devicePixelRatio,
-                                            root.systrayIconPx * Screen.devicePixelRatio)
-                        scale: systrayMouse.containsMouse ? 1.12 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 120 } }
-                    }
-                    MouseArea {
-                        id: systrayMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
-                        onClicked: (mouse) => {
-                            const gx = mapToGlobal(mouse.x, mouse.y).x
-                            const gy = mapToGlobal(mouse.x, mouse.y).y
-                            if (mouse.button === Qt.LeftButton) {
-                                // A menu-only item has nothing to activate: the
-                                // spec says show the menu. Everything else gets
-                                // Activate, and falls back to the menu if the
-                                // item does not really implement it (the model
-                                // turns that failure into menuReady).
-                                if (model.itemIsMenu && model.hasMenu)
-                                    systrayItem.openMenu(gx, gy)
-                                else
-                                    systray.activate(index, gx, gy)
-                            } else if (mouse.button === Qt.RightButton) {
-                                // Never ContextMenu when the item has a real
-                                // menu: asking the item to draw it cannot work
-                                // on Wayland (no surface to parent a popup to).
-                                if (model.hasMenu)
-                                    systrayItem.openMenu(gx, gy)
-                                else
-                                    systray.contextMenu(index, gx, gy)
-                            } else if (mouse.button === Qt.MiddleButton) {
-                                systray.secondaryActivate(index, gx, gy)
-                            }
-                        }
-                    }
+            Image {
+                anchors.centerIn: parent
+                width: root.appIconPx
+                height: root.appIconPx
+                source: "image://icon/preferences-desktop-notification" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.appIconPx * Screen.devicePixelRatio,
+                                    root.appIconPx * Screen.devicePixelRatio)
+                scale: sysMouse.containsMouse ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
 
-                    // ---- The item's own menu, drawn by us ------------------
-                    // Fetching it is asynchronous, so a click only *asks*; the
-                    // menu opens when the layout arrives.
-                    property bool menuWanted: false
-                    function openMenu(gx, gy) {
-                        systrayItem.menuWanted = true
-                        systrayItem.pendingX = gx
-                        systrayItem.pendingY = gy
-                        systray.requestMenu(index)
-                    }
-                    property int pendingX: 0
-                    property int pendingY: 0
+            MouseArea {
+                id: sysMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                // A block, so the section-level MouseArea is disabled here and the
+                // right button has to be handled by this one.
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) { sysCtxMenu.popup(); return }
+                    // The dock's connector: the tray is a layer surface, so it
+                    // really lands on that output.
+                    systrayLauncher.toggle(config.screenName)
+                }
+            }
 
-                    SystrayMenu {
-                        id: itemMenu
-                        itemRow: index
-                        service: model.service
-                        onAboutToShow: root.menuOpen = true
-                        onOpened: systray.setMenuOpen(index, true)
-                        onClosed: {
-                            root.menuOpen = false
-                            systray.setMenuOpen(index, false)
-                        }
-                    }
+            Menu {
+                id: sysCtxMenu
+                popupType: Popup.Window
+                // A translated label can outgrow the capabase one, and a QtQuick
+                // Menu does not size to its widest item (see CLAUDE.md).
+                width: Math.max(implicitWidth + 64, 240)
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
 
-                    Connections {
-                        target: systray
-                        function onMenuReady(row) {
-                            if (row !== index || !systrayItem.menuWanted)
-                                return
-                            systrayItem.menuWanted = false
-                            itemMenu.nodes = systray.menuTree(index)
-                            itemMenu.popup(systrayItem.menuOriginX(),
-                                           systrayItem.menuOriginY())
-                        }
-                        function onMenuFailed(row) {
-                            if (row !== index || !systrayItem.menuWanted)
-                                return
-                            systrayItem.menuWanted = false
-                            // No menu to draw: let the item try its own way.
-                            systray.contextMenu(index, systrayItem.pendingX,
-                                                systrayItem.pendingY)
-                        }
-                        function onMenuInvalidated(row) {
-                            // Keep an open menu in step with the item.
-                            if (row === index && itemMenu.visible)
-                                itemMenu.nodes = systray.menuTree(index)
-                        }
-                    }
-
-                    // Opens away from the dock edge, like every other popup.
-                    function menuOriginX() {
-                        if (config.edge === 2) return systrayItem.width
-                        if (config.edge === 3) return -itemMenu.width
-                        return 0
-                    }
-                    function menuOriginY() {
-                        if (config.edge === 0) return -itemMenu.height
-                        if (config.edge === 1) return systrayItem.height
-                        return 0
-                    }
+                IconMenuItem {
+                    text: qsTr("Configurar bandeja…")
+                    iconName: "configure"
+                    onTriggered: systrayLauncher.openSettings()
+                }
+                IconMenuItem {
+                    text: qsTr("Dock settings…")
+                    iconName: "configure"
+                    onTriggered: dockWindow.openSettings()
                 }
             }
         }

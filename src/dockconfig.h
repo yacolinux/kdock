@@ -48,10 +48,10 @@ class DockConfig : public QObject
     Q_PROPERTY(int alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged)
     Q_PROPERTY(bool showAppIcons READ showAppIcons WRITE setShowAppIcons NOTIFY showAppIconsChanged)
     Q_PROPERTY(bool showVolume READ showVolume WRITE setShowVolume NOTIFY showVolumeChanged)
+    // Per-dock visibility of the systray launcher button (token `systray`). The
+    // tray itself lives in kdock-systray; this only decides which docks draw the
+    // button. No exclusivity: several buttons harmlessly toggle the one window.
     Q_PROPERTY(bool showSystray READ showSystray WRITE setShowSystray NOTIFY showSystrayChanged)
-    Q_PROPERTY(int systrayIconScale READ systrayIconScale WRITE setSystrayIconScale NOTIFY systrayIconScaleChanged)
-    Q_PROPERTY(int systrayIconSize READ systrayIconSize NOTIFY systrayIconSizeChanged)
-    Q_PROPERTY(QStringList systrayHiddenItems READ systrayHiddenItems WRITE setSystrayHiddenItems NOTIFY systrayHiddenItemsChanged)
     Q_PROPERTY(QStringList relanzadoresHidden READ relanzadoresHidden WRITE setRelanzadoresHidden NOTIFY relanzadoresHiddenChanged)
     Q_PROPERTY(QStringList relanzadoresShown READ relanzadoresShown WRITE setRelanzadoresShown NOTIFY relanzadoresShownChanged)
     Q_PROPERTY(QStringList scriptRunnersHidden READ scriptRunnersHidden WRITE setScriptRunnersHidden NOTIFY scriptRunnersHiddenChanged)
@@ -653,11 +653,6 @@ public:
     bool showAppIcons() const { return m_showAppIcons; }
     bool showVolume() const { return m_showVolume; }
     bool showSystray() const { return m_showSystray; }
-    int systrayIconScale() const { return m_systrayIconScale; }
-    // Effective icon size for the systray, independent of widgetIconSize:
-    // iconSize scaled by systrayIconScale%, clamped to a legible minimum.
-    int systrayIconSize() const { return qMax(16, qRound(m_iconSize * m_systrayIconScale / 100.0)); }
-    QStringList systrayHiddenItems() const { return m_systrayHiddenItems; }
     // Per-dock relanzador visibility. The primary dock uses a *hidden* list
     // (default: all shown); every other dock uses a *shown* list (default: none).
     QStringList relanzadoresHidden() const { return m_relanzadoresHidden; }
@@ -831,8 +826,6 @@ public:
     void setShowAppIcons(bool show);
     void setShowVolume(bool show);
     void setShowSystray(bool show);
-    void setSystrayIconScale(int percent);
-    void setSystrayHiddenItems(const QStringList &items);
     void setRelanzadoresHidden(const QStringList &ids);
     void setRelanzadoresShown(const QStringList &ids);
     void setScriptRunnersHidden(const QStringList &ids);
@@ -1070,9 +1063,6 @@ signals:
     void showAppIconsChanged();
     void showVolumeChanged();
     void showSystrayChanged();
-    void systrayIconScaleChanged();
-    void systrayIconSizeChanged();
-    void systrayHiddenItemsChanged();
     void relanzadoresHiddenChanged();
     void relanzadoresShownChanged();
     void scriptRunnersHiddenChanged();
@@ -1233,8 +1223,6 @@ private:
     int m_gapRevision = 0;
     bool m_showAppIcons = true;
     bool m_showSystray = false;
-    int m_systrayIconScale = 100; // % of iconSize applied to systray icons
-    QStringList m_systrayHiddenItems;
     QStringList m_relanzadoresHidden;
     QStringList m_relanzadoresShown;
     QStringList m_scriptRunnersHidden;
