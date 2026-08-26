@@ -413,6 +413,13 @@ que hace que los botones se puedan apretar.
   → `root.mapToGlobal()`). El anchor rect del popup se mide contra la superficie del dock, así
   que los dos extremos tienen que salir del mismo marco; meter `Screen.*` ahí pone el preview
   en cualquier lado (el compositor nunca le dice a un cliente layer-shell dónde quedó).
+- **El eje transversal se ancla al PANEL (`slider`), no al borde de la superficie** (fix
+  2026-08-26). El halo exterior de neón crece la superficie más allá del panel, así que
+  posicionar contra `root.height`/`root.width`/`0` alejaba el preview del panel por el margen
+  del glow. `slider.x/y/width/height` ya pliegan `crossOffset`, el reveal offset y la banda del
+  borde, así que dan el borde real del panel en todos los modos y equivalen a la matemática
+  vieja cuando el halo está apagado. El eje *along* (centrar sobre el ícono con `c` +
+  clamp a la superficie) no cambia.
 - **Cambiar de ícono destruye y rehace el popup**: un xdg_popup no se puede mover, así que
   `showAppPreview()` hace `visible = false` **siempre** antes de reposicionar. Verificado con
   tres íconos seguidos: tres posiciones, tres capturas correctas.
