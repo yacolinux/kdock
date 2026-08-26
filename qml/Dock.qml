@@ -1466,10 +1466,15 @@ Item {
                     border.width: Math.max(2, Math.round(config.neonSize / 5))
                     border.color: config.neonColor
                     layer.enabled: true
+                    // The outer halo is meant to be *seen* bleeding outward, so
+                    // it is more solid (higher spread) and better sampled than the
+                    // inward rim below — a 40 px radius capped at 41 samples looked
+                    // thin and read as "no halo". The radius is the glow margin, so
+                    // the blur fills the transparent room the surface grew.
                     layer.effect: Glow {
                         radius: config.neonSize
-                        samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 41))
-                        spread: 0.2
+                        samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 81))
+                        spread: 0.45
                         color: config.neonColor
                         transparentBorder: true
                     }
