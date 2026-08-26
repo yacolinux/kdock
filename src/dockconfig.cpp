@@ -573,6 +573,48 @@ void DockConfig::setNeonSize(qreal v)
     notifyNeonChanged();
 }
 
+bool DockConfig::screenHasNeighbor(int side) const
+{
+    // This dock's screen: by connector name, or the primary for a legacy dock
+    // with no bound screen (same fallback as neonActive()).
+    QScreen *self = nullptr;
+    const auto screens = QGuiApplication::screens();
+    if (!m_screenName.isEmpty()) {
+        for (QScreen *s : screens)
+            if (s->name() == m_screenName) { self = s; break; }
+    }
+    if (!self)
+        self = QGuiApplication::primaryScreen();
+    if (!self)
+        return false;
+
+    const QRect g = self->geometry();
+    for (QScreen *s : screens) {
+        if (s == self)
+            continue;
+        const QRect o = s->geometry();
+        switch (side) {
+        case 0: // top: o sits directly above g, with vertical overlap
+            if (o.bottom() + 1 == g.top() && o.left() < g.right() && o.right() > g.left())
+                return true;
+            break;
+        case 1: // bottom
+            if (o.top() == g.bottom() + 1 && o.left() < g.right() && o.right() > g.left())
+                return true;
+            break;
+        case 2: // left
+            if (o.right() + 1 == g.left() && o.top() < g.bottom() && o.bottom() > g.top())
+                return true;
+            break;
+        default: // 3 right
+            if (o.left() == g.right() + 1 && o.top() < g.bottom() && o.bottom() > g.top())
+                return true;
+            break;
+        }
+    }
+    return false;
+}
+
 int DockConfig::neonGlowMode()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

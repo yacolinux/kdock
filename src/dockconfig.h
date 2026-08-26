@@ -811,7 +811,30 @@ public:
     // How far the surface may grow toward the screen edge for an edge-side halo:
     // capped by the floating gap, so it never runs off-screen. 0 for a flush or
     // hiding dock (no room), which is why the edge side then does not glow out.
-    int neonEdgeGlow() const { return qMin(neonGlowMargin(), effectiveMargin()); }
+    // Also 0 when another monitor abuts that side: the glow would spill onto it
+    // (see screenHasNeighbor / the multi-monitor bleed, 2026-08-26).
+    int neonEdgeGlow() const
+    {
+        if (screenHasNeighbor(edgeSidePhysical()))
+            return 0;
+        return qMin(neonGlowMargin(), effectiveMargin());
+    }
+    // Physical side (0=top, 1=bottom, 2=left, 3=right) the dock is anchored to.
+    int edgeSidePhysical() const
+    {
+        switch (m_edge) {
+        case Top: return 0;
+        case Bottom: return 1;
+        case Left: return 2;
+        default: return 3; // Right
+        }
+    }
+    // Is another connected monitor immediately adjacent on `side` of this dock's
+    // screen? The outer halo must not grow toward such a side or it bleeds onto
+    // the neighbour (the surface can overflow the output when other docks' struts
+    // shrink the usable area and KWin centres the grown surface off it). A side
+    // with no neighbour lets the glow spill harmlessly off the desktop edge.
+    Q_INVOKABLE bool screenHasNeighbor(int side) const;
     // Right-click "Neon" submenu. neonEnabledGlobal mirrors the master (toggling
     // it hits every dock); neonDockDisabled is a per-dock opt-out that wins over
     // everything in neonActive(). The setters go through the statics so QML can

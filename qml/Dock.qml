@@ -701,13 +701,30 @@ Item {
     readonly property int glowMargin: config.neonGlowMargin
     readonly property bool _glowFullEdge: (config.panelMode && config.dockLength === 0)
                                           || config.dockLength === 100
-    readonly property int goInterior: outerGlow ? glowMargin : 0
-    readonly property int goEdge: outerGlow ? config.neonEdgeGlow : 0
+    // Physical side (0=top,1=bottom,2=left,3=right) each glow term grows toward,
+    // so it can be suppressed when another monitor abuts that side (the halo
+    // would bleed onto the neighbour — see DockConfig::screenHasNeighbor). A side
+    // with no neighbour spills harmlessly off the desktop edge, so it stays.
+    readonly property int _interiorSide: config.edge === 0 ? 0 : config.edge === 1 ? 1
+                                         : config.edge === 2 ? 3 : 2
+    readonly property int _startSide: root.horizontal ? 2 : 0
+    readonly property int _endSide:   root.horizontal ? 3 : 1
+    // If EITHER end of the along axis touches a neighbour, suppress BOTH ends:
+    // growing even the far (neighbour-less) end widens the surface, and KWin
+    // centres it in the strut-shrunk usable area, which can push the near end
+    // across the boundary anyway (measured 2026-08-26). The perpendicular
+    // interior/edge glow, which cannot cross a side-by-side monitor seam, stays.
+    readonly property bool _alongNeighbor: config.screenHasNeighbor(_startSide)
+                                           || config.screenHasNeighbor(_endSide)
+    readonly property int goInterior: (outerGlow && !config.screenHasNeighbor(_interiorSide)) ? glowMargin : 0
+    readonly property int goEdge: outerGlow ? config.neonEdgeGlow : 0 // neighbour-aware in C++
     // A pinned end (Start alignment pins the start end, End pins the end) gets no
     // room; a centred/floating dock frees both ends. edge enum: Bottom/Top are
     // horizontal, so the ends are left/right; Left/Right are vertical (top/bottom).
-    readonly property int goStart: (outerGlow && !_glowFullEdge && config.alignment !== 0) ? glowMargin : 0
-    readonly property int goEnd:   (outerGlow && !_glowFullEdge && config.alignment !== 2) ? glowMargin : 0
+    readonly property int goStart: (outerGlow && !_glowFullEdge && !_alongNeighbor
+                                     && config.alignment !== 0) ? glowMargin : 0
+    readonly property int goEnd:   (outerGlow && !_glowFullEdge && !_alongNeighbor
+                                     && config.alignment !== 2) ? glowMargin : 0
     readonly property int glowAlongTotal: goStart + goEnd
     readonly property int glowCrossTotal: goInterior + goEdge
     readonly property int glowAlongOffset: goStart
