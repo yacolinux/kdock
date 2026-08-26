@@ -963,10 +963,18 @@ Item {
         var px, py
         if (root.horizontal) {
             px = Math.round(c.x - w / 2)
-            py = config.edge === 0 ? -(h + gap) : root.height + gap
+            // Anchor across the dock to the PANEL edge (slider), not the surface.
+            // The outer neon halo grows the surface past the panel, so root.height
+            // / 0 would push the preview out by that glow margin (regression
+            // 2026-08-26). slider.y/height already fold in crossOffset, the reveal
+            // offset and the edge band, so this is exact in every mode and equal to
+            // the old surface math when the halo is off.
+            py = config.edge === 0 ? slider.y - (h + gap)
+                                   : slider.y + slider.height + gap
         } else {
             py = Math.round(c.y - h / 2)
-            px = config.edge === 2 ? root.width + gap : -(w + gap)
+            px = config.edge === 2 ? slider.x + slider.width + gap
+                                   : slider.x - (w + gap)
         }
         // Clamped along the dock only; across it the preview is *meant* to be
         // outside the surface, which is where the screen is.
