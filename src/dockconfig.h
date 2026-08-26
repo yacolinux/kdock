@@ -141,6 +141,19 @@ class DockConfig : public QObject
     Q_PROPERTY(bool darkModeActive READ darkModeActive NOTIFY darkModeChanged)
     Q_PROPERTY(QColor darkAccent READ darkAccent NOTIFY darkModeChanged)
     Q_PROPERTY(QColor darkBackground READ darkBackground NOTIFY darkModeChanged)
+    // Neon glow around the panel(s): a global, opt-in-per-monitor effect (see
+    // the static neon* accessors). These instance properties are what Dock.qml
+    // renders from; neonActive resolves the master switch and the per-monitor
+    // list against this dock's screen.
+    Q_PROPERTY(bool neonActive READ neonActive NOTIFY neonChanged)
+    Q_PROPERTY(QColor neonColor READ neonColor NOTIFY neonChanged)
+    Q_PROPERTY(qreal neonIntensity READ neonIntensity NOTIFY neonChanged)
+    Q_PROPERTY(qreal neonSize READ neonSize NOTIFY neonChanged)
+    // For the right-click "Neon" submenu (all NOTIFY neonChanged): the global
+    // master state, this dock's own opt-out, and the five quick colors.
+    Q_PROPERTY(bool neonEnabledGlobal READ neonEnabledGlobal NOTIFY neonChanged)
+    Q_PROPERTY(bool neonDockDisabled READ neonDockDisabled WRITE setNeonDockDisabled NOTIFY neonChanged)
+    Q_PROPERTY(QStringList neonPresetColors READ neonPresetColors CONSTANT)
     // ColorAuto (see AutoColorScheme): the colors this dock takes from its
     // monitor's wallpaper. Same arrangement as dark mode and for the same
     // reason — an override applied at *read* time, never written to the .conf,
@@ -485,6 +498,30 @@ public:
     static QColor darkBackgroundColor();
     static void setDarkBackgroundColor(const QColor &color);
 
+    // Neon glow: a luminous halo drawn around each dock panel, opt-in per
+    // monitor. Stored in the shared settings file (like the dark-mode globals
+    // above); the master gates everything and each connector is individually
+    // enabled. Applied at read time in QML via the instance properties
+    // neonActive/neonColor/neonIntensity/neonSize — nothing is written per dock.
+    static bool neonEnabled();
+    static void setNeonEnabled(bool on);
+    static QStringList neonScreens();                 // connectors with neon on
+    static bool neonScreenEnabled(const QString &connector);
+    static void setNeonScreenEnabled(const QString &connector, bool on);
+    static QColor neonColorSetting();
+    static void setNeonColor(const QColor &color);
+    static qreal neonIntensitySetting();              // 0..1, glow opacity/strength
+    static void setNeonIntensity(qreal v);
+    static qreal neonSizeSetting();                   // glow radius in px
+    static void setNeonSize(qreal v);
+    // "Activate neon with dark mode": when on, dark mode lights the neon even if
+    // the neon master is off. A read-time link (see neonActive()), not a write —
+    // it never touches neonEnabled. Set from the DarkMode tab.
+    static bool neonWithDarkMode();
+    static void setNeonWithDarkMode(bool on);
+    // Emits neonChanged() on every live dock, like notifyDarkModeChanged().
+    static void notifyNeonChanged();
+
     // Like favoritesShared(), but for the menu *appearance/behavior* group
     // (menu icon, popup width/height, power row, columns). Stored under
     // "shareMenuConfig"; when on, those keys live in the shared settings file.
@@ -740,6 +777,26 @@ public:
     bool darkModeActive() const;
     QColor darkAccent() const { return darkAccentColor(); }
     QColor darkBackground() const { return darkBackgroundColor(); }
+
+    // Neon glow, resolved for this dock. neonActive folds the master switch and
+    // the per-monitor list against this dock's screen; a legacy single-instance
+    // dock (empty screenName) resolves against the primary connector.
+    bool neonActive() const;
+    QColor neonColor() const { return neonColorSetting(); }
+    qreal neonIntensity() const { return neonIntensitySetting(); }
+    qreal neonSize() const { return neonSizeSetting(); }
+    // Right-click "Neon" submenu. neonEnabledGlobal mirrors the master (toggling
+    // it hits every dock); neonDockDisabled is a per-dock opt-out that wins over
+    // everything in neonActive(). The setters go through the statics so QML can
+    // write them naturally (config.setNeonColorGlobal(...) etc.).
+    bool neonEnabledGlobal() const { return neonEnabled(); }
+    bool neonDockDisabled() const { return m_neonDisabled; }
+    void setNeonDockDisabled(bool on);
+    QStringList neonPresetColors() const { return neonQuickColors(); }
+    Q_INVOKABLE void setNeonColorGlobal(const QColor &c) { setNeonColor(c); }
+    Q_INVOKABLE void setNeonEnabledGlobal(bool on) { setNeonEnabled(on); }
+    // The five fixed neon colors offered in the submenu (hex strings).
+    static QStringList neonQuickColors();
 
     // ColorAuto, pushed in by AutoColorScheme once per wallpaper change. Never
     // persisted: these live and die with the process, which is what makes
@@ -1131,6 +1188,8 @@ signals:
     // exceptions, both colors): every QML binding that cares reads more than
     // one of them anyway.
     void darkModeChanged();
+    // One signal for the whole neon group, same reasoning as darkModeChanged().
+    void neonChanged();
     // One signal for the ColorAuto trio, same reasoning as darkModeChanged().
     void autoColorChanged();
     void groupWindowsChanged();
@@ -1280,6 +1339,7 @@ private:
     bool m_showPager = false;
     bool m_showColorAuto = false;
     bool m_darkMode = false;
+    bool m_neonDisabled = false; // per-dock opt-out of the global neon effect
     // ColorAuto, deliberately absent from load()/save(): see setAutoColors().
     bool m_autoColorActive = false;
     QColor m_autoBackground;

@@ -121,7 +121,7 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
 
 qt_add_resources(kdock_core "qml"
     PREFIX "/"
-    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/NeonMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
 
 # Shipped translation layers. They are copied to

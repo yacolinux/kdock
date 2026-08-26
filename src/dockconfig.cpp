@@ -5,7 +5,9 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
 #include <QRegularExpression>
+#include <QScreen>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -465,6 +467,180 @@ void DockConfig::setDarkBackgroundColor(const QColor &color)
     notifyDarkModeChanged();
 }
 
+// Neon glow. Global settings, opt-in per monitor, read on demand from the
+// shared file exactly like the dark-mode globals above. Defaults: a cyan neon,
+// full-ish strength, a modest halo.
+namespace {
+constexpr const char *kNeonColorDefault = "#00e5ff";
+constexpr qreal kNeonIntensityDefault = 0.8;
+constexpr qreal kNeonSizeDefault = 16.0;
+} // namespace
+
+bool DockConfig::neonEnabled()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonEnabled"), false).toBool();
+}
+
+void DockConfig::setNeonEnabled(bool on)
+{
+    if (neonEnabled() == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonEnabled"), on);
+    }
+    notifyNeonChanged();
+}
+
+QStringList DockConfig::neonScreens()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonScreens")).toStringList();
+}
+
+bool DockConfig::neonScreenEnabled(const QString &connector)
+{
+    return neonScreens().contains(connector);
+}
+
+void DockConfig::setNeonScreenEnabled(const QString &connector, bool on)
+{
+    if (connector.isEmpty() || neonScreenEnabled(connector) == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        QStringList list = s.value(QStringLiteral("neonScreens")).toStringList();
+        if (on)
+            list.append(connector);
+        else
+            list.removeAll(connector);
+        s.setValue(QStringLiteral("neonScreens"), list);
+    }
+    notifyNeonChanged();
+}
+
+QColor DockConfig::neonColorSetting()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    const QColor c(s.value(QStringLiteral("neonColor"),
+                           QString::fromLatin1(kNeonColorDefault)).toString());
+    return c.isValid() ? c : QColor(QString::fromLatin1(kNeonColorDefault));
+}
+
+void DockConfig::setNeonColor(const QColor &color)
+{
+    if (!color.isValid() || neonColorSetting() == color)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonColor"), color.name());
+    }
+    notifyNeonChanged();
+}
+
+qreal DockConfig::neonIntensitySetting()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonIntensity"), kNeonIntensityDefault).toDouble();
+}
+
+void DockConfig::setNeonIntensity(qreal v)
+{
+    if (qFuzzyCompare(neonIntensitySetting(), v))
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonIntensity"), v);
+    }
+    notifyNeonChanged();
+}
+
+qreal DockConfig::neonSizeSetting()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonSize"), kNeonSizeDefault).toDouble();
+}
+
+void DockConfig::setNeonSize(qreal v)
+{
+    if (qFuzzyCompare(neonSizeSetting(), v))
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonSize"), v);
+    }
+    notifyNeonChanged();
+}
+
+bool DockConfig::neonWithDarkMode()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonWithDarkMode"), false).toBool();
+}
+
+void DockConfig::setNeonWithDarkMode(bool on)
+{
+    if (neonWithDarkMode() == on)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonWithDarkMode"), on);
+    }
+    notifyNeonChanged();
+}
+
+void DockConfig::notifyNeonChanged()
+{
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->neonChanged();
+}
+
+QStringList DockConfig::neonQuickColors()
+{
+    return {QStringLiteral("#00e5ff"),  // cyan
+            QStringLiteral("#ff2d95"),  // pink
+            QStringLiteral("#39ff14"),  // green
+            QStringLiteral("#ff9f0a"),  // orange
+            QStringLiteral("#bf5cff")}; // purple
+}
+
+void DockConfig::setNeonDockDisabled(bool on)
+{
+    if (m_neonDisabled == on)
+        return;
+    m_neonDisabled = on;
+    m_settings.setValue(QStringLiteral("neonDisabled"), on);
+    // Per-dock: only this instance's rendering changes.
+    emit neonChanged();
+}
+
+bool DockConfig::neonActive() const
+{
+    // This dock's own opt-out wins over the global switch and the dark link.
+    if (m_neonDisabled)
+        return false;
+    // Two independent triggers: the neon master, or the "activate with dark
+    // mode" link (which lights neon even when the master is off — a read-time
+    // override, never a write to neonEnabled). darkModeActive() is per instance.
+    const bool darkLink = neonWithDarkMode() && darkModeActive();
+    if (!neonEnabled() && !darkLink)
+        return false;
+    const QStringList screens = neonScreens();
+    // No monitors picked in the Neon tab: the dark-mode link lights every
+    // monitor (its whole point is "just works"), while the master alone lights
+    // none — same as before this link existed.
+    if (screens.isEmpty())
+        return darkLink;
+    if (!m_screenName.isEmpty())
+        return screens.contains(m_screenName);
+    // Legacy single-instance dock with no bound connector: resolve against the
+    // primary screen, so ticking that monitor lights this dock too.
+    if (QScreen *primary = QGuiApplication::primaryScreen())
+        return screens.contains(primary->name());
+    return false;
+}
+
 void DockConfig::setAutoColors(const QColor &background, const QColor &accent)
 {
     // No QSettings anywhere in here on purpose. ColorAuto is a read-time
@@ -684,6 +860,9 @@ DockConfig::DockConfig(QObject *parent)
 {
     load();
     s_instances.append(this);
+    // neonActive() folds in darkModeActive() (the "activate neon with dark mode"
+    // link), so its QML binding has to re-evaluate on dark-mode changes too.
+    connect(this, &DockConfig::darkModeChanged, this, &DockConfig::neonChanged);
 }
 
 DockConfig::DockConfig(const QString &dockId, QObject *parent)
@@ -693,6 +872,9 @@ DockConfig::DockConfig(const QString &dockId, QObject *parent)
 {
     load();
     s_instances.append(this);
+    // neonActive() folds in darkModeActive() (the "activate neon with dark mode"
+    // link), so its QML binding has to re-evaluate on dark-mode changes too.
+    connect(this, &DockConfig::darkModeChanged, this, &DockConfig::neonChanged);
     // Bind to the output derived from the dockId (extra slots share a screen
     // with slot 0 but persist to their own file).
     const QString screen = screenOfDockId(dockId);
@@ -972,6 +1154,7 @@ void DockConfig::load()
     m_showPager = m_settings.value(QStringLiteral("showPager"), false).toBool();
     m_showColorAuto = m_settings.value(QStringLiteral("showColorAuto"), false).toBool();
     m_darkMode = m_settings.value(QStringLiteral("darkMode"), false).toBool();
+    m_neonDisabled = m_settings.value(QStringLiteral("neonDisabled"), false).toBool();
     m_showClock2 = m_settings.value(QStringLiteral("showClock2"), false).toBool();
     m_groupWindows = m_settings.value(QStringLiteral("groupWindows"), true).toBool();
     m_menuFavorites = m_settings.value(QStringLiteral("menuFavorites"),

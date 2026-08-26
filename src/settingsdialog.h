@@ -132,6 +132,7 @@ private:
     // Dark mode: the per-dock switch, the app-wide one with its exception list,
     // and the two colors of the dark scheme (accent + background).
     QWidget *createDarkModeTab();
+    QWidget *createNeonTab();
     // Swatch button + "Breeze Dark" reset idiom shared by the DarkMode and
     // Colores tabs. Returns the refresh lambda so the caller can re-run it on
     // DockConfig::darkModeChanged (both colors are app-wide statics).

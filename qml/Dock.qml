@@ -1410,6 +1410,42 @@ Item {
                 border.color: Qt.rgba(theme.foreground.r, theme.foreground.g,
                                       theme.foreground.b, 0.18)
 
+                // Neon rim: a luminous outline hugging the panel edge, drawn on
+                // top (the panel fills the whole layer surface, so an outward
+                // halo would be clipped by the compositor — see DockConfig::
+                // neonActive). One rim per run, so gapped docks glow per pill.
+                // The soft glow spreads inward over the panel and a crisp bright
+                // line marks the rim itself, for the neon-tube look.
+                Item {
+                    anchors.fill: parent
+                    z: 3
+                    visible: config.neonActive && config.neonSize > 0
+                    opacity: config.neonIntensity
+                    Rectangle {
+                        id: neonSource
+                        anchors.fill: parent
+                        radius: background.radius
+                        color: "transparent"
+                        border.width: Math.max(2, Math.round(config.neonSize / 5))
+                        border.color: config.neonColor
+                        layer.enabled: true
+                        layer.effect: Glow {
+                            radius: config.neonSize
+                            samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 41))
+                            spread: 0.2
+                            color: config.neonColor
+                            transparentBorder: true
+                        }
+                    }
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: background.radius
+                        color: "transparent"
+                        border.width: 2
+                        border.color: Qt.lighter(config.neonColor, 1.4)
+                    }
+                }
+
                 // Optional tiled background image, drawn over the base color.
                 // Scaled to the dock thickness and repeated along its length;
                 // orientation-aware. Honors config.opacity, and is masked to the
@@ -1830,6 +1866,7 @@ Item {
                             MenuSeparator {}
                             BackgroundColorMenu {}
                             ModeMenu {}
+                            NeonMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
                             MenuSeparator {}
@@ -2428,6 +2465,7 @@ Item {
                             }
                             BackgroundColorMenu {}
                             ModeMenu {}
+                            NeonMenu {}
                             IconLabelMenu {}
                             WidgetLabelMenu {}
                             // Only for the icons of a selectable-apps widget:

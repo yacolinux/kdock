@@ -341,6 +341,9 @@ void SettingsDialog::buildTabs()
     addTab(createWidgetsTab(), tr("Widgets"));
     addTab(createMenuTab(), tr("Menu"));
     addTab(createDarkModeTab(), tr("DarkMode"));
+    // Next to DarkMode: a purely visual dock effect (a neon halo around the
+    // panels), global with an opt-in-per-monitor list like the Desktop tab.
+    addTab(createNeonTab(), tr("Neon"));
     // Next to DarkMode on purpose: it is the other feature that rewrites the
     // desktop's appearance, and the two are interlocked (dark mode suspends it).
     m_colorAutoDefaults = nullptr;
@@ -4023,6 +4026,20 @@ QWidget *SettingsDialog::createDarkModeTab()
     bgRow->addWidget(bgBtn, 1);
     bgRow->addWidget(bgReset);
     form->addRow(tr("Fondo del dock:"), bgRow);
+
+    // "Activate neon with dark mode": lights the neon halo whenever dark mode is
+    // on, even if the neon master (Neon tab) is off. Read-time link, see
+    // DockConfig::neonActive(). The per-monitor list of the Neon tab still
+    // applies; with no monitors picked there, it lights all of them.
+    auto *neonWithDark = new QCheckBox(tr("Encender el brillo neón al entrar en modo oscuro"), tab);
+    neonWithDark->setChecked(DockConfig::neonWithDarkMode());
+    neonWithDark->setToolTip(tr("Con esto tildado, el modo oscuro enciende el neón aunque el "
+                                "interruptor de la solapa Neon esté apagado. Respeta los monitores "
+                                "marcados en la solapa Neon; si no marcaste ninguno, se enciende en "
+                                "todos."));
+    connect(neonWithDark, &QCheckBox::toggled, this,
+            [](bool on) { DockConfig::setNeonWithDarkMode(on); });
+    form->addRow(tr("Brillo neón:"), neonWithDark);
     // Both colors are mirrored in the Colores tab (and are app-wide statics),
     // so re-read them whenever the dark-mode group changes anywhere.
     connect(m_config, &DockConfig::darkModeChanged, tab, refreshAccent);
@@ -4149,6 +4166,114 @@ void SettingsDialog::reloadColorAutoDefaults()
         tr("Esquema de color: <b>%1</b> — Iconset del dock: <b>%2</b>")
             .arg(colors.isEmpty() ? tr("(sin definir)") : colors,
                  icons.isEmpty() ? tr("(seguir el del sistema)") : icons));
+}
+
+QWidget *SettingsDialog::createNeonTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+
+    auto *info = new QLabel(
+        tr("El brillo neón dibuja un halo luminoso alrededor de los paneles del dock. "
+           "Es un efecto global, activable por monitor: marcá abajo en qué monitores lo "
+           "querés. El color, la intensidad y el tamaño del halo se ajustan acá."),
+        tab);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    // --- master switch: off = ningún halo en ningún dock ---
+    auto *master = new QCheckBox(tr("Activar Neon"), tab);
+    master->setChecked(DockConfig::neonEnabled());
+    master->setToolTip(tr("Interruptor general. Apagado, no se dibuja ningún halo, sin perder "
+                          "qué monitores tenés marcados."));
+    layout->addWidget(master);
+
+    // --- appearance: color + two sliders ---
+    auto *lookBox = new QGroupBox(tr("Apariencia del halo"), tab);
+    auto *lookForm = new QFormLayout(lookBox);
+
+    auto *colorBtn = new QPushButton(lookBox);
+    const auto refreshColor = makeColorButton(colorBtn, &DockConfig::neonColorSetting,
+                                              &DockConfig::setNeonColor, tr("Color del neón"));
+    colorBtn->setToolTip(tr("Color del halo."));
+    lookForm->addRow(tr("Color:"), colorBtn);
+
+    // Intensity 0..1 <-> slider 0..100.
+    auto *intensity = new QSlider(Qt::Horizontal, lookBox);
+    intensity->setRange(0, 100);
+    intensity->setValue(qRound(DockConfig::neonIntensitySetting() * 100.0));
+    auto *intensityVal = new QLabel(lookBox);
+    const auto showIntensity = [intensityVal](int v) {
+        intensityVal->setText(QStringLiteral("%1 %").arg(v));
+    };
+    showIntensity(intensity->value());
+    auto *intensityRow = new QHBoxLayout;
+    intensityRow->addWidget(intensity, 1);
+    intensityRow->addWidget(intensityVal);
+    lookForm->addRow(tr("Intensidad:"), intensityRow);
+
+    // Size in px; a modest ceiling keeps the halo from swamping the panel.
+    auto *size = new QSlider(Qt::Horizontal, lookBox);
+    size->setRange(0, 40);
+    size->setValue(qRound(DockConfig::neonSizeSetting()));
+    auto *sizeVal = new QLabel(lookBox);
+    const auto showSize = [sizeVal](int v) {
+        sizeVal->setText(QStringLiteral("%1 px").arg(v));
+    };
+    showSize(size->value());
+    auto *sizeRow = new QHBoxLayout;
+    sizeRow->addWidget(size, 1);
+    sizeRow->addWidget(sizeVal);
+    lookForm->addRow(tr("Tamaño:"), sizeRow);
+
+    layout->addWidget(lookBox);
+
+    // --- per-monitor list (same idiom as the Desktop tab) ---
+    layout->addWidget(new QLabel(tr("Monitores (marcá dónde querés el halo):"), tab));
+    auto *monitors = new QListWidget(tab);
+    monitors->setMaximumHeight(150);
+    layout->addWidget(monitors);
+
+    // Rebuild the checkable monitor rows from the config.
+    const auto reload = [this, monitors, master] {
+        const bool on = master->isChecked();
+        QSignalBlocker block(monitors);
+        monitors->clear();
+        QStringList names = m_manager ? m_manager->connectedScreens() : QStringList();
+        if (names.isEmpty())
+            for (QScreen *s : QGuiApplication::screens())
+                names << s->name();
+        for (const QString &c : names) {
+            auto *item = new QListWidgetItem(c, monitors);
+            item->setData(Qt::UserRole, c);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(DockConfig::neonScreenEnabled(c) ? Qt::Checked : Qt::Unchecked);
+        }
+        // Master off greys the list: the marks are kept, nothing glows.
+        monitors->setEnabled(on);
+    };
+    reload();
+
+    connect(master, &QCheckBox::toggled, this, [reload](bool on) {
+        DockConfig::setNeonEnabled(on);
+        reload();
+    });
+    connect(monitors, &QListWidget::itemChanged, this, [](QListWidgetItem *item) {
+        const QString c = item->data(Qt::UserRole).toString();
+        DockConfig::setNeonScreenEnabled(c, item->checkState() == Qt::Checked);
+    });
+
+    connect(intensity, &QSlider::valueChanged, this, [showIntensity](int v) {
+        showIntensity(v);
+        DockConfig::setNeonIntensity(v / 100.0);
+    });
+    connect(size, &QSlider::valueChanged, this, [showSize](int v) {
+        showSize(v);
+        DockConfig::setNeonSize(v);
+    });
+
+    layout->addStretch();
+    return tab;
 }
 
 QWidget *SettingsDialog::createColorAutoTab()
