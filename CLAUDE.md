@@ -1267,11 +1267,12 @@ detalle está en `AGENTS.md` → *Capa de traducciones*. Lo que hay que saber pa
 - C++17, Qt 6 (≥ 6.5), `#pragma once`, `QStringLiteral`, `connect` con punteros a miembro,
   `Q_INVOKABLE` para lo que llame QML.
 - QML: `QtQuick` + `QtQuick.Controls` (sin sufijo, ver *Qt style*), nada que dependa de
-  estilos de KDE. Dos módulos de efectos, los dos dependencia de runtime del dock (si faltan,
-  el QML no carga y la pantalla queda sin dock): `Qt5Compat.GraphicalEffects` para el
-  `OpacityMask` de la imagen de panel, y `QtQuick.Effects` (`MultiEffect`) para el resplandor
-  de neón desde 2026-08-26 — antes era el `Glow` de Qt5Compat (migrado por memoria: un pase
-  padded y menos buffers que su blur multi-pase, con un FBO de glow por run y por dock).
+  estilos de KDE. `Qt5Compat.GraphicalEffects` es dependencia de runtime del dock (si falta, el
+  QML no carga y la pantalla queda sin dock): lo usan el `OpacityMask` de la imagen de panel y
+  el `Glow` del resplandor de neón (los dos glows, rim y halo exterior). El 2026-08-26 se probó
+  migrar el neón a `QtQuick.Effects` (`MultiEffect`) por un supuesto ahorro de buffers, pero se
+  percibió más lento en la sesión real y se revirtió el mismo día a `Glow` — que era el estado
+  fluido. Si volvés a intentar la migración, medí GPU en la sesión Wayland real antes de comitear.
 - Comentarios en inglés, en el estilo del archivo que estés tocando: explican *por qué*,
   no *qué* — la densidad actual es la referencia.
 - Nada de KDE Frameworks como dependencia: los backends hablan D-Bus / CLI directo

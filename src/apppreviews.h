@@ -44,8 +44,8 @@ public:
     Q_INVOKABLE bool available() const;
 
     // Ask for a capture of `uuid` no wider than `maxWidth`. A capture younger
-    // than kFreshMs is reused as is, so the 1 s refresh of a visible preview and
-    // a pointer sweeping across the dock cost KWin nothing extra.
+    // than kFreshMs is reused as is, so a pointer sweeping across the dock (icon
+    // to icon, then back) costs KWin nothing extra.
     Q_INVOKABLE void request(const QString &uuid, int maxWidth);
     // Drop anything still queued (the pointer left the icon). A capture already
     // in flight is left alone — see ScreenShotSource::cancel.

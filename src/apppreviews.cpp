@@ -55,9 +55,9 @@ void AppPreviews::request(const QString &uuid, int maxWidth)
 {
     if (uuid.isEmpty() || maxWidth <= 0)
         return;
-    // Reuse a capture that is still warm. Without this the 1 s refresh of the
-    // visible preview and a pointer running along the dock would each mean a
-    // full offscreen re-render in KWin.
+    // Reuse a capture that is still warm. Without this a pointer running along
+    // the dock (and returning to a recent icon) would each time mean a full
+    // offscreen re-render in KWin.
     const qint64 last = m_cache->lastAttempt(uuid);
     if (last > 0 && ThumbnailCache::nowMs() - last < kFreshMs)
         return;
