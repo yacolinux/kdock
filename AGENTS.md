@@ -1607,6 +1607,37 @@ El widget *siguiente fondo* llega por `WallpaperControl::setAlternateEngine()`, 
 `kdock-controlmanager`**, que no tiene por qué linkear un renderer con `QQuickView` para dibujar
 una tarjeta.
 
+### `kdock-setwallpaper` — «Setear Kdock Wallpaper» desde «Abrir con» (`setwallpaper/`, 2026-08-25)
+
+Un noveno binario, minúsculo y autocontenido: toma **una imagen como argumento** y la pone de
+wallpaper de kdock en el **monitor actual**. Es el gemelo de *Avanzar Wallpaper* pero al revés —
+en vez de elegir el siguiente archivo de un slideshow, la imagen viene dada. Su razón de ser es el
+`.desktop` (`Name=Setear Kdock Wallpaper`, con `MimeType` de imágenes y `Exec=… %f`): hace que la
+app aparezca en **«Abrir con»** de Dolphin y PCManFM-Qt, así un clic sobre una imagen la deja de
+fondo.
+
+- **No hace ninguna otra configuración.** En particular no saca al escritorio del modo slideshow:
+  si el escritorio actual es un pase de diapositivas, la imagen se ve hasta el próximo paso (o
+  hasta que los botones de *avanzar wallpaper* la cambien). Es a propósito.
+- **Dos caminos, en orden** (`setwallpaper/src/main.cpp`):
+  1. **`org.kdock.Dock.setWallpaper(screen, path)`** — el camino primario. Bajo LXQt kdock es
+     quien dibuja los fondos en sus propias superficies (`LxqtWallpapers`), así que sólo él puede
+     poner uno. `DockService::setWallpaper` resuelve `screen` vacío al primario y delega en
+     `LxqtWallpapers::setWallpaper(screen, path)`, que persiste la imagen como el estático de
+     `(escritorio actual, monitor)` (vía `DesktopWallpapers::setImageFor`), la muestra ya en la
+     `WallpaperWindow` de ese monitor **sea cual sea el modo**, y baja a PCManFM como hace
+     `apply()`. Devuelve `false` cuando el motor LXQt no está dibujando — y ahí el binario cae al
+     camino 2.
+  2. **Plasma directo** (`org.kde.PlasmaShell.evaluateScript`, `plasmascript.h`) — para una sesión
+     Plasma sin kdock al mando del fondo: ubica el containment por geometría (mismo criterio que
+     `WallpaperControl`) y hace el *set as wallpaper* estándar (`org.kde.image` + `writeConfig` +
+     `reloadConfig`). Es el único punto que sí cambia el plugin, y sólo corre cuando kdock no manda.
+- **El monitor actual** sale de `org.kde.KWin.activeOutputName` (el de la ventana con foco), con
+  respaldo al primario. `--screen <conector>` lo fuerza.
+- Como `kdock-calendar`: ventana ninguna, ningún privilegio de KWin, corre desde `build/` y su
+  install **no** necesita refresco de ksycoca. Sólo incluye `plasmascript.h` de `../src`; no compila
+  nada de kdock, así que no puede perturbar el build del dock.
+
 ### Clic derecho de un widget: acción vs. menú de sección
 - El clic derecho sobre un widget abre por defecto el **menú de sección** (agregar separador, color de fondo, etiquetas, renombrar, Configuración). Algunos widgets se lo gastan en una segunda acción, y eso se declara en **un solo lugar** de `Dock.qml`: `sectionHasAltClick(token)` dice cuáles, y `sectionAltClick(token)` hace qué. Hoy: `volume` → mezclador (solapa Audio), `brightness` → solapa VideoEnergía, `movetoscreen` → monitor anterior, `maxmin` → minimizar, `closewindow` → mandar la ventana al escritorio siguiente sin seguirla, `darkmode` → modo oscuro (el clic izquierdo pone el modo normal).
 - **`Shift`+clic derecho siempre abre el menú de sección**, en todos los widgets (`secMouse.onClicked`). Es la única vía al menú en esos tres — antes el widget de volumen simplemente se quedaba sin menú.

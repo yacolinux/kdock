@@ -86,6 +86,13 @@ public slots:
     Q_SCRIPTABLE void nextWallpaper(const QString &screenName);
     Q_SCRIPTABLE void nextWallpaperAll();
 
+    // Set a concrete image as the wallpaper of one monitor for the current
+    // desktop (the kdock-setwallpaper binary calls this). Empty screenName =
+    // the primary monitor. Only meaningful while kdock is the one drawing the
+    // wallpapers (LXQt): returns false otherwise, so the caller can fall back
+    // to driving Plasma itself.
+    Q_SCRIPTABLE bool setWallpaper(const QString &screenName, const QString &path);
+
     // Three parallel lists rather than one a(ssb): plain `as` needs no
     // qDBusRegisterMetaType on either side (see CLAUDE.md on struct properties).
     Q_SCRIPTABLE QStringList dockIds();

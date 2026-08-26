@@ -310,6 +310,37 @@ void LxqtWallpapers::advance(const QString &screenName)
         emit wallpapersApplied(desktop);
 }
 
+bool LxqtWallpapers::setWallpaper(const QString &screenName, const QString &path)
+{
+    // Persist as the (current desktop, monitor) static image so it survives a
+    // desktop round-trip and a restart. In slideshow mode this key is normally
+    // ignored, but keeping it means the picture is what a switch back to Static
+    // would show — and writing it is harmless there.
+    DesktopWallpapers::setImageFor(m_currentDesktop, screenName, path);
+
+    if (!m_active)
+        return false;
+    syncWindows();
+    auto it = m_windows.find(screenName);
+    if (it == m_windows.end())
+        return false;
+
+    // Show it now regardless of the desktop's mode. If this desktop is a
+    // slideshow, its timer will overwrite the image at the next step — that is
+    // the documented behaviour, not a bug (see the header).
+    it.value()->setImage(path, DesktopWallpapers::fillMode());
+
+    // Same reason as apply(): once something of ours covers the desktop,
+    // PCManFM has to stand down or its icons would sit invisible on top.
+    if (!m_suppressed) {
+        m_suppressed = true;
+        setPcmanfmDesktop(false);
+    }
+
+    emit wallpapersApplied(m_currentDesktop);
+    return true;
+}
+
 void LxqtWallpapers::updateTimer(int desktop)
 {
     if (!DesktopWallpapers::slideshowEnabled(desktop)) {

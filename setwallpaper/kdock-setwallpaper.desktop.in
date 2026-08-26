@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Setear Kdock Wallpaper
+GenericName=Set as kdock wallpaper
+Comment=Pone la imagen como fondo de kdock en el monitor actual
+# %f: a single local file. The tool takes one image and sets it as the wallpaper
+# of the monitor the user is on.
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock-setwallpaper %f
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Graphics;
+# So the entry shows up under "Abrir con" for images in Dolphin and PCManFM-Qt.
+# Desktop-entry MimeType has no wildcards, so the common image types are listed.
+MimeType=image/png;image/jpeg;image/jpg;image/bmp;image/gif;image/webp;image/tiff;image/x-xpixmap;image/svg+xml;image/avif;
+# No X-KDE-Wayland-Interfaces / X-KDE-DBUS-Restricted-Interfaces here: this binary
+# asks the compositor for nothing privileged. It talks to the running kdock (or,
+# as a fallback, to plasmashell) over the plain session bus. Install needs no
+# ksycoca refresh.

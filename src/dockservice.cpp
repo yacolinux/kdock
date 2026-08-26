@@ -5,11 +5,14 @@
 #include "autocolorscheme.h"
 #include "dockmanager.h"
 #include "dockwindow.h"
+#include "lxqtwallpapers.h"
 #include "wallpapercontrol.h"
 
 #include <QCoreApplication>
 #include <QDBusConnection>
+#include <QGuiApplication>
 #include <QProcess>
+#include <QScreen>
 
 QString DockService::serviceName()
 {
@@ -190,4 +193,16 @@ void DockService::nextWallpaperAll()
     if (!m_manager || !m_manager->sharedWallpaperControl())
         return;
     m_manager->sharedWallpaperControl()->nextWallpaperAll();
+}
+
+bool DockService::setWallpaper(const QString &screenName, const QString &path)
+{
+    if (!m_manager || !m_manager->lxqtWallpapers())
+        return false;
+
+    QString screen = screenName;
+    if (screen.isEmpty() && QGuiApplication::primaryScreen())
+        screen = QGuiApplication::primaryScreen()->name();
+
+    return m_manager->lxqtWallpapers()->setWallpaper(screen, path);
 }

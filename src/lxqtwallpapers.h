@@ -80,6 +80,18 @@ public:
     // whose desktop is in slideshow mode move.
     void advance(const QString &screenName = QString());
 
+    // Put a *specific* image up on one monitor for the current desktop, now,
+    // and persist it as that (desktop, monitor)'s static wallpaper. This is the
+    // kdock-setwallpaper binary's entry point (via DockService): unlike
+    // advance(), the image is given, not picked from a folder.
+    //
+    // It sets nothing else — in particular it does NOT switch the desktop out
+    // of slideshow mode. So on a slideshow desktop this only shows the image
+    // until the next slideshow step overwrites it; on a static desktop it
+    // sticks. Returns false when this engine is not the one drawing (there is
+    // no surface to show it on) or the monitor is unknown.
+    bool setWallpaper(const QString &screenName, const QString &path);
+
     // Take everything down and give the desktop back to PCManFM. Idempotent.
     void stop();
 

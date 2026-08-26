@@ -81,7 +81,7 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
    el estilo por omisión, medí `height()` de cada control custom, no alcanza con que el QML
    cargue.
 
-**Son ocho binarios**, los ocho los compila el mismo `cmake --build build`:
+**Son nueve binarios**, los nueve los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -127,6 +127,14 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
   Su `.desktop` no pide privilegios (layer-shell no está restringido y SNI es D-Bus de sesión),
   así que **no necesita refresco de ksycoca**. Detalles en `AGENTS.md` → *Bandeja del sistema*.
   Ojo con el watcher zombi de kded6, más abajo (*Arnés de `kdock-systray`*).
+- `kdock-setwallpaper` (`build/setwallpaper/kdock-setwallpaper`, árbol `setwallpaper/`): toma
+  **una imagen como argumento** y la pone de wallpaper de kdock en el **monitor actual** (el gemelo
+  de *Avanzar Wallpaper*, pero con la imagen dada). Su razón de ser es el `.desktop`
+  (`Name=Setear Kdock Wallpaper`, con `MimeType` de imágenes) que lo mete en **«Abrir con»** de
+  Dolphin y PCManFM-Qt. Camino primario: `org.kdock.Dock.setWallpaper` (bajo LXQt lo pinta
+  `LxqtWallpapers`); respaldo: Plasma directo. Autocontenido como `kdock-calendar` —sin ventana,
+  sin privilegios, corre desde `build/`, **no necesita refresco de ksycoca**—; sólo incluye
+  `plasmascript.h` de `../src`. Detalles en `AGENTS.md` → *`kdock-setwallpaper`*.
 
 **`kdock-tilemenu` es el binario fácil de desarrollar, y conviene saber por qué**: su ventana
 es un **toplevel normal maximizado**, no una superficie layer-shell, y **no pide ningún
@@ -175,14 +183,14 @@ ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(
 Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
 y el bug "seguía" (2026-08-10).
 
-El install escribe **dieciséis** cosas: los ocho binarios y sus ocho `.desktop`. Después de
+El install escribe **dieciocho** cosas: los nueve binarios y sus nueve `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
 tarjetas caen a ícono, y desde 2026-08-17 `kdock` se queda sin las vistas previas al hoverear
 un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager`,
-`kdock-weather`, `kdock-desktop` y `kdock-systray` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
-el ícono del gestor de tareas—, así que si lo único que tocaste fue uno de esos, saltealo
-y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las ocho líneas
+`kdock-weather`, `kdock-desktop`, `kdock-systray` y `kdock-setwallpaper` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+el ícono del gestor de tareas (el de `kdock-setwallpaper`, además, para aparecer en «Abrir con»)—, así que si lo único que tocaste fue uno de esos, saltealo
+y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las nueve líneas
 de `.desktop` dicen `Up-to-date`, ksycoca ya los tiene y no hay nada que refrescar, sin importar
 cuántos binarios se hayan reemplazado. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier

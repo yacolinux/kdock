@@ -189,6 +189,9 @@ add_subdirectory(desktop)
 add_subdirectory(weather)
 # kdock-systray: the system tray host+watcher and its window (see systray/CMakeLists.txt).
 add_subdirectory(systray)
+# kdock-setwallpaper: tiny "set this image as the current monitor's wallpaper"
+# tool, made to appear under file managers' "Open with" (see setwallpaper/).
+add_subdirectory(setwallpaper)
 
 # Test suite (tests/README.md). Off by default so a plain build of the dock
 # needs neither Qt6::Test nor the extra targets; tests/run.sh turns it on.
