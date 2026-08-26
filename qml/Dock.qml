@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 
 Item {
@@ -1475,26 +1476,37 @@ Item {
                 y: (root.horizontal ? 0 : modelData.pos) - root.glowMargin
                 width: (root.horizontal ? modelData.size : slider.width) + 2 * root.glowMargin
                 height: (root.horizontal ? slider.height : modelData.size) + 2 * root.glowMargin
+                // The ring shape the halo is a blur of: transparent fill, neon
+                // border. Only a texture source for the MultiEffect below (drawn
+                // invisibly), never painted itself — the crisp tube core is the
+                // bright line over the panel further down.
                 Rectangle {
+                    id: outerGlowSource
                     anchors.fill: parent
                     anchors.margins: root.glowMargin // back to the panel's shape
                     radius: config.compact ? 6 : 12
                     color: "transparent"
                     border.width: Math.max(2, Math.round(config.neonSize / 5))
                     border.color: config.neonColor
+                    visible: false
                     layer.enabled: true
-                    // The outer halo is meant to be *seen* bleeding outward, so
-                    // it is more solid (higher spread) and better sampled than the
-                    // inward rim below — a 40 px radius capped at 41 samples looked
-                    // thin and read as "no halo". The radius is the glow margin, so
-                    // the blur fills the transparent room the surface grew.
-                    layer.effect: Glow {
-                        radius: config.neonSize
-                        samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 81))
-                        spread: 0.45
-                        color: config.neonColor
-                        transparentBorder: true
-                    }
+                }
+                // MultiEffect (QtQuick.Effects, Qt >= 6.5) blurs that ring outward
+                // into the transparent room the surface grew — one padded pass and
+                // fewer intermediate buffers than the old Qt5Compat Glow's separable
+                // multi-pass blur, for the same soft halo. autoPadding lets the blur
+                // bleed past the source bounds instead of being clipped; blurMax is
+                // the reach in px, matching the old radius. Meant to be *seen*
+                // spilling out, so brightness lifts the core the way the old spread
+                // 0.45 did.
+                MultiEffect {
+                    anchors.fill: outerGlowSource
+                    source: outerGlowSource
+                    autoPaddingEnabled: true
+                    blurEnabled: true
+                    blur: 1.0
+                    blurMax: Math.max(8, Math.round(config.neonSize))
+                    brightness: 0.15
                 }
             }
         }
@@ -1541,14 +1553,20 @@ Item {
                         color: "transparent"
                         border.width: Math.max(2, Math.round(config.neonSize / 5))
                         border.color: config.neonColor
+                        visible: false // texture source for the MultiEffect below
                         layer.enabled: true
-                        layer.effect: Glow {
-                            radius: config.neonSize
-                            samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 41))
-                            spread: 0.2
-                            color: config.neonColor
-                            transparentBorder: true
-                        }
+                    }
+                    // Soft inward wash of the ring over the panel, clipped to it
+                    // (no autoPadding: an outward bleed would be cut by the
+                    // compositor here anyway — that is what the outer style is for).
+                    // MultiEffect replaces the old Qt5Compat Glow: one blur pass,
+                    // fewer buffers, same look.
+                    MultiEffect {
+                        anchors.fill: parent
+                        source: neonSource
+                        blurEnabled: true
+                        blur: 1.0
+                        blurMax: Math.max(8, Math.round(config.neonSize))
                     }
                     Rectangle {
                         anchors.fill: parent

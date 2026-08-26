@@ -102,8 +102,17 @@ private:
     // hand-made position into.
     QList<TileRecord> searchPlacement() const;
     // The search hits ordered per TileConfig::searchSort. Both the grid and the
-    // list read this, so the two views always agree on the order.
+    // list read this, so the two views always agree on the order. Memoised for
+    // the current (query, sort): a single keystroke otherwise re-searches and
+    // re-sorts two or three times over — reloadApps() + searchPlacement(), plus
+    // the QML list's searchResults() — for the same result.
     QVariantList sortedSearchApps() const;
+    // The actual search + sort behind sortedSearchApps(), run on a cache miss.
+    QVariantList computeSortedSearchApps() const;
+    // Drop the memo. Called at the top of refresh(), which is where every input
+    // that changes the result (query, config sort, menu/favourites) funnels
+    // through, so the QML-facing searchResults() served afterwards is fresh.
+    void invalidateSearchCache() { m_searchCacheValid = false; }
 
     TileLayout *m_layout;
     AppMenu *m_menu;
@@ -118,4 +127,12 @@ private:
     int m_currentGroup = 0;
     int m_rows = 0;
     bool m_customized = false;
+
+    // Memo for sortedSearchApps(), keyed by (query, sort) and guarded by a valid
+    // flag that invalidateSearchCache() clears. mutable: the search accessors are
+    // const (they feed const Q_INVOKABLE getters), the cache is just their memo.
+    mutable QVariantList m_searchCache;
+    mutable QString m_searchCacheQuery;
+    mutable int m_searchCacheSort = -1;
+    mutable bool m_searchCacheValid = false;
 };

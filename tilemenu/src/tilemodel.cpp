@@ -147,6 +147,18 @@ void TileModel::reloadApps()
 
 QVariantList TileModel::sortedSearchApps() const
 {
+    const int mode = m_config ? m_config->searchSort() : 2;
+    if (m_searchCacheValid && m_searchCacheQuery == m_query && m_searchCacheSort == mode)
+        return m_searchCache;
+    m_searchCache = computeSortedSearchApps();
+    m_searchCacheQuery = m_query;
+    m_searchCacheSort = mode;
+    m_searchCacheValid = true;
+    return m_searchCache;
+}
+
+QVariantList TileModel::computeSortedSearchApps() const
+{
     if (!m_menu)
         return {};
     QVariantList apps = m_menu->search(m_query);
@@ -241,6 +253,10 @@ QList<TileRecord> TileModel::searchPlacement() const
 
 void TileModel::refresh()
 {
+    // Every input that changes the search order (query, config sort, menu and
+    // favourites) reaches the model through refresh(); drop the memo here so the
+    // recompute below and any later QML searchResults() see the new state.
+    invalidateSearchCache();
     reloadApps();
 
     // Clamp first: a tab can disappear under us (removed from the panel, or the
