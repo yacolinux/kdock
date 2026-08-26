@@ -4226,6 +4226,19 @@ QWidget *SettingsDialog::createNeonTab()
     sizeRow->addWidget(sizeVal);
     lookForm->addRow(tr("Tamaño:"), sizeRow);
 
+    // Render style: the inward rim (default) or an outward halo. The halo needs
+    // transparent room around the panel, so a floating dock glows on all four
+    // sides while one flush to the edge glows on the free ones; it does not run
+    // in the auto-hiding modes (falls back to the rim there).
+    auto *styleCombo = new QComboBox(lookBox);
+    styleCombo->addItem(tr("Rim (contorno interior)"));
+    styleCombo->addItem(tr("Halo exterior"));
+    styleCombo->setCurrentIndex(DockConfig::neonGlowMode() == 1 ? 1 : 0);
+    styleCombo->setToolTip(tr("Rim: el resplandor se derrama hacia adentro del panel. "
+                              "Halo exterior: se derrama hacia afuera (un dock flotante brilla "
+                              "por los cuatro lados; no corre en los modos de auto-ocultar)."));
+    lookForm->addRow(tr("Estilo:"), styleCombo);
+
     layout->addWidget(lookBox);
 
     // --- per-monitor list (same idiom as the Desktop tab) ---
@@ -4271,6 +4284,8 @@ QWidget *SettingsDialog::createNeonTab()
         showSize(v);
         DockConfig::setNeonSize(v);
     });
+    connect(styleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [](int idx) { DockConfig::setNeonGlowMode(idx); });
 
     layout->addStretch();
     return tab;

@@ -573,6 +573,23 @@ void DockConfig::setNeonSize(qreal v)
     notifyNeonChanged();
 }
 
+int DockConfig::neonGlowMode()
+{
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    return s.value(QStringLiteral("neonGlowMode"), 0).toInt();
+}
+
+void DockConfig::setNeonGlowMode(int mode)
+{
+    if (neonGlowMode() == mode)
+        return;
+    {
+        QSettings s(settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("neonGlowMode"), mode);
+    }
+    notifyNeonChanged();
+}
+
 bool DockConfig::neonWithDarkMode()
 {
     QSettings s(settingsFilePath(), QSettings::IniFormat);

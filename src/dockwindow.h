@@ -86,6 +86,12 @@ public:
     // too, or it would be a see-through patch that still eats them.
     Q_INVOKABLE void setGapRects(const QVariantList &rects);
 
+    // Rectangles (surface coordinates) of the painted panel pills, sent by
+    // Dock.qml only while the outer neon halo is active. When non-empty, the
+    // input region is restricted to their union so the transparent glow margin
+    // around the panel stays click-through; empty restores the gap-based mask.
+    Q_INVOKABLE void setContentRects(const QVariantList &rects);
+
     // Language changed: re-evaluate every qsTr() binding of this dock's QML and
     // rebuild the settings dialog (Qt Widgets has no retranslateUi here, the
     // strings were baked in when the widgets were built).
@@ -213,6 +219,7 @@ private:
     bool m_hidden = false;
     bool m_windowsOverlap = false;
     QList<QRect> m_gapRects; // transparent separators, see setGapRects()
+    QList<QRect> m_contentRects; // panel pills for the outer-halo input region
     bool m_primary = false;
     bool m_screenChangePending = false;
     // wl_output the current layer surface was bound to (as a raw pointer value).

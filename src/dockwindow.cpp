@@ -116,6 +116,9 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     connect(m_config, &DockConfig::compactChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::alignmentChanged, this, &DockWindow::applyLayerProperties);
     connect(m_config, &DockConfig::dockLengthChanged, this, &DockWindow::applyLayerProperties);
+    // The outer neon halo trims the screen-edge anchor margin (see the edgeM
+    // comment in applyLayerProperties); re-anchor when the neon state changes.
+    connect(m_config, &DockConfig::neonChanged, this, &DockWindow::applyLayerProperties);
     // A selectable-apps widget removed from the Layout tab would otherwise leave
     // its model behind, still connected and still rebuilding itself.
     connect(m_config, &DockConfig::widgetOrderChanged, this,
@@ -407,7 +410,13 @@ void DockWindow::applyLayerProperties()
     // the hover, and the dock hides, un-anchors, is hovered again… forever.
     // Only the dock's own edge; the alignment margins below keep the real
     // margin, or the dock would slide along the edge every time it hides.
-    const int edgeM = m_config->anchorEdgeMargin();
+    // Outer neon halo on the screen-edge side: the surface grows toward the edge
+    // by neonEdgeGlow() (QML insets the panel back, so it stays put), which means
+    // reducing the anchor margin by exactly that. 0 unless the halo is active, so
+    // this is a no-op everywhere else. The exclusive zone below is deliberately
+    // NOT reduced — the strut still reserves the dock thickness, the halo just
+    // floats over the gap.
+    const int edgeM = m_config->anchorEdgeMargin() - m_config->neonEdgeGlow();
     const bool horizontal = m_config->edge() == DockConfig::Bottom
                             || m_config->edge() == DockConfig::Top;
     switch (m_config->edge()) {
@@ -500,9 +509,38 @@ void DockWindow::setGapRects(const QVariantList &rects)
     applyHiddenMask();
 }
 
+void DockWindow::setContentRects(const QVariantList &rects)
+{
+    QList<QRect> parsed;
+    parsed.reserve(rects.size());
+    for (const QVariant &v : rects) {
+        const QVariantMap m = v.toMap();
+        const QRect r(m.value(QStringLiteral("x")).toInt(), m.value(QStringLiteral("y")).toInt(),
+                      m.value(QStringLiteral("width")).toInt(),
+                      m.value(QStringLiteral("height")).toInt());
+        if (!r.isEmpty())
+            parsed.append(r);
+    }
+    if (parsed == m_contentRects)
+        return;
+    m_contentRects = parsed;
+    applyHiddenMask();
+}
+
 void DockWindow::applyHiddenMask()
 {
     if (!m_hidden) {
+        // Outer neon halo: the input region is ONLY the panel pills, so the
+        // transparent glow margin the surface grew stays click-through. QML
+        // sends these only while the halo is active (empty otherwise), so this
+        // is the exact opposite of the gap path below — a union, not a cut-out.
+        if (!m_contentRects.isEmpty()) {
+            QRegion region;
+            for (const QRect &r : std::as_const(m_contentRects))
+                region += r;
+            setMask(region);
+            return;
+        }
         // An empty region means "no mask at all", which is the whole surface —
         // and the fast path for a dock without transparent separators.
         if (m_gapRects.isEmpty()) {

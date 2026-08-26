@@ -248,12 +248,7 @@ Item {
             else
                 content.push({ pos: pos, size: size })
         }
-        if (holes.length === 0) {
-            // No transparent separator: one run, no mask. Same dock as always.
-            root.gapRuns = [{ pos: 0, size: total }]
-            dockWindow.setGapRects([])
-            return
-        }
+        let painted
         // A hole is a hole only where no section draws. Everything below derives
         // from this one rule, and it is what guarantees that a section can never
         // be left outside the painted runs — and therefore never has its clicks
@@ -261,38 +256,39 @@ Item {
         // separator, but they do when the layout runs out of room and starts
         // piling them (the failure mode the auto-shrink exists for), and a stale
         // measurement can put them anywhere.
-        holes = root.subtractSpans(holes, content)
+        if (holes.length > 0)
+            holes = root.subtractSpans(holes, content)
         if (holes.length === 0) {
-            root.gapRuns = [{ pos: 0, size: total }]
-            dockWindow.setGapRects([])
-            return
-        }
-        holes.sort((a, b) => a.pos - b.pos)
+            // No transparent separator: one run. Same dock as always.
+            painted = [{ pos: 0, size: total }]
+        } else {
+            holes.sort((a, b) => a.pos - b.pos)
 
-        // Complement of the holes inside [0, total): the candidate runs.
-        let runs = []
-        let at = 0
-        for (let h = 0; h < holes.length; ++h) {
-            const start = Math.max(at, holes[h].pos)
-            if (start > at)
-                runs.push({ pos: at, size: start - at })
-            at = Math.max(at, holes[h].pos + holes[h].size)
-        }
-        if (at < total)
-            runs.push({ pos: at, size: total - at })
+            // Complement of the holes inside [0, total): the candidate runs.
+            let runs = []
+            let at = 0
+            for (let h = 0; h < holes.length; ++h) {
+                const start = Math.max(at, holes[h].pos)
+                if (start > at)
+                    runs.push({ pos: at, size: start - at })
+                at = Math.max(at, holes[h].pos + holes[h].size)
+            }
+            if (at < total)
+                runs.push({ pos: at, size: total - at })
 
-        // A run with nothing in it is not drawn. Without this, a separator next
-        // to a switched-off widget (the app menu, say) leaves a sliver of dock
-        // painted against the screen edge with no icon in it, which reads as
-        // "the dock lost its left end" (bug 2026-08-07). Only the padding lives
-        // there, so there is nothing to show.
-        let painted = []
-        for (let r = 0; r < runs.length; ++r) {
-            const from = runs[r].pos, to = runs[r].pos + runs[r].size
-            for (let c = 0; c < content.length; ++c) {
-                if (content[c].pos < to && content[c].pos + content[c].size > from) {
-                    painted.push(runs[r])
-                    break
+            // A run with nothing in it is not drawn. Without this, a separator
+            // next to a switched-off widget (the app menu, say) leaves a sliver
+            // of dock painted against the screen edge with no icon in it, which
+            // reads as "the dock lost its left end" (bug 2026-08-07). Only the
+            // padding lives there, so there is nothing to show.
+            painted = []
+            for (let r = 0; r < runs.length; ++r) {
+                const from = runs[r].pos, to = runs[r].pos + runs[r].size
+                for (let c = 0; c < content.length; ++c) {
+                    if (content[c].pos < to && content[c].pos + content[c].size > from) {
+                        painted.push(runs[r])
+                        break
+                    }
                 }
             }
         }
@@ -314,6 +310,24 @@ Item {
                 cursor = painted[k].pos + painted[k].size
         }
         dockWindow.setGapRects(rects)
+
+        // Outer halo: the input region must be ONLY the painted pills, so the
+        // transparent glow margin around them stays click-through. The runs
+        // above are in slider space and full-cross; map them to surface coords
+        // with the panel's glow offsets. Empty (and ignored by the window) in
+        // every other case, so the gap-based mask above is what applies then.
+        let contentRects = []
+        if (root.outerGlow) {
+            for (let p = 0; p < painted.length; ++p) {
+                const pr = painted[p]
+                contentRects.push(root.horizontal
+                    ? { x: pr.pos + root.glowAlongOffset, y: root.crossOffset,
+                        width: pr.size, height: root.thickness }
+                    : { x: root.crossOffset, y: pr.pos + root.glowAlongOffset,
+                        width: root.thickness, height: pr.size })
+            }
+        }
+        dockWindow.setContentRects(contentRects)
     }
     onWidthChanged: scheduleGapRuns()
     onHeightChanged: scheduleGapRuns()
@@ -327,6 +341,9 @@ Item {
         function onEdgeChanged() { root.scheduleGapRuns() }
         function onSpacingChanged() { root.scheduleGapRuns() }
         function onDockThicknessChanged() { root.scheduleGapRuns() }
+        // The outer halo changes the surface size and the panel offsets, so the
+        // input region (contentRects) has to be recomputed on any neon change.
+        function onNeonChanged() { root.scheduleGapRuns() }
     }
 
     // ---- Auto-shrink ------------------------------------------------------
@@ -673,16 +690,47 @@ Item {
     readonly property int edgeInset: config.edgeInset
     readonly property int surfaceThickness: thickness + edgeInset
 
+    // ---- Outer neon halo (see DockConfig::neonGlowOuter) ------------------
+    // When the "halo exterior" style is on, the surface grows beyond the dock
+    // and the panel is inset into that transparent room, so the glow can bleed
+    // outward instead of being clipped (the rim style leaves all of this at 0).
+    // The growth is per-side, only where the anchoring leaves room; where a side
+    // is pinned (an alignment corner, both ends in panel mode, the screen edge of
+    // a flush dock) the room is 0 and the halo simply clips there.
+    readonly property bool outerGlow: config.neonGlowOuter
+    readonly property int glowMargin: config.neonGlowMargin
+    readonly property bool _glowFullEdge: (config.panelMode && config.dockLength === 0)
+                                          || config.dockLength === 100
+    readonly property int goInterior: outerGlow ? glowMargin : 0
+    readonly property int goEdge: outerGlow ? config.neonEdgeGlow : 0
+    // A pinned end (Start alignment pins the start end, End pins the end) gets no
+    // room; a centred/floating dock frees both ends. edge enum: Bottom/Top are
+    // horizontal, so the ends are left/right; Left/Right are vertical (top/bottom).
+    readonly property int goStart: (outerGlow && !_glowFullEdge && config.alignment !== 0) ? glowMargin : 0
+    readonly property int goEnd:   (outerGlow && !_glowFullEdge && config.alignment !== 2) ? glowMargin : 0
+    readonly property int glowAlongTotal: goStart + goEnd
+    readonly property int glowCrossTotal: goInterior + goEdge
+    readonly property int glowAlongOffset: goStart
+    // Distance from the surface's top/left along the thickness axis to the panel:
+    // the interior room comes first on Bottom/Right, the edge room first on Top/Left.
+    readonly property int crossOffset: config.edge === 0 ? goInterior
+                                       : config.edge === 1 ? goEdge
+                                       : config.edge === 2 ? goEdge
+                                       : goInterior
+    readonly property int surfaceThicknessTotal: surfaceThickness + glowCrossTotal
+
     width: horizontal
-           ? (config.dockLength > 0 ? Math.max(fixedLength, thickness)
-              : config.panelMode ? Math.max(Window.width, thickness)
-                                 : Math.max(sectionLayout.implicitWidth + 2 * pad, thickness))
-           : surfaceThickness
+           ? ((config.dockLength > 0 ? Math.max(fixedLength, thickness)
+               : config.panelMode ? Math.max(Window.width, thickness)
+                                  : Math.max(sectionLayout.implicitWidth + 2 * pad, thickness))
+              + glowAlongTotal)
+           : surfaceThicknessTotal
     height: horizontal
-            ? surfaceThickness
-            : (config.dockLength > 0 ? Math.max(fixedLength, thickness)
-               : config.panelMode ? Math.max(Window.height, thickness)
-                                  : Math.max(sectionLayout.implicitHeight + 2 * pad, thickness))
+            ? surfaceThicknessTotal
+            : ((config.dockLength > 0 ? Math.max(fixedLength, thickness)
+                : config.panelMode ? Math.max(Window.height, thickness)
+                                   : Math.max(sectionLayout.implicitHeight + 2 * pad, thickness))
+               + glowAlongTotal)
 
     property bool menuOpen: false
     property bool tooltipVisible: false
@@ -1348,9 +1396,10 @@ Item {
         id: slider
         // The dock itself, which is only as thick as the dock: the extra
         // root.edgeInset of surface is the transparent band against the screen
-        // edge, and nothing is drawn in it.
-        width: root.horizontal ? root.width : root.thickness
-        height: root.horizontal ? root.thickness : root.height
+        // edge, and nothing is drawn in it. With the outer halo, the surface is
+        // also longer by root.glowAlongTotal, so the dock length subtracts it.
+        width: root.horizontal ? (root.width - root.glowAlongTotal) : root.thickness
+        height: root.horizontal ? root.thickness : (root.height - root.glowAlongTotal)
 
         // Where the dock sits when revealed: pushed away from the screen edge
         // by the inset, so the band ends up between the dock and the edge. On
@@ -1360,15 +1409,22 @@ Item {
         // Hiding it takes the whole surface: content plus band.
         readonly property int hideDistance: root.surfaceThickness
 
+        // The reveal/hide base position, plus the outer-halo inset that pushes
+        // the panel into the transparent room (both are 0 in the other's mode:
+        // the halo only runs in non-hiding modes, so edgeInset is 0 then).
         x: {
-            if (root.horizontal) return 0
-            if (root.revealed) return config.edge === 2 ? revealedOffset : 0
-            return config.edge === 2 ? -hideDistance : hideDistance
+            var b
+            if (root.horizontal) b = 0
+            else if (root.revealed) b = config.edge === 2 ? revealedOffset : 0
+            else b = config.edge === 2 ? -hideDistance : hideDistance
+            return b + (root.horizontal ? root.glowAlongOffset : root.crossOffset)
         }
         y: {
-            if (!root.horizontal) return 0
-            if (root.revealed) return config.edge === 1 ? revealedOffset : 0
-            return config.edge === 1 ? -hideDistance : hideDistance
+            var b
+            if (!root.horizontal) b = 0
+            else if (root.revealed) b = config.edge === 1 ? revealedOffset : 0
+            else b = config.edge === 1 ? -hideDistance : hideDistance
+            return b + (root.horizontal ? root.crossOffset : root.glowAlongOffset)
         }
 
         Behavior on x {
@@ -1383,6 +1439,41 @@ Item {
                 duration: config.hideAnimationMs
                 easing.type: Easing.InOutQuad
                 onRunningChanged: if (!running && !root.revealed) dockWindow.setHidden(true)
+            }
+        }
+
+        // Outer neon halo: one glow per run, drawn BEHIND the panels so the
+        // light emanates from behind each pill into the transparent room the
+        // surface grew (root.glowMargin). The source is the panel's ring shape;
+        // Glow blurs it outward. Where a side has no room the compositor clips
+        // it — exactly "no halo there". Only in the "halo exterior" style; the
+        // inward rim below covers the other style (they never both show).
+        Repeater {
+            model: root.outerGlow ? root.gapRuns : []
+            delegate: Item {
+                required property var modelData
+                z: -1
+                opacity: config.neonIntensity
+                x: (root.horizontal ? modelData.pos : 0) - root.glowMargin
+                y: (root.horizontal ? 0 : modelData.pos) - root.glowMargin
+                width: (root.horizontal ? modelData.size : slider.width) + 2 * root.glowMargin
+                height: (root.horizontal ? slider.height : modelData.size) + 2 * root.glowMargin
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: root.glowMargin // back to the panel's shape
+                    radius: config.compact ? 6 : 12
+                    color: "transparent"
+                    border.width: Math.max(2, Math.round(config.neonSize / 5))
+                    border.color: config.neonColor
+                    layer.enabled: true
+                    layer.effect: Glow {
+                        radius: config.neonSize
+                        samples: Math.max(9, Math.min(Math.round(config.neonSize) * 2 + 1, 41))
+                        spread: 0.2
+                        color: config.neonColor
+                        transparentBorder: true
+                    }
+                }
             }
         }
 
@@ -1419,7 +1510,7 @@ Item {
                 Item {
                     anchors.fill: parent
                     z: 3
-                    visible: config.neonActive && config.neonSize > 0
+                    visible: config.neonActive && config.neonSize > 0 && !root.outerGlow
                     opacity: config.neonIntensity
                     Rectangle {
                         id: neonSource
@@ -1444,6 +1535,21 @@ Item {
                         border.width: 2
                         border.color: Qt.lighter(config.neonColor, 1.4)
                     }
+                }
+
+                // The crisp neon tube for the outer halo: a bright line hugging
+                // the panel edge, on top of the panel (the soft glow behind it
+                // is the Repeater above). Rim mode draws its own crisp line in
+                // the block above, so this is only for the outer style.
+                Rectangle {
+                    anchors.fill: parent
+                    z: 3
+                    visible: root.outerGlow && config.neonSize > 0
+                    opacity: config.neonIntensity
+                    radius: background.radius
+                    color: "transparent"
+                    border.width: 2
+                    border.color: Qt.lighter(config.neonColor, 1.4)
                 }
 
                 // Optional tiled background image, drawn over the base color.

@@ -84,6 +84,54 @@ private slots:
         QCOMPARE(cfg.dockThickness(), base);
     }
 
+    // El halo exterior (neonGlowMode=1) reusa la primitiva del edgeInset: crece
+    // la superficie por lado. Lo que se congela acá es la resolución —cuándo
+    // corre y cuánto margen pide— que es lo que Dock.qml y dockwindow.cpp leen.
+    void outerGlowResolvesOnlyInNonHidingModes()
+    {
+        const QString id = freshDockId("neon-outer");
+        DockConfig cfg(id);
+        cfg.setScreenMargin(40);
+        cfg.setHideMode(DockConfig::AlwaysVisible);
+        DockConfig::setNeonEnabled(true);
+        DockConfig::setNeonScreenEnabled(id, true);
+        DockConfig::setNeonSize(18);
+        QVERIFY(cfg.neonActive());
+
+        // Rim (default): sin halo, sin crecer la superficie.
+        DockConfig::setNeonGlowMode(0);
+        QVERIFY(!cfg.neonGlowOuter());
+        QCOMPARE(cfg.neonGlowMargin(), 0);
+        QCOMPARE(cfg.neonEdgeGlow(), 0);
+
+        // Halo exterior en un modo que no oculta: margen = ceil(size), lado del
+        // borde acotado por el hueco flotante.
+        DockConfig::setNeonGlowMode(1);
+        QVERIFY(cfg.neonGlowOuter());
+        QCOMPARE(cfg.neonGlowMargin(), 18);
+        QCOMPARE(cfg.neonEdgeGlow(), 18); // min(18, 40)
+
+        // Un hueco flotante chico recorta el lado del borde.
+        cfg.setScreenMargin(10);
+        QCOMPARE(cfg.neonEdgeGlow(), 10); // min(18, 10)
+        cfg.setScreenMargin(40);
+
+        // Un modo que oculta cae al rim: nada de halo (compone mal con la banda
+        // del reveal, y un dock que se esconde no necesita un halo permanente).
+        cfg.setHideMode(DockConfig::AutoHide);
+        QVERIFY(!cfg.neonGlowOuter());
+        QCOMPARE(cfg.neonGlowMargin(), 0);
+        QCOMPARE(cfg.neonEdgeGlow(), 0);
+
+        // El estilo persiste (compartido, kdock.conf).
+        QCOMPARE(DockConfig::neonGlowMode(), 1);
+
+        // Devolver los estáticos compartidos para no arrastrar estado a otros casos.
+        DockConfig::setNeonEnabled(false);
+        DockConfig::setNeonScreenEnabled(id, false);
+        DockConfig::setNeonGlowMode(0);
+    }
+
     // Las dos son compartidas (kdock.conf), como showTooltips: se configuran
     // una vez y valen para todos los docks.
     void hideTimingsAreSharedAndClamped()

@@ -9,6 +9,7 @@
 #include <QSettings>
 #include <QStringList>
 #include <QUrl>
+#include <QtMath>
 
 // Process-wide "the dark mode changed" ping. DockConfig::darkModeChanged() is
 // per instance (one per dock); this one fires once, which is what the system
@@ -149,6 +150,16 @@ class DockConfig : public QObject
     Q_PROPERTY(QColor neonColor READ neonColor NOTIFY neonChanged)
     Q_PROPERTY(qreal neonIntensity READ neonIntensity NOTIFY neonChanged)
     Q_PROPERTY(qreal neonSize READ neonSize NOTIFY neonChanged)
+    // Outer halo instead of the inward rim, resolved for this dock: true only in
+    // "halo exterior" style AND a non-hiding mode (see neonGlowOuter). Dock.qml
+    // reads this to decide whether to grow the surface and bleed the glow out.
+    Q_PROPERTY(bool neonGlowOuter READ neonGlowOuter NOTIFY neonChanged)
+    // How much transparent room the outer glow needs around the panel, in px
+    // (0 when the outer glow is not active). Dock.qml grows the surface by this.
+    Q_PROPERTY(int neonGlowMargin READ neonGlowMargin NOTIFY neonChanged)
+    // The room available toward the screen edge (capped by the floating gap);
+    // Dock.qml grows the surface that way, dockwindow.cpp trims the anchor margin.
+    Q_PROPERTY(int neonEdgeGlow READ neonEdgeGlow NOTIFY neonChanged)
     // For the right-click "Neon" submenu (all NOTIFY neonChanged): the global
     // master state, this dock's own opt-out, and the five quick colors.
     Q_PROPERTY(bool neonEnabledGlobal READ neonEnabledGlobal NOTIFY neonChanged)
@@ -514,6 +525,10 @@ public:
     static void setNeonIntensity(qreal v);
     static qreal neonSizeSetting();                   // glow radius in px
     static void setNeonSize(qreal v);
+    // Neon render style: 0 = inward rim (default), 1 = outward halo. Shared, like
+    // the rest of the neon group; resolved per dock by neonGlowOuter().
+    static int neonGlowMode();
+    static void setNeonGlowMode(int mode);
     // "Activate neon with dark mode": when on, dark mode lights the neon even if
     // the neon master is off. A read-time link (see neonActive()), not a write —
     // it never touches neonEnabled. Set from the DarkMode tab.
@@ -785,6 +800,18 @@ public:
     QColor neonColor() const { return neonColorSetting(); }
     qreal neonIntensity() const { return neonIntensitySetting(); }
     qreal neonSize() const { return neonSizeSetting(); }
+    // The outer halo runs only when this dock's neon is active, the style is
+    // "halo exterior", and the mode does not hide (v1 does not compose the glow
+    // margin with the reveal band — see the Neon docs). Everything below keys
+    // off this: false ⇒ the classic rim, unchanged.
+    bool neonGlowOuter() const { return neonActive() && neonGlowMode() == 1 && !surfaceHugsEdge(); }
+    // px of transparent room the outer glow bleeds into, on the sides that have
+    // room. The margin is the glow radius; 0 when the halo is not active.
+    int neonGlowMargin() const { return neonGlowOuter() ? qCeil(neonSizeSetting()) : 0; }
+    // How far the surface may grow toward the screen edge for an edge-side halo:
+    // capped by the floating gap, so it never runs off-screen. 0 for a flush or
+    // hiding dock (no room), which is why the edge side then does not glow out.
+    int neonEdgeGlow() const { return qMin(neonGlowMargin(), effectiveMargin()); }
     // Right-click "Neon" submenu. neonEnabledGlobal mirrors the master (toggling
     // it hits every dock); neonDockDisabled is a per-dock opt-out that wins over
     // everything in neonActive(). The setters go through the statics so QML can
