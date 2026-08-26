@@ -13,6 +13,7 @@
 #include <QGuiApplication>
 #include <QProcess>
 #include <QScreen>
+#include <QTimer>
 
 QString DockService::serviceName()
 {
@@ -63,11 +64,35 @@ bool DockService::registerOnBus()
     QDBusConnection bus = QDBusConnection::sessionBus();
     if (!bus.isConnected())
         return false;
-    if (!bus.registerService(serviceName()))
-        return false;
-    return bus.registerObject(objectPath(), this,
-                              QDBusConnection::ExportScriptableSlots
-                                  | QDBusConnection::ExportScriptableSignals);
+
+    // Export the object once: it is local and does not depend on owning the
+    // name, so clients simply cannot reach it until the name is acquired below.
+    if (!m_objectExported) {
+        if (!bus.registerObject(objectPath(), this,
+                                QDBusConnection::ExportScriptableSlots
+                                    | QDBusConnection::ExportScriptableSignals))
+            return false;
+        m_objectExported = true;
+    }
+
+    if (bus.registerService(serviceName()))
+        return true;
+
+    // Name momentarily taken — the restart race (see the header). Keep trying on
+    // the event loop until the outgoing instance releases it, bounded so a real
+    // second kdock stops instead of spinning forever.
+    if (!m_registerRetry) {
+        m_registerRetry = new QTimer(this);
+        m_registerRetry->setInterval(kRegisterRetryMs);
+        connect(m_registerRetry, &QTimer::timeout, this, [this] {
+            if (QDBusConnection::sessionBus().registerService(serviceName())
+                || ++m_registerAttempts >= kRegisterMaxTries)
+                m_registerRetry->stop();
+        });
+    }
+    m_registerAttempts = 0;
+    m_registerRetry->start();
+    return false;
 }
 
 void DockService::openSettings(const QString &dockId)

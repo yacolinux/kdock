@@ -1234,3 +1234,17 @@ este archivo y leé la entrada correspondiente (o toda la sección).
   vacío y `apply()` no escribía nada teniendo "latam" a la vista (2026-08-22). Vale para
   cualquier control con valor sugerido: **la captura se ve idéntica en las dos versiones**, esto
   solo se encuentra manejando el diálogo desde código e imprimiendo lo que quedó en la config.
+
+- **`QDBusConnection::registerService` no hace cola, y el reinicio del dock corre una carrera
+  contra sí mismo.** `kdock::restartAll` (`src/apprestart.cpp`) hace `QProcess::startDetached`
+  del nuevo proceso y **recién después** `QCoreApplication::quit()` del viejo, así que por un
+  instante los dos están vivos y el viejo todavía es dueño de `org.kdock.Dock`. Un
+  `registerService` de un solo intento **pierde el nombre para siempre**: el dock relanzado
+  queda en pantalla pero sin servicio D-Bus, y desde afuera se ve como "el reinicio no tomó el
+  binario nuevo" (medido 2026-08-25 — tras instalar `setWallpaper`, el `restart` dejaba el dock
+  sin `org.kdock.Dock`, y `GetNameOwner` daba *no such name*). El arreglo es un reintento acotado
+  sobre el bucle de eventos (`DockService::registerOnBus`, `QTimer` cada 150 ms hasta ~3 s): el
+  objeto se exporta una sola vez —es local, no depende del nombre— y solo el `registerService` se
+  reintenta, así el dock termina contestando sin robarle el nombre a un segundo kdock legítimo.
+  Se prueba llamando `restart` por D-Bus varias veces seguidas y verificando que `GetNameOwner
+  org.kdock.Dock` devuelve dueño en cada vuelta.

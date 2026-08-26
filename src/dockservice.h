@@ -22,6 +22,7 @@
 #include <QStringList>
 
 class DockManager;
+class QTimer;
 
 class DockService : public QObject
 {
@@ -33,9 +34,17 @@ public:
 
     explicit DockService(DockManager *manager, QObject *parent = nullptr);
 
-    // Claims the name and exports the slots. False when the name is taken (a
-    // second kdock) or there is no bus — neither is fatal, the dock just does
-    // not answer.
+    // Exports the slots and claims the name. Returns whether the name was
+    // acquired *right now*: false when there is no bus (a second real kdock),
+    // and also false during the restart race below — but in that case a bounded
+    // retry keeps trying on the event loop, so the dock ends up answering anyway.
+    //
+    // The race: the menu's "Restart" (kdock::restartAll) starts the new process
+    // and only *then* quits the old one, so for a moment both are alive and the
+    // old one still owns org.kdock.Dock. registerService does no queuing, so a
+    // single attempt would lose the name for good and the relaunched dock would
+    // never answer D-Bus (measured 2026-08-25). Retrying until the old instance
+    // lets go fixes it without stealing the name from a genuine second kdock.
     bool registerOnBus();
 
 public slots:
@@ -112,4 +121,15 @@ private:
     // Last value announced, so the notifier does not re-emit on every repaint.
     bool m_lastDarkMode = false;
     bool m_lastColorAuto = false;
+
+    // Bus-name acquisition state (see registerOnBus). The object is exported
+    // once — it is local and does not depend on owning the name — and then the
+    // name is retried until it is free.
+    bool m_objectExported = false;
+    QTimer *m_registerRetry = nullptr;
+    int m_registerAttempts = 0;
+    // ~3 s of retries: the old instance quits right after it launches this one,
+    // so the name frees in tens of milliseconds; this is slack, not a wait.
+    static constexpr int kRegisterRetryMs = 150;
+    static constexpr int kRegisterMaxTries = 20;
 };

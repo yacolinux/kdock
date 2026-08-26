@@ -1448,6 +1448,7 @@ El cuerpo de cada trampa está en **`CLAUDE-TRAMPS.md`** — abrí ese archivo y
 - **`org.kde.KWin.reconfigure` no recarga el mapa de teclas**, y `/etc/default/keyboard` es la respuesta de X11.
 - **Un metatipo de D-Bus registrado por el test le queda registrado al código de producción.**
 - **Un combo que abre en un valor de *fallback* no guarda ese valor**, y la casilla que lo aplica no aplica nada.
+- **`QDBusConnection::registerService` no hace cola, y el reinicio del dock corre una carrera contra sí mismo.**
 
 ## Depurar un arranque que "no responde"
 
