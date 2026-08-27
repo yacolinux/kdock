@@ -103,6 +103,44 @@ protected:
     }
 };
 
+// A client that exports a perfectly valid SNI object but never calls the
+// watcher's RegisterStatusNotifierItem method.  This is the state left by
+// clients such as blueman/kdeconnect after the host process is restarted.
+class PassiveTrayClient
+{
+public:
+    PassiveTrayClient()
+        : m_bus(QDBusConnection::connectToBus(
+            QDBusConnection::SessionBus, QStringLiteral("kdock-test-passive-sni")))
+    {
+    }
+
+    ~PassiveTrayClient()
+    {
+        if (m_bus.isConnected()) {
+            m_bus.unregisterObject(QStringLiteral("/org/blueman/sni"));
+            QDBusConnection::disconnectFromBus(QStringLiteral("kdock-test-passive-sni"));
+        }
+    }
+
+    bool registerObject()
+    {
+        m_adaptor = new SniItemAdaptor(&m_object);
+        if (!m_bus.registerObject(QStringLiteral("/org/blueman/sni"), &m_object,
+                                  QDBusConnection::ExportAdaptors))
+            return false;
+        serviceName = m_bus.baseService();
+        return !serviceName.isEmpty();
+    }
+
+    QString serviceName;
+
+private:
+    QDBusConnection m_bus;
+    QObject m_object;
+    SniItemAdaptor *m_adaptor = nullptr;
+};
+
 class TestSystray : public QObject
 {
     Q_OBJECT
@@ -116,10 +154,23 @@ private slots:
     {
         if (!QDBusConnection::sessionBus().isConnected())
             QSKIP("no hay bus de sesión (¿falta dbus-run-session?)");
+        m_passive = std::make_unique<PassiveTrayClient>();
+        QVERIFY(m_passive->registerObject());
         m_host = std::make_unique<SystrayHost>();
     }
 
-    void cleanupTestCase() { m_host.reset(); }
+    void cleanupTestCase()
+    {
+        m_passive.reset();
+        m_host.reset();
+    }
+
+    void recoversAnItemThatNeverReRegistered()
+    {
+        QVERIFY(m_host->active());
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->items().size(), 1, 5000);
+        QCOMPARE(m_host->items().first()->service, m_passive->serviceName);
+    }
 
     // Sin nadie más en el bus, el host se convierte en el watcher — que es el
     // caso de esta sesión (LXQt) y el único en el que kdock atiende
@@ -133,6 +184,12 @@ private slots:
     void registeringAMuteItemDoesNotBlockTheEventLoop()
     {
         SystrayHost &host = *m_host;
+
+        // The recovery test deliberately leaves an SNI object behind without
+        // a watcher registration.  Remove it before testing the single-item
+        // registration path below.
+        m_passive.reset();
+        QTRY_COMPARE_WITH_TIMEOUT(host.items().size(), 0, 2000);
 
         MuteTrayClient client;
         client.start();
@@ -174,6 +231,7 @@ private slots:
 
 private:
     std::unique_ptr<SystrayHost> m_host;
+    std::unique_ptr<PassiveTrayClient> m_passive;
 };
 
 KDOCK_TEST_MAIN(TestSystray)

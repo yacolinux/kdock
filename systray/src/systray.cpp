@@ -17,7 +17,9 @@
 #include <QImage>
 #include <QPainter>
 #include <QPixmap>
+#include <QTimer>
 #include <QVariantMap>
+#include <QXmlStreamReader>
 #include <QtEndian>
 
 #include <memory>
@@ -37,6 +39,11 @@ static const QString ITEM_IFACE = QStringLiteral("org.kde.StatusNotifierItem");
 // kept alive for a client that never answers — but "never answers" is the normal
 // state of a tray client that is itself blocked, so the default is far too long.
 static constexpr int kItemCallTimeoutMs = 4000;
+// Give normal clients a chance to finish their startup registration first.
+// The scan is a recovery path for clients that did not register again after a
+// watcher restart, not a replacement for the normal signal-driven path.
+static constexpr int kExistingItemScanDelayMs = 1500;
+static constexpr int kIntrospectionTimeoutMs = 3000;
 
 // The properties the dock draws. Only used by the per-key fallback: the normal
 // path is a single GetAll.
@@ -534,6 +541,7 @@ void SystrayHost::becomeWatcher()
                       "name may not appear until it is freed (disable kded6's "
                       "statusnotifierwatcher module and restart the session).";
     }
+    scheduleExistingItemScan();
 }
 
 void SystrayHost::setupAsHost(const QStringList &initialIds)
@@ -566,6 +574,127 @@ void SystrayHost::setupAsHost(const QStringList &initialIds)
             qWarning() << "kdock: RegisterStatusNotifierHost failed:" << reply.error().message()
                        << "— becoming the watcher ourselves";
             becomeWatcher();
+        }
+    });
+    scheduleExistingItemScan();
+}
+
+void SystrayHost::scheduleExistingItemScan()
+{
+    // Do not introspect from ensureWatcher(): under a real session the watcher
+    // probe and host registration are still settling there.  A queued timer
+    // also makes the scan harmless when this process is started before the
+    // session's SNI clients have finished creating their objects.
+    QTimer::singleShot(kExistingItemScanDelayMs, this,
+                       &SystrayHost::scanExistingItems);
+}
+
+void SystrayHost::scanExistingItems()
+{
+    if (!m_active)
+        return;
+
+    // ListNames is asynchronous on purpose.  A tray client can be blocked in
+    // its own synchronous RegisterStatusNotifierItem call, and a recovery
+    // pass must never make that stall the host's event loop.
+    QDBusMessage list = QDBusMessage::createMethodCall(
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("/"),
+        QStringLiteral("org.freedesktop.DBus"), QStringLiteral("ListNames"));
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(list, kIntrospectionTimeoutMs), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
+        const QDBusPendingReply<QStringList> reply = *watcher;
+        watcher->deleteLater();
+        if (reply.isError()) {
+            qWarning() << "kdock: systray could not list session-bus services for SNI recovery:"
+                       << reply.error().message();
+            return;
+        }
+
+        int services = 0;
+        for (const QString &name : reply.value()) {
+            // Unique names are enough: they identify the owner even when the
+            // well-known name changes, and avoid introspecting the same process
+            // once for every alias it owns.
+            if (!name.startsWith(QLatin1Char(':')))
+                continue;
+            ++services;
+            scanServiceObject(name, QStringLiteral("/"));
+        }
+        qInfo() << "kdock: systray SNI recovery scan started for" << services
+                << "session-bus service(s)";
+    });
+}
+
+void SystrayHost::scanServiceObject(const QString &service, const QString &path)
+{
+    QDBusMessage introspect = QDBusMessage::createMethodCall(
+        service, path, QStringLiteral("org.freedesktop.DBus.Introspectable"),
+        QStringLiteral("Introspect"));
+    auto *watcher = new QDBusPendingCallWatcher(
+        QDBusConnection::sessionBus().asyncCall(introspect, kIntrospectionTimeoutMs), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, watcher, service, path] {
+        const QDBusPendingReply<QString> reply = *watcher;
+        watcher->deleteLater();
+        if (reply.isError())
+            return; // Most session services are not introspectable at '/'.
+
+        QXmlStreamReader xml(reply.value());
+        QStringList children;
+        bool isStatusNotifierItem = false;
+        // The first start element is the document's outer <node>.  Do not
+        // skip it: doing so would also skip every child node and make the
+        // recovery pass silently find nothing on Qt-exported objects.
+        if (!xml.readNextStartElement() || xml.name() != QLatin1String("node"))
+            return;
+        while (xml.readNextStartElement()) {
+            if (xml.name() == QLatin1String("interface")) {
+                if (xml.attributes().value(QLatin1String("name"))
+                        == ITEM_IFACE)
+                    isStatusNotifierItem = true;
+                xml.skipCurrentElement();
+            } else if (xml.name() == QLatin1String("node")) {
+                const QString child = xml.attributes().value(QLatin1String("name")).toString();
+                if (!child.isEmpty() && !child.contains(QLatin1Char('/')))
+                    children.append(child);
+                xml.skipCurrentElement();
+            } else {
+                xml.skipCurrentElement();
+            }
+        }
+        if (xml.hasError())
+            return;
+
+        if (isStatusNotifierItem) {
+            if (indexOfService(service) < 0) {
+                addItem(service, path);
+                qInfo() << "kdock: systray recovered unregistered SNI item"
+                        << service << path;
+            }
+
+            // For the common /StatusNotifierItem form, ask a foreign watcher
+            // to record the item too.  We cannot do this for custom paths:
+            // the watcher obtains their owner from the method-call sender, and
+            // that sender is kdock rather than the client.  The local host is
+            // still fully functional for those items because addItem() above
+            // talks to the real object directly.
+            if (!m_isWatcher && path == QLatin1String("/StatusNotifierItem")) {
+                QDBusMessage registerItem = QDBusMessage::createMethodCall(
+                    m_watcherService, WATCHER_PATH, m_watcherService,
+                    QStringLiteral("RegisterStatusNotifierItem"));
+                registerItem.setArguments({service});
+                QDBusConnection::sessionBus().asyncCall(registerItem,
+                                                        kIntrospectionTimeoutMs);
+            }
+        }
+
+        for (const QString &child : children) {
+            QString childPath = path;
+            if (childPath != QLatin1String("/"))
+                childPath += QLatin1Char('/');
+            childPath += child;
+            scanServiceObject(service, childPath);
         }
     });
 }

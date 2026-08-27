@@ -154,6 +154,13 @@ private:
     // Register as a host with the (verified alive) watcher in m_watcherService,
     // wire its signals and seed the list from the ids the probe already fetched.
     void setupAsHost(const QStringList &initialIds);
+    // Some SNI clients keep their object alive but do not register again when
+    // the watcher/host process is restarted.  Discover those objects directly
+    // on the session bus after startup, like GNOME's app-indicator watcher
+    // does, and add them back to this host.
+    void scheduleExistingItemScan();
+    void scanExistingItems();
+    void scanServiceObject(const QString &service, const QString &path);
     void connectWatcherSignals();
     void onServiceUnregistered(const QString &service);
     void addItem(const QString &service, const QString &path);
