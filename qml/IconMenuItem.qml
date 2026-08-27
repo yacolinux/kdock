@@ -33,6 +33,10 @@ MenuItem {
         Image {
             visible: control._source !== ""
             source: control._source
+            // Systray menu entries may carry a raw icon-data URL with a serial
+            // suffix. Do not retain every old raw blob in Qt Quick's image
+            // cache; named theme icons keep the normal cache behavior.
+            cache: control.iconSource === ""
             sourceSize: Qt.size(22 * Screen.devicePixelRatio, 22 * Screen.devicePixelRatio)
             width: 22
             height: 22

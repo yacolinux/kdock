@@ -147,7 +147,15 @@ int main(int argc, char *argv[])
     QObject::connect(&translations, &Translations::changed, &window,
                      [&window] { window.reloadConfig(); });
     SystrayService service(&window);
-    service.registerOnBus();
+    // `alreadyRunning()` above is only an optimisation. Two launchers can pass
+    // it before either one has claimed the name, so the registration itself is
+    // the authoritative single-instance check. A loser must not enter the event
+    // loop: it would keep its own SNI host, QML scene and render resources alive
+    // without being reachable through org.kdock.Systray.
+    if (!service.registerOnBus()) {
+        qWarning() << "kdock: systray instance lost the single-instance bus race";
+        return 0;
+    }
 
     if (wantShow || wantToggle)
         window.showOn(screenName);

@@ -5,7 +5,8 @@
 // Context properties (set in SystrayWindow): systray (SystrayModel), theme,
 // config (SystrayConfig), win (SystrayWindow). Menus are Popup.Window, i.e.
 // their own xdg surface — which now has a real toplevel to parent to, unlike
-// inside the dock.
+// inside the dock. Tooltips use the attached API so the tray has one shared
+// tooltip instead of one Popup.Window per item.
 
 import QtQuick
 import QtQuick.Controls
@@ -53,12 +54,13 @@ Item {
                 width: root.iconPx
                 height: root.iconPx
 
-                ToolTip {
-                    popupType: Popup.Window
-                    visible: config.showTooltips && !root.menuOpen && systrayMouse.containsMouse
-                    delay: 400
-                    text: model.tooltip || model.service
-                }
+                // The attached ToolTip is shared by the QQuickWindow. An inline
+                // Popup.Window here creates a permanent render surface the first
+                // time each item is hovered.
+                ToolTip.text: model.tooltip || model.service
+                ToolTip.visible: config.showTooltips && !root.menuOpen
+                                 && systrayMouse.containsMouse
+                ToolTip.delay: 400
 
                 Image {
                     anchors.centerIn: parent
@@ -71,6 +73,10 @@ Item {
                         : "image://systray/" + model.service + "@" + model.iconSerial
                     sourceSize: Qt.size(root.iconPx * Screen.devicePixelRatio,
                                         root.iconPx * Screen.devicePixelRatio)
+                    // Pixmap-only SNI icons use a changing cache-busting URL.
+                    // Do not retain every old frame in Qt Quick's global image
+                    // cache when an item emits frequent NewStatus/NewIcon signals.
+                    cache: model.iconName !== ""
                     scale: systrayMouse.containsMouse ? 1.12 : 1.0
                     Behavior on scale { NumberAnimation { duration: 120 } }
                 }
@@ -120,16 +126,44 @@ Item {
                     systray.requestMenu(index)
                 }
 
-                SystrayMenu {
-                    id: itemMenu
-                    itemRow: index
-                    service: model.service
-                    onAboutToShow: { root.menuOpen = true; win.setMenuOpen(true) }
-                    onOpened: systray.setMenuOpen(index, true)
-                    onClosed: {
-                        root.menuOpen = false
-                        systray.setMenuOpen(index, false)
-                        win.setMenuOpen(false)
+                Loader {
+                    id: menuLoader
+                    active: false
+                    property double closedAt: 0
+                    property int itemRow: index
+                    property string itemService: model.service
+                    sourceComponent: SystrayMenu {
+                        id: itemMenu
+                        itemRow: menuLoader.itemRow
+                        service: menuLoader.itemService
+                        onAboutToShow: {
+                            root.menuOpen = true
+                            win.setMenuOpen(true)
+                        }
+                        onOpened: systray.setMenuOpen(menuLoader.itemRow, true)
+                        onClosed: {
+                            root.menuOpen = false
+                            systray.setMenuOpen(menuLoader.itemRow, false)
+                            win.setMenuOpen(false)
+                        }
+                        // Closing a Popup.Window does not destroy its backing
+                        // QQuickWindow. Tear this menu down after it has been
+                        // idle so repeated tray-menu use cannot accumulate one
+                        // render surface per item/submenu forever.
+                        onVisibleChanged: {
+                            if (!visible) {
+                                menuLoader.closedAt = Date.now()
+                                idleTimer.restart()
+                            }
+                        }
+                        Timer {
+                            id: idleTimer
+                            interval: 30000
+                            onTriggered: {
+                                if (!itemMenu.visible)
+                                    menuLoader.active = false
+                            }
+                        }
                     }
                 }
 
@@ -139,8 +173,9 @@ Item {
                         if (row !== index || !systrayItem.menuWanted)
                             return
                         systrayItem.menuWanted = false
-                        itemMenu.nodes = systray.menuTree(index)
-                        itemMenu.popup(systrayItem.menuOriginX(), systrayItem.menuOriginY())
+                        menuLoader.active = true
+                        menuLoader.item.nodes = systray.menuTree(index)
+                        menuLoader.item.popup(systrayItem.menuOriginX(), systrayItem.menuOriginY())
                     }
                     function onMenuFailed(row) {
                         if (row !== index || !systrayItem.menuWanted)
@@ -150,19 +185,19 @@ Item {
                         systray.contextMenu(index, systrayItem.pendingX, systrayItem.pendingY)
                     }
                     function onMenuInvalidated(row) {
-                        if (row === index && itemMenu.visible)
-                            itemMenu.nodes = systray.menuTree(index)
+                        if (row === index && menuLoader.item && menuLoader.item.visible)
+                            menuLoader.item.nodes = systray.menuTree(index)
                     }
                 }
 
                 // Opens away from the anchored edge, like every dock popup.
                 function menuOriginX() {
                     if (config.edge === 2) return systrayItem.width
-                    if (config.edge === 3) return -itemMenu.width
+                    if (config.edge === 3) return -menuLoader.item.width
                     return 0
                 }
                 function menuOriginY() {
-                    if (config.edge === 0) return -itemMenu.height
+                    if (config.edge === 0) return -menuLoader.item.height
                     if (config.edge === 1) return systrayItem.height
                     return 0
                 }
