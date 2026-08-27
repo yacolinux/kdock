@@ -91,6 +91,11 @@ public:
     // Monitors offered by the UI: the connected ones first, then the ones the
     // config has seen before, capped at kMaxScreens.
     static QStringList configuredScreens();
+    // All remembered wallpaper folders across the virtual desktops, with the
+    // folder of `currentScreen` on `desktop` first. Empty folders are omitted
+    // and repeated paths appear only once. The remembered lists are append-only
+    // and are refreshed from the per-monitor config on every call.
+    static QStringList slideshowFolders(int desktop, const QString &currentScreen);
 
     // "x,y" of every connected screen, by connector name. Public because it is
     // the bridge between a Plasma containment (which only knows a screen index

@@ -29,7 +29,8 @@ OUT = ROOT / "translations" / "capabase.md"
 # are exactly the UIdock bucket. Everything else is a C++ class.
 QML_DIRS = [ROOT / "qml", ROOT / "previews" / "qml", ROOT / "tilemenu" / "qml",
             ROOT / "controlmanager" / "qml", ROOT / "controlmanager" / "qml" / "cards",
-            ROOT / "weather" / "qml", ROOT / "systray" / "qml"]
+            ROOT / "weather" / "qml", ROOT / "systray" / "qml",
+            ROOT / "desktop" / "qml"]
 QML_CONTEXTS = {p.stem for d in QML_DIRS for p in d.glob("*.qml")}
 
 # The four binaries share one catalogue: the accessories' strings live in the
@@ -40,7 +41,8 @@ SCAN_DIRS = [ROOT / "src", ROOT / "qml",
              ROOT / "tilemenu" / "src", ROOT / "tilemenu" / "qml",
              ROOT / "controlmanager" / "src", ROOT / "controlmanager" / "qml",
              ROOT / "weather" / "src", ROOT / "weather" / "qml",
-             ROOT / "systray" / "src", ROOT / "systray" / "qml"]
+             ROOT / "systray" / "src", ROOT / "systray" / "qml",
+             ROOT / "desktop" / "src", ROOT / "desktop" / "qml"]
 
 HEADER = """# capabase
 

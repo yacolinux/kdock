@@ -199,6 +199,16 @@ void DockLink::openSettings(const QString &dockId)
     QDBusConnection::sessionBus().asyncCall(msg);
 }
 
+void DockLink::openWallpaperSettings(const QString &dockId)
+{
+    if (!m_available)
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("openWallpaperSettings"));
+    msg.setArguments({dockId});
+    QDBusConnection::sessionBus().asyncCall(msg);
+}
+
 void DockLink::openNetworkSettings(const QString &dockId)
 {
     if (!m_available)

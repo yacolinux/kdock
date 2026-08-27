@@ -7,6 +7,7 @@
 #include "cmsections.h"
 #include "cmsettingsdialog.h"
 
+#include "desktopwallpapers.h"
 #include "dockconfig.h"
 
 #include "audiocontrol.h"
@@ -128,6 +129,14 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
     connect(qGuiApp, &QGuiApplication::screenAdded, this, &CmWindow::scheduleApplyScreen);
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, &CmWindow::scheduleApplyScreen);
     connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, &CmWindow::scheduleApplyScreen);
+    connect(qGuiApp, &QGuiApplication::screenAdded, this,
+            [this] { emit slideshowWallpaperFoldersChanged(); });
+    connect(qGuiApp, &QGuiApplication::screenRemoved, this,
+            [this] { emit slideshowWallpaperFoldersChanged(); });
+    if (m_backends.desktops) {
+        connect(m_backends.desktops, &VirtualDesktops::currentChanged, this,
+                [this] { emit slideshowWallpaperFoldersChanged(); });
+    }
     connect(m_config, &CmConfig::sectionsChanged, this, &CmWindow::sectionsChanged);
     // A background change can flip which icon set reads on it, and a theme edit
     // bumps the revision that busts QML's pixmap cache.
@@ -164,6 +173,9 @@ CmWindow::CmWindow(CmConfig *config, Theme *theme, CmLayout *layout, CmModel *mo
 
     applyScreen();
     applySize();
+    // Seed the append-only folder registry at startup, even if the user does
+    // not open the context menu during this run.
+    DesktopWallpapers::slideshowFolders(wallpaperDesktop(), wallpaperScreenName());
     setSource(QUrl(QStringLiteral("qrc:/qml/ControlManager.qml")));
 
     connect(this, &QWindow::activeChanged, this, &CmWindow::onActiveChanged);
@@ -214,6 +226,45 @@ void CmWindow::setCurrentTab(const QString &tab)
     if (m_config->rememberTab())
         m_config->setLastTab(tab);
     emit currentTabChanged();
+}
+
+int CmWindow::wallpaperDesktop() const
+{
+    // LXQt has no KWin desktop answer, but its wallpaper engine uses desktop 1
+    // for the same shared configuration. Under Plasma, currentPosition() is
+    // the authoritative 1-based desktop number.
+    return m_backends.desktops && m_backends.desktops->currentPosition() > 0
+               ? m_backends.desktops->currentPosition()
+               : 1;
+}
+
+QString CmWindow::wallpaperScreenName() const
+{
+    if (!m_screenName.isEmpty())
+        return m_screenName;
+    if (screen() && !screen()->name().isEmpty())
+        return screen()->name();
+    if (QScreen *primary = QGuiApplication::primaryScreen())
+        return primary->name();
+    return {};
+}
+
+QStringList CmWindow::slideshowWallpaperFolders() const
+{
+    return DesktopWallpapers::slideshowFolders(wallpaperDesktop(), wallpaperScreenName());
+}
+
+QString CmWindow::currentSlideshowWallpaperFolder() const
+{
+    return DesktopWallpapers::slideshowFolder(wallpaperDesktop(), wallpaperScreenName());
+}
+
+void CmWindow::setCurrentSlideshowWallpaperFolder(const QString &folder)
+{
+    if (!slideshowWallpaperFolders().contains(folder))
+        return;
+    DesktopWallpapers::setSlideshowFolder(wallpaperDesktop(), wallpaperScreenName(), folder);
+    emit slideshowWallpaperFoldersChanged();
 }
 
 void CmWindow::scheduleApplyScreen()
@@ -348,6 +399,7 @@ void CmWindow::showOn(const QString &screenName)
 {
     if (!screenName.isEmpty() && screenName != m_screenName) {
         m_screenName = screenName;
+        emit slideshowWallpaperFoldersChanged();
         applyScreen();
     }
     applySize();

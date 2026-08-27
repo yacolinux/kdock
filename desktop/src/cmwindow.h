@@ -19,6 +19,7 @@
 
 #include <QQuickView>
 #include <QString>
+#include <QStringList>
 
 #include "cmbackends.h"
 
@@ -35,6 +36,11 @@ class CmWindow : public QQuickView
     // Tab currently on screen ("" = Principal). Lives here rather than in QML so
     // the D-Bus "show this section" call has somewhere to land.
     Q_PROPERTY(QString currentTab READ currentTab WRITE setCurrentTab NOTIFY currentTabChanged)
+    // Slideshow folders offered by the right-click menu. The current monitor's
+    // folder is first; the setter only changes the stored folder key, leaving
+    // the wallpaper currently on screen untouched until kdock applies it.
+    Q_PROPERTY(QStringList slideshowWallpaperFolders READ slideshowWallpaperFolders
+                   NOTIFY slideshowWallpaperFoldersChanged)
     // The sections, for the tab bar and the settings panel.
     Q_PROPERTY(QVariantList sections READ sections NOTIFY sectionsChanged)
     // Trailing part of every image://icon URL in the panel: the theme revision
@@ -73,6 +79,10 @@ public:
     QString currentTab() const { return m_currentTab; }
     void setCurrentTab(const QString &tab);
 
+    QStringList slideshowWallpaperFolders() const;
+    Q_INVOKABLE QString currentSlideshowWallpaperFolder() const;
+    Q_INVOKABLE void setCurrentSlideshowWallpaperFolder(const QString &folder);
+
     // Corner-drag resize: the QML grips report the new pixel size and this
     // stores it, clearing any width/height percentage first (a drag writes
     // absolute pixels — that is what the user is looking at).
@@ -108,6 +118,7 @@ public:
 
 signals:
     void currentTabChanged();
+    void slideshowWallpaperFoldersChanged();
     void sectionsChanged();
     void iconSuffixChanged();
     void windowFrameChanged();
@@ -124,6 +135,8 @@ private:
     void scheduleApplyScreen();
     void applySize();
     void onActiveChanged();
+    int wallpaperDesktop() const;
+    QString wallpaperScreenName() const;
     // True while one of our own dialogs is on screen: those steal the focus, and
     // closing the panel underneath the dialog it just opened is not what anyone
     // wants.

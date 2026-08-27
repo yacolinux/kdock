@@ -2817,6 +2817,21 @@ binario limpio; el uso de la barra de solapas (visible arriba) viene después.
   `MouseArea` de fondo (`z:-1`, `acceptedButtons: RightButton`) que abre el mismo menú desde
   cualquier lado — así se puede volver a *Principal* estando dentro de una sección. Todo esto es
   solo del `ControlManager.qml` de `desktop/`.
+- **Selector de carpetas de wallpaper en el clic derecho** (2026-08-26): el menú del lienzo
+  tiene un submenú *Carpeta de wallpaper*. Al abrirlo, `CmWindow` consulta
+  `DesktopWallpapers::slideshowFolders()` y agrega las carpetas configuradas en **todos** los
+  escritorios virtuales (`1..kMaxDesktops`) y monitores conocidos; la carpeta del monitor y
+  escritorio actuales queda primera, y las demás rutas aparecen una sola vez. La lectura es de
+  configuración, no del sistema de archivos (como máximo `kMaxDesktops * kMaxScreens` entradas),
+  por lo que se refresca en cada apertura sin coste apreciable. Cada `[WallpapersN]` conserva una
+  lista `knownSlideshowFolders` append-only: las carpetas se incorporan al releer las asignaciones,
+  pero nunca se eliminan por ahora. Al arranque se hace una primera siembra y el menú vuelve a
+  refrescarse al mostrarse. La interfaz solo muestra el nombre de la carpeta (con tratamiento
+  especial para `/`); elegir un ítem cambia únicamente la clave slideshow del escritorio y
+  monitor actuales, sin aplicar el fondo directamente. El ítem final *Configurar* llama por
+  D-Bus a `DockWindow::openWallpaperSettings()`, que abre el diálogo de kdock directamente en la
+  solapa *Fondos*. Las cadenas de `desktop/qml` y `desktop/src` entran en el catálogo mediante
+  `tools/gen-capabase.py`.
 - **Color de fuente general** (2026-08-23, en los DOS binarios): espejo del color de fondo.
   `CmConfig::foregroundMode` (0 automático / 1 propio) + `foregroundColor`, con su combo y su botón
   en el diálogo (*Fuente* / *Color de fuente*), replicando el control de fondo. La jerarquía de
@@ -3240,4 +3255,3 @@ Two fixes, both with precedent measured in `tilemenu/` (783 MB → 245 MB):
   - UI de configuración en `SettingsDialog` (pestaña "Relanzadores": alta/baja + editor de apps) — ✅ hecho
   - **Fix**: `RelanzadorPopup` debe ser `popupType: Popup.Window` para no quedar recortado dentro de la superficie del dock (igual que menús/tooltips). Sin esto, el popup no muestra los lanzadores.
   - Pendiente: widgets opcionales dentro del popup (hoy placeholders vacíos), apertura de sub-relanzador anidado, drag & drop entre relanzadores, menú contextual + selector de icono.
-

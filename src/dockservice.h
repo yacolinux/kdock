@@ -51,6 +51,8 @@ public slots:
     // Empty dockId = the primary dock (and, if that one is not on screen right
     // now, whichever dock is).
     Q_SCRIPTABLE void openSettings(const QString &dockId);
+    // The same dialog, opened straight on the Wallpapers tab.
+    Q_SCRIPTABLE void openWallpaperSettings(const QString &dockId);
     // The same dialog, opened straight on the Redes tab: the control panel's
     // network section offers "Configurar redes…" and the full connection editor
     // lives here, in the dock's process.

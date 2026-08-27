@@ -53,6 +53,11 @@ QString slideshowIntervalKey(int desktop)
     return QStringLiteral("Wallpapers%1/slideshowInterval").arg(desktop);
 }
 
+QString knownSlideshowFoldersKey(int desktop)
+{
+    return QStringLiteral("Wallpapers%1/knownSlideshowFolders").arg(desktop);
+}
+
 // JS that resolves each containment's screen into the "x,y" key the maps below
 // are indexed by. Shared prologue of the three write scripts.
 QString containmentLoopJs()
@@ -208,6 +213,54 @@ QStringList DesktopWallpapers::configuredScreens()
     while (names.size() > kMaxScreens)
         names.removeLast();
     return names;
+}
+
+QStringList DesktopWallpapers::slideshowFolders(int desktop, const QString &currentScreen)
+{
+    QSettings s = shared();
+    const QStringList screens = configuredScreens();
+    QHash<int, QStringList> rememberedByDesktop;
+    bool changed = false;
+
+    const auto remember = [&changed](QStringList &remembered, const QString &folder) {
+        if (!folder.isEmpty() && !remembered.contains(folder)) {
+            remembered.append(folder);
+            changed = true;
+        }
+    };
+
+    // This is intentionally a configuration scan, not a filesystem scan: there
+    // are at most kMaxDesktops * kMaxScreens entries and QSettings is already
+    // the source of truth. It is cheap enough to repeat when the menu opens,
+    // while each remembered list itself is append-only for now.
+    for (int candidate = 1; candidate <= DockConfig::kMaxDesktops; ++candidate) {
+        QStringList remembered = s.value(knownSlideshowFoldersKey(candidate)).toStringList();
+        for (const QString &screen : screens)
+            remember(remembered, s.value(slideshowFolderKey(candidate, screen)).toString());
+        rememberedByDesktop.insert(candidate, remembered);
+        if (remembered != s.value(knownSlideshowFoldersKey(candidate)).toStringList())
+            s.setValue(knownSlideshowFoldersKey(candidate), remembered);
+    }
+    if (changed) {
+        s.sync();
+    }
+
+    QStringList folders;
+    const auto addFolder = [&folders](const QString &folder) {
+        if (!folder.isEmpty() && !folders.contains(folder))
+            folders.append(folder);
+    };
+
+    // The current monitor is deliberately handled before every other desktop:
+    // it must remain the first choice even after the lists have accumulated
+    // paths from earlier configurations.
+    addFolder(s.value(slideshowFolderKey(desktop, currentScreen)).toString());
+    for (int candidate = 1; candidate <= DockConfig::kMaxDesktops; ++candidate) {
+        const QStringList remembered = rememberedByDesktop.value(candidate);
+        for (const QString &folder : remembered)
+            addFolder(folder);
+    }
+    return folders;
 }
 
 QHash<QString, WallpaperSnapshot> DesktopWallpapers::snapshot()

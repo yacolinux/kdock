@@ -627,6 +627,13 @@ void DockWindow::openSettings()
     m_dialog->activateWindow();
 }
 
+void DockWindow::openWallpaperSettings()
+{
+    openSettings();
+    if (m_dialog)
+        m_dialog->showWallpapersTab();
+}
+
 void DockWindow::retranslate()
 {
     engine()->retranslate();

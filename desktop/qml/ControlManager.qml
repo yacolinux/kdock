@@ -706,6 +706,63 @@ Item {
             }
         }
 
+        Menu {
+            id: wallpaperFolderMenu
+            title: qsTr("Carpeta de wallpaper")
+            popupType: Popup.Window
+            width: Math.max(implicitWidth + 64, 280)
+            property string currentFolder: ""
+
+            ListModel {
+                id: wallpaperFolderModel
+            }
+
+            function refreshFolders() {
+                wallpaperFolderModel.clear()
+                var folders = win.slideshowWallpaperFolders
+                wallpaperFolderMenu.currentFolder = win.currentSlideshowWallpaperFolder()
+                for (var i = 0; i < folders.length; ++i)
+                    wallpaperFolderModel.append({ folder: folders[i] })
+            }
+
+            function folderName(path) {
+                var trimmed = path
+                while (trimmed.length > 1 && trimmed.endsWith("/"))
+                    trimmed = trimmed.slice(0, -1)
+                if (trimmed === "/")
+                    return trimmed
+                var slash = trimmed.lastIndexOf("/")
+                return slash >= 0 ? trimmed.slice(slash + 1) : trimmed
+            }
+
+            onAboutToShow: refreshFolders()
+
+            Repeater {
+                model: wallpaperFolderModel
+                delegate: IconMenuItem {
+                    required property string folder
+                    text: wallpaperFolderMenu.folderName(folder)
+                    checkable: true
+                    checked: folder === wallpaperFolderMenu.currentFolder
+                    onTriggered: {
+                        win.setCurrentSlideshowWallpaperFolder(folder)
+                        wallpaperFolderMenu.currentFolder = folder
+                    }
+                }
+            }
+
+            MenuSeparator { visible: wallpaperFolderModel.count > 0 }
+            IconMenuItem {
+                text: qsTr("Configurar")
+                iconName: "configure"
+                enabled: typeof dock !== "undefined" && dock && dock.available
+                onTriggered: {
+                    if (typeof dock !== "undefined" && dock && dock.available)
+                        dock.openWallpaperSettings()
+                }
+            }
+        }
+
         MenuSeparator {}
 
         IconMenuItem {

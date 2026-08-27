@@ -49,6 +49,8 @@ public:
     Q_INVOKABLE void toggleDarkMode() { setDarkMode(!m_darkMode); }
     // Empty dockId = the primary dock.
     Q_INVOKABLE void openSettings(const QString &dockId = QString());
+    // Opens Kdock's settings directly on the Wallpapers tab.
+    Q_INVOKABLE void openWallpaperSettings(const QString &dockId = QString());
     // The dock's settings dialog, opened on its Redes tab (the connection
     // editor: static IP, DNS, routes). Nothing of that lives in this process.
     Q_INVOKABLE void openNetworkSettings(const QString &dockId = QString());

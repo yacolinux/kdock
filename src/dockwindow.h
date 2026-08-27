@@ -111,6 +111,8 @@ public:
     void setPrimary(bool primary);
 
     Q_INVOKABLE void openSettings();
+    // Open the settings dialog directly on the Wallpapers tab.
+    Q_INVOKABLE void openWallpaperSettings();
     // Open the settings dialog on the Docks tab, selecting this dock's
     // row (right-click → Dock → Nombre).
     Q_INVOKABLE void openSettingsToDock();

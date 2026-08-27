@@ -13,6 +13,7 @@
 // stray run from asking PCManFM to drop the desktop.
 
 #include "desktopwallpapers.h"
+#include "dockconfig.h"
 #include "lxqtwallpapers.h"
 #include "wallpaperfolder.h"
 
@@ -36,6 +37,7 @@ private slots:
     void folderNextWraps();
     void folderNextStartsAtTheFirstImage();
     void configIsSharedWithTheKdeEngine();
+    void slideshowFoldersIncludeEveryDesktopAndKeepRemembered();
     void engineIsInertWhileDisabled();
     void currentImagesIsEmptyWhileNothingIsDrawn();
     void unconfiguredMonitorFallsBackToPcmanfm();
@@ -123,6 +125,38 @@ void TestLxqtWallpapers::configIsSharedWithTheKdeEngine()
     QVERIFY(DesktopWallpapers::slideshowEnabled(1));
     QCOMPARE(DesktopWallpapers::slideshowFolder(1, QStringLiteral("VIRT-1")), m_dir.path());
     DesktopWallpapers::setSlideshowEnabled(1, false);
+}
+
+void TestLxqtWallpapers::slideshowFoldersIncludeEveryDesktopAndKeepRemembered()
+{
+    const QString first = m_dir.path() + QStringLiteral("/first");
+    const QString second = m_dir.path() + QStringLiteral("/second");
+    const QString third = m_dir.path() + QStringLiteral("/third");
+    const QString fourth = m_dir.path() + QStringLiteral("/fourth");
+
+    for (const QString &screen : {QStringLiteral("FOLDER-A"), QStringLiteral("FOLDER-B"),
+                                   QStringLiteral("FOLDER-C"), QStringLiteral("FOLDER-D")})
+        DockConfig::addKnownScreen(screen);
+
+    DesktopWallpapers::setSlideshowEnabled(2, true);
+    DesktopWallpapers::setSlideshowFolder(2, QStringLiteral("FOLDER-A"), first);
+    DesktopWallpapers::setSlideshowFolder(2, QStringLiteral("FOLDER-B"), second);
+    DesktopWallpapers::setSlideshowFolder(2, QStringLiteral("FOLDER-C"), third);
+    DesktopWallpapers::setSlideshowFolder(2, QStringLiteral("FOLDER-D"), second);
+    DesktopWallpapers::setSlideshowEnabled(3, true);
+    DesktopWallpapers::setSlideshowFolder(3, QStringLiteral("FOLDER-D"), fourth);
+
+    QCOMPARE(DesktopWallpapers::slideshowFolders(2, QStringLiteral("FOLDER-C")),
+             QStringList({third, first, second, fourth}));
+    // Removing a configured entry does not remove the folder from the menu's
+    // append-only registry: it remains available for reuse.
+    DesktopWallpapers::setSlideshowFolder(2, QStringLiteral("FOLDER-A"), QString());
+    QCOMPARE(DesktopWallpapers::slideshowFolders(2, QStringLiteral("FOLDER-C")),
+             QStringList({third, first, second, fourth}));
+    QCOMPARE(DesktopWallpapers::slideshowFolders(3, QStringLiteral("FOLDER-C")),
+             QStringList({first, second, third, fourth}));
+    DesktopWallpapers::setSlideshowEnabled(2, false);
+    DesktopWallpapers::setSlideshowEnabled(3, false);
 }
 
 void TestLxqtWallpapers::engineIsInertWhileDisabled()

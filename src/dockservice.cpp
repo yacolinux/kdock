@@ -103,6 +103,14 @@ void DockService::openSettings(const QString &dockId)
         window->openSettings();
 }
 
+void DockService::openWallpaperSettings(const QString &dockId)
+{
+    if (!m_manager)
+        return;
+    if (DockWindow *window = m_manager->windowFor(dockId))
+        window->openWallpaperSettings();
+}
+
 void DockService::openNetworkSettings(const QString &dockId)
 {
     if (!m_manager)
