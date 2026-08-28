@@ -113,7 +113,15 @@ void ScreensaverManager::ensureWindow(const QString &screenName)
 {
     if (screenName.isEmpty() || m_windows.contains(screenName))
         return;
-    auto *window = new ScreensaverWindow(screenName, m_desktops, nullptr);
+    int monitorIndex = 0;
+    const auto screens = QGuiApplication::screens();
+    for (int i = 0; i < screens.size(); ++i) {
+        if (screens.at(i)->name() == screenName) {
+            monitorIndex = i;
+            break;
+        }
+    }
+    auto *window = new ScreensaverWindow(screenName, m_desktops, nullptr, monitorIndex);
     connect(window, &ScreensaverWindow::userDismissed, this, [this] { hideAll(); });
     m_windows.insert(screenName, window);
 }

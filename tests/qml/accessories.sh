@@ -72,7 +72,7 @@ if env -u WAYLAND_DISPLAY timeout 60 dbus-run-session -- \
     ok=1
     grep -q "^== Principal ==" "$out" || { echo "FAIL: falta la grilla Principal"; ok=0; }
     grep -q "^== secciones ==" "$out" || { echo "FAIL: falta la tabla de secciones"; ok=0; }
-    for section in clock audio video calendar play network wallpaper system; do
+    for section in clock audio video calendar play network wallpaper system screensaver; do
         grep -qE "^  $section " "$out" || {
             echo "FAIL: la sección '$section' no aparece en el volcado"; ok=0; }
     done

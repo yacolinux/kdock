@@ -99,6 +99,7 @@ qt_add_resources(kdock-controlmanager "controlmanager-qml"
         qml/cards/AppearanceCard.qml
         qml/cards/DesktopsCard.qml
         qml/cards/ColorAutoCard.qml
+        qml/cards/ScreensaverCard.qml
 )
 
 # WallpaperWindow's own QML (shared with kdock, qrc:/qml/Wallpaper.qml)

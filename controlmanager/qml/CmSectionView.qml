@@ -31,6 +31,7 @@ Loader {
         case "appearance": return "cards/AppearanceCard.qml"
         case "desktops":  return "cards/DesktopsCard.qml"
         case "colorauto": return "cards/ColorAutoCard.qml"
+        case "screensaver": return "cards/ScreensaverCard.qml"
         }
         // No case = an empty Loader, i.e. a tab that opens onto nothing and a
         // card that draws nothing, with no error anywhere. tests/static checks

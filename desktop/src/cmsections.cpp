@@ -29,6 +29,7 @@ const QList<CmSectionInfo> &table()
         {QStringLiteral("appearance"),QStringLiteral("preferences-desktop-theme"),       2, 2, 2, 1, true},
         {QStringLiteral("desktops"),  QStringLiteral("virtual-desktops"),                2, 1, 1, 1, true},
         {QStringLiteral("colorauto"), QStringLiteral("color-management"),                2, 1, 1, 1, true},
+        {QStringLiteral("screensaver"), QStringLiteral("preferences-desktop-screensaver"), 2, 1, 1, 1, true},
     };
     return t;
 }
@@ -100,6 +101,8 @@ QString CmSections::label(const QString &id)
         return QCoreApplication::translate("CmSections", "Escritorios");
     if (id == QLatin1String("colorauto"))
         return QCoreApplication::translate("CmSections", "ColorAuto");
+    if (id == QLatin1String("screensaver"))
+        return QCoreApplication::translate("CmSections", "Salvapantallas");
     return id;
 }
 
@@ -143,6 +146,9 @@ QString CmSections::description(const QString &id)
         return QCoreApplication::translate("CmSections",
                                            "Generar un esquema de color con el fondo de "
                                            "pantalla, y guardarlo.");
+    if (id == QLatin1String("screensaver"))
+        return QCoreApplication::translate("CmSections",
+                                           "Activar el salvapantallas por monitor.");
     return QString();
 }
 

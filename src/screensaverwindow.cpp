@@ -5,6 +5,7 @@
 #include "virtualdesktops.h"
 #include "wallpaperfolder.h"
 
+#include <algorithm>
 #include <QDir>
 #include <QEvent>
 #include <QFileInfo>
@@ -15,6 +16,8 @@
 #include <QMargins>
 #include <QRandomGenerator>
 #include <QScreen>
+#include <QResizeEvent>
+#include <QToolButton>
 #include <QUrl>
 #include <QWindow>
 #include <QWebEngineSettings>
@@ -24,6 +27,19 @@
 
 namespace {
 constexpr uint AnchorAll = 1u | 2u | 4u | 8u;
+
+const QStringList &afterDarkPages()
+{
+    static const QStringList pages = {
+        QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
+        QStringLiteral("fish.html"),
+        QStringLiteral("flying-toasters.html"), QStringLiteral("globe.html"),
+        QStringLiteral("hard-rain.html"), QStringLiteral("logo.html"),
+        QStringLiteral("messages.html"), QStringLiteral("messages2.html"),
+        QStringLiteral("rainstorm.html"), QStringLiteral("spotlight.html"),
+        QStringLiteral("warp.html")};
+    return pages;
+}
 
 QString jsArray(const QStringList &values)
 {
@@ -35,10 +51,11 @@ QString jsArray(const QStringList &values)
 }
 
 ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops *desktops,
-                                     QWidget *parent)
+                                     QWidget *parent, int monitorIndex)
     : QWebEngineView(parent)
     , m_screenName(screenName)
     , m_desktops(desktops)
+    , m_monitorIndex(qMax(0, monitorIndex))
 {
     setWindowTitle(QStringLiteral("kdock Screensaver"));
     setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
@@ -82,6 +99,19 @@ ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops 
     } else {
         applyLayerProperties();
     }
+
+    m_changeButton = new QToolButton(this);
+    m_changeButton->setText(tr("Cambiar"));
+    m_changeButton->setToolTip(tr("Cambiar la escena del salvapantallas"));
+    m_changeButton->setFocusPolicy(Qt::NoFocus);
+    m_changeButton->setCursor(Qt::PointingHandCursor);
+    m_changeButton->setStyleSheet(QStringLiteral(
+        "QToolButton { color: white; background: rgba(20,20,20,190); "
+        "border: 1px solid rgba(255,255,255,100); border-radius: 6px; "
+        "padding: 6px 12px; } QToolButton:hover { background: rgba(70,70,70,220); }"));
+    m_changeButton->hide();
+    connect(m_changeButton, &QToolButton::clicked, this, &ScreensaverWindow::advanceContent);
+
     qApp->installEventFilter(this);
 }
 
@@ -103,31 +133,11 @@ QString ScreensaverWindow::currentWallpaperFolder() const
 
 QString ScreensaverWindow::wallpaperHtml() const
 {
-    QStringList folders;
-    const auto addFolder = [&folders](const QString &folder) {
-        if (!folder.isEmpty() && !folders.contains(folder))
-            folders << folder;
-    };
-    addFolder(currentWallpaperFolder());
-    // Desktop 1 is often the user's active desktop, so inspect every saved
-    // desktop for this same monitor without mixing in another monitor's folder.
-    for (int desktop = 1; desktop <= DockConfig::kMaxDesktops; ++desktop) {
-        addFolder(DesktopWallpapers::slideshowFolder(desktop, m_screenName));
-    }
-    QStringList files = WallpaperFolder::images(folders);
-    if (files.isEmpty()) {
-        for (int desktop = 1; desktop <= DockConfig::kMaxDesktops; ++desktop) {
-            const QString image = DesktopWallpapers::imageFor(desktop, m_screenName);
-            if (!image.isEmpty()) {
-                files << image;
-                break;
-            }
-        }
-    }
-
     QStringList urls;
-    for (const QString &file : files)
-        urls << QUrl::fromLocalFile(file).toString(QUrl::FullyEncoded);
+    for (int i = 0; i < m_wallpaperFiles.size(); ++i) {
+        const int index = (m_wallpaperIndex + i) % m_wallpaperFiles.size();
+        urls << QUrl::fromLocalFile(m_wallpaperFiles.at(index)).toString(QUrl::FullyEncoded);
+    }
     const int interval = DockConfig::screensaverSlideshowIntervalSeconds();
     return QStringLiteral(R"HTML(<!doctype html><meta charset="utf-8">
 <style>
@@ -147,17 +157,10 @@ if(!images.length){document.body.innerHTML='<div style="height:100%;display:grid
 
 QString ScreensaverWindow::afterDarkHtml(const QString &pageOverride) const
 {
-    static const QStringList pages = {
-        QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
-        QStringLiteral("fish.html"),
-        QStringLiteral("flying-toasters.html"), QStringLiteral("globe.html"),
-        QStringLiteral("hard-rain.html"), QStringLiteral("logo.html"),
-        QStringLiteral("messages.html"), QStringLiteral("messages2.html"),
-        QStringLiteral("rainstorm.html"), QStringLiteral("spotlight.html"),
-        QStringLiteral("warp.html")};
+    const QStringList &pages = afterDarkPages();
     QString page = pageOverride;
     if (!pages.contains(page))
-        page = pages.at(int(QRandomGenerator::global()->bounded(uint(pages.size()))));
+        page = pages.at(m_afterDarkIndex % pages.size());
 
     const QString local = DockConfig::screensaverAfterDarkPath();
     if (!local.isEmpty()) {
@@ -167,6 +170,72 @@ QString ScreensaverWindow::afterDarkHtml(const QString &pageOverride) const
     }
     return QStringLiteral("https://bryanbraun.github.io/after-dark-css/all/%1")
         .arg(page);
+}
+
+void ScreensaverWindow::prepareWallpaper()
+{
+    QStringList folders;
+    const auto addFolder = [&folders](const QString &folder) {
+        if (!folder.isEmpty() && !folders.contains(folder))
+            folders << folder;
+    };
+    addFolder(currentWallpaperFolder());
+    // Desktop 1 is often the user's active desktop, so inspect every saved
+    // desktop for this same monitor without mixing in another monitor's folder.
+    for (int desktop = 1; desktop <= DockConfig::kMaxDesktops; ++desktop)
+        addFolder(DesktopWallpapers::slideshowFolder(desktop, m_screenName));
+
+    m_wallpaperFiles = WallpaperFolder::images(folders);
+    if (m_wallpaperFiles.isEmpty()) {
+        for (int desktop = 1; desktop <= DockConfig::kMaxDesktops; ++desktop) {
+            const QString image = DesktopWallpapers::imageFor(desktop, m_screenName);
+            if (!image.isEmpty()) {
+                m_wallpaperFiles << image;
+                break;
+            }
+        }
+    }
+
+    // The screensaver slideshow is independent from the wallpaper slideshow:
+    // each activation gets its own random order, so it never mirrors the
+    // filesystem/configuration order or advances the desktop wallpaper state.
+    // Keep the first image stable by monitor before shuffling the remainder.
+    // This guarantees different initial images when monitors share a folder,
+    // while the rest of each monitor's slideshow remains random.
+    if (!m_wallpaperFiles.isEmpty()) {
+        const int first = m_monitorIndex % m_wallpaperFiles.size();
+        const QString firstFile = m_wallpaperFiles.takeAt(first);
+        std::shuffle(m_wallpaperFiles.begin(), m_wallpaperFiles.end(),
+                     *QRandomGenerator::global());
+        m_wallpaperFiles.prepend(firstFile);
+    }
+    m_wallpaperIndex = 0;
+}
+
+void ScreensaverWindow::prepareAfterDark(const QString &page)
+{
+    const QStringList &pages = afterDarkPages();
+    const int requested = pages.indexOf(page);
+    m_afterDarkIndex = requested >= 0 ? requested : m_monitorIndex % pages.size();
+    m_afterDarkPage = pages.at(m_afterDarkIndex);
+}
+
+void ScreensaverWindow::advanceContent()
+{
+    if (m_activeEngine == 1) {
+        const QStringList &pages = afterDarkPages();
+        m_afterDarkIndex = (m_afterDarkIndex + 1) % pages.size();
+        m_afterDarkPage = pages.at(m_afterDarkIndex);
+        load(QUrl(afterDarkHtml(m_afterDarkPage)));
+        return;
+    }
+
+    if (m_wallpaperFiles.isEmpty())
+        prepareWallpaper();
+    if (m_wallpaperFiles.isEmpty())
+        return;
+    m_wallpaperIndex = (m_wallpaperIndex + 1) % m_wallpaperFiles.size();
+    setHtml(wallpaperHtml(), QUrl::fromLocalFile(QStringLiteral("/")));
 }
 
 void ScreensaverWindow::applyLayerProperties()
@@ -221,10 +290,17 @@ void ScreensaverWindow::showSaver(int engine, const QString &afterDarkPage)
         && selectedEngine == m_activeEngine)
         return;
     m_activeEngine = selectedEngine;
-    if (selectedEngine == 1)
-        load(QUrl(afterDarkHtml(afterDarkPage)));
-    else
+    if (selectedEngine == 1) {
+        prepareAfterDark(afterDarkPage);
+        load(QUrl(afterDarkHtml(m_afterDarkPage)));
+    } else {
+        prepareWallpaper();
         setHtml(wallpaperHtml(), QUrl::fromLocalFile(QStringLiteral("/")));
+    }
+    m_changeButton->show();
+    m_changeButton->raise();
+    m_changeButton->adjustSize();
+    m_changeButton->move(width() - m_changeButton->width() - 24, 24);
     show();
     raise();
 }
@@ -234,11 +310,22 @@ void ScreensaverWindow::hideSaver()
     hide();
     stop();
     m_activeEngine = -1;
+    m_changeButton->hide();
 }
 
 void ScreensaverWindow::refreshConfig()
 {
     applyLayerProperties();
+}
+
+void ScreensaverWindow::resizeEvent(QResizeEvent *event)
+{
+    QWebEngineView::resizeEvent(event);
+    if (m_changeButton) {
+        const QSize size = m_changeButton->sizeHint();
+        m_changeButton->setGeometry(width() - size.width() - 24, 24,
+                                    size.width(), size.height());
+    }
 }
 
 bool ScreensaverWindow::eventFilter(QObject *watched, QEvent *event)
@@ -248,7 +335,9 @@ bool ScreensaverWindow::eventFilter(QObject *watched, QEvent *event)
                                  || event->type() == QEvent::TouchBegin
                                  || event->type() == QEvent::Wheel)) {
         auto *widget = qobject_cast<QWidget *>(watched);
-        if (widget && widget->window() == this) {
+        const bool isChangeButton = widget && (widget == m_changeButton
+                                               || m_changeButton->isAncestorOf(widget));
+        if (widget && widget->window() == this && !isChangeButton) {
             emit userDismissed();
             return true;
         }
