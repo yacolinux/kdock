@@ -213,6 +213,29 @@ private slots:
         QCOMPARE(widget.rowCount(), 2);
     }
 
+    void lateCreatedWidgetTracksExistingWindowChanges()
+    {
+        // The appsel model is lazy: its section may be instantiated after the
+        // monitor has already announced a window. It still has to observe the
+        // later app_id/state burst, or its launcher remains idle forever and
+        // hover preview never gets a uuid-bearing row.
+        const QString id = freshDockId("late");
+        DockConfig cfg(id);
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        const QString token = cfg.insertAppsWidget(0);
+        cfg.setWidgetApps(token, {QStringLiteral("real.desktop")});
+
+        FakeWindow *window = openWindow(&monitor, QStringLiteral("generic"));
+        DockModel widget(&cfg, &apps, &monitor, nullptr, token);
+        QCOMPARE(widget.rowCount(), 1); // only the configured launcher
+        QCOMPARE(widget.index(0).data(DockModel::WindowCountRole).toInt(), 0);
+
+        window->appId = QStringLiteral("real.desktop");
+        emit window->changed();
+        QCOMPARE(widget.index(0).data(DockModel::WindowCountRole).toInt(), 1);
+    }
+
     void theCatchAllWidgetSkipsWhatAnotherOneAlreadyDraws()
     {
         // El caso de la feature: un widget con la lista de siempre y otro que

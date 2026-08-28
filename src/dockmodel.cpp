@@ -114,12 +114,22 @@ DockModel::DockModel(DockConfig *config, DesktopEntryIndex *apps, WindowMonitor 
         });
     }
     if (m_monitor) {
-        connect(m_monitor, &WindowMonitor::windowAdded, this, [this](AbstractWindow *w) {
+        const auto watchWindow = [this](AbstractWindow *w) {
             connect(w, &AbstractWindow::changed, this, [this, w] { windowChanged(w); });
+        };
+        connect(m_monitor, &WindowMonitor::windowAdded, this, [this, watchWindow](AbstractWindow *w) {
+            watchWindow(w);
             if (!w->skipTaskbar)
                 placeWindow(w);
         });
         connect(m_monitor, &WindowMonitor::windowRemoved, this, &DockModel::removeWindow);
+        // An appsel model is created lazily while Dock.qml loads its section.
+        // By then KWin may already have announced the window, so windowAdded
+        // will never be emitted for it again. Without this connection, a later
+        // app_id/state update is invisible to the widget and a launcher keeps
+        // looking idle even though its window is already open.
+        for (AbstractWindow *w : std::as_const(m_monitor->windows))
+            watchWindow(w);
     }
     rebuild();
 }
