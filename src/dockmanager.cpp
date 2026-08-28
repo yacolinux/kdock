@@ -7,6 +7,7 @@
 #include "dockwindow.h"
 #include "translations.h"
 #include "virtualdesktops.h"
+#include "screensavermanager.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -67,6 +68,13 @@ QString DockManager::primaryScreenName() const
 {
     QScreen *p = QGuiApplication::primaryScreen();
     return p ? p->name() : QString();
+}
+
+void DockManager::activateScreensaver(const QString &screenName, int engine,
+                                      const QString &page)
+{
+    if (m_shared.screensaver)
+        m_shared.screensaver->activate(screenName, engine, page);
 }
 
 QString DockManager::primaryDockId() const

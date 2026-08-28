@@ -763,6 +763,49 @@ Item {
             }
         }
 
+        Menu {
+            id: screensaverMenu
+            title: qsTr("Salvapantallas")
+            popupType: Popup.Window
+            width: Math.max(implicitWidth + 64, 280)
+
+            IconMenuItem {
+                text: qsTr("Slideshow")
+                iconName: "view-preview"
+                enabled: dock && dock.available
+                onTriggered: if (dock && dock.available)
+                                 dock.activateScreensaver(win.screenName, 0, "")
+            }
+
+            MenuSeparator {}
+
+            Repeater {
+                model: [
+                    { page: "bouncing-ball.html", label: qsTr("Bouncing ball") },
+                    { page: "fade-out.html", label: qsTr("Fade out") },
+                    { page: "fish.html", label: qsTr("Fish") },
+                    { page: "flying-toasters.html", label: qsTr("Flying toasters") },
+                    { page: "globe.html", label: qsTr("Globe") },
+                    { page: "hard-rain.html", label: qsTr("Hard rain") },
+                    { page: "logo.html", label: qsTr("Logo") },
+                    { page: "messages.html", label: qsTr("Messages") },
+                    { page: "messages2.html", label: qsTr("Messages 2") },
+                    { page: "rainstorm.html", label: qsTr("Rainstorm") },
+                    { page: "spotlight.html", label: qsTr("Spotlight") },
+                    { page: "warp.html", label: qsTr("Warp") }
+                ]
+                delegate: IconMenuItem {
+                    required property var modelData
+                    text: modelData.label
+                    iconName: "preferences-desktop-screensaver"
+                    enabled: dock && dock.available
+                    onTriggered: if (dock && dock.available)
+                                     dock.activateScreensaver(win.screenName, 1,
+                                                              modelData.page)
+                }
+            }
+        }
+
         MenuSeparator {}
 
         IconMenuItem {

@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Network is only for the weather backend (src/weathercontrol.cpp): plain HTTPS
 # against Open-Meteo, the one thing in kdock that is not local.
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick QuickControls2 Widgets WaylandClient WaylandClientPrivate DBus Network)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core CorePrivate Gui Qml Quick QuickControls2 Widgets WaylandClient WaylandClientPrivate DBus Network WebEngineWidgets)
 
 qt_standard_project_setup()
 
@@ -106,6 +106,8 @@ add_library(kdock_core OBJECT
     src/apprestart.cpp          src/apprestart.h
     src/dockservice.cpp         src/dockservice.h
     src/globalshortcut.cpp      src/globalshortcut.h
+    src/screensavermanager.cpp  src/screensavermanager.h
+    src/screensaverwindow.cpp   src/screensaverwindow.h
 )
 
 qt_generate_wayland_protocol_client_sources(kdock_core FILES
@@ -117,6 +119,7 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
     # Unlike plasma-window-management this one is *not* in KWin's restricted
     # interface list, so no .desktop privilege is involved.
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-data-control-v1.xml
+    ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-idle-notify-v1.xml
 )
 
 qt_add_resources(kdock_core "qml"
@@ -157,11 +160,13 @@ target_link_libraries(kdock_core PUBLIC
     Qt6::WaylandClientPrivate
     Qt6::DBus
     Qt6::Network
+    Qt6::WebEngineWidgets
 )
 # Tests include headers as "dockconfig.h", same as the sources do.
 target_include_directories(kdock_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 qt_add_executable(kdock src/main.cpp)
+target_include_directories(kdock PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(kdock PRIVATE kdock_core)
 
 include(GNUInstallDirs)

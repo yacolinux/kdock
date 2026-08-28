@@ -655,6 +655,148 @@ void DockConfig::notifyNeonChanged()
         emit cfg->neonChanged();
 }
 
+namespace {
+constexpr int kScreensaverTimeoutDefault = 300;
+constexpr int kScreensaverTimeoutMin = 10;
+constexpr int kScreensaverTimeoutMax = 86400;
+constexpr int kScreensaverSlideshowIntervalDefault = 60;
+constexpr int kScreensaverSlideshowIntervalMin = 5;
+constexpr int kScreensaverSlideshowIntervalMax = 86400;
+}
+
+bool DockConfig::screensaverEnabled()
+{
+    return QSettings(settingsFilePath(), QSettings::IniFormat)
+        .value(QStringLiteral("Screensaver/enabled"), false).toBool();
+}
+
+void DockConfig::setScreensaverEnabled(bool on)
+{
+    if (screensaverEnabled() == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/enabled"), on);
+    notifyScreensaverChanged();
+}
+
+QStringList DockConfig::screensaverScreens()
+{
+    return QSettings(settingsFilePath(), QSettings::IniFormat)
+        .value(QStringLiteral("Screensaver/screens"), QStringList()).toStringList();
+}
+
+bool DockConfig::screensaverScreenEnabled(const QString &connector)
+{
+    return !connector.isEmpty() && screensaverScreens().contains(connector);
+}
+
+void DockConfig::setScreensaverScreenEnabled(const QString &connector, bool on)
+{
+    if (connector.isEmpty() || screensaverScreenEnabled(connector) == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    QStringList list = s.value(QStringLiteral("Screensaver/screens"), QStringList()).toStringList();
+    if (on) {
+        if (!list.contains(connector))
+            list.append(connector);
+    } else {
+        list.removeAll(connector);
+    }
+    s.setValue(QStringLiteral("Screensaver/screens"), list);
+    notifyScreensaverChanged();
+}
+
+int DockConfig::screensaverTimeoutSeconds()
+{
+    return qBound(kScreensaverTimeoutMin,
+                  QSettings(settingsFilePath(), QSettings::IniFormat)
+                      .value(QStringLiteral("Screensaver/timeoutSeconds"),
+                             kScreensaverTimeoutDefault).toInt(),
+                  kScreensaverTimeoutMax);
+}
+
+void DockConfig::setScreensaverTimeoutSeconds(int seconds)
+{
+    const int value = qBound(kScreensaverTimeoutMin, seconds, kScreensaverTimeoutMax);
+    if (screensaverTimeoutSeconds() == value)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/timeoutSeconds"), value);
+    notifyScreensaverChanged();
+}
+
+int DockConfig::screensaverSlideshowIntervalSeconds()
+{
+    return qBound(kScreensaverSlideshowIntervalMin,
+                  QSettings(settingsFilePath(), QSettings::IniFormat)
+                      .value(QStringLiteral("Screensaver/slideshowIntervalSeconds"),
+                             kScreensaverSlideshowIntervalDefault).toInt(),
+                  kScreensaverSlideshowIntervalMax);
+}
+
+void DockConfig::setScreensaverSlideshowIntervalSeconds(int seconds)
+{
+    const int value = qBound(kScreensaverSlideshowIntervalMin, seconds,
+                             kScreensaverSlideshowIntervalMax);
+    if (screensaverSlideshowIntervalSeconds() == value)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/slideshowIntervalSeconds"), value);
+    notifyScreensaverChanged();
+}
+
+bool DockConfig::screensaverCoverDocks()
+{
+    return QSettings(settingsFilePath(), QSettings::IniFormat)
+        .value(QStringLiteral("Screensaver/coverDocks"), false).toBool();
+}
+
+void DockConfig::setScreensaverCoverDocks(bool on)
+{
+    if (screensaverCoverDocks() == on)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/coverDocks"), on);
+    notifyScreensaverChanged();
+}
+
+int DockConfig::screensaverEngine()
+{
+    return qBound(0, QSettings(settingsFilePath(), QSettings::IniFormat)
+                      .value(QStringLiteral("Screensaver/engine"), 0).toInt(), 1);
+}
+
+void DockConfig::setScreensaverEngine(int engine)
+{
+    const int value = qBound(0, engine, 1);
+    if (screensaverEngine() == value)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/engine"), value);
+    notifyScreensaverChanged();
+}
+
+QString DockConfig::screensaverAfterDarkPath()
+{
+    return QSettings(settingsFilePath(), QSettings::IniFormat)
+        .value(QStringLiteral("Screensaver/afterDarkPath")).toString();
+}
+
+void DockConfig::setScreensaverAfterDarkPath(const QString &path)
+{
+    if (screensaverAfterDarkPath() == path)
+        return;
+    QSettings s(settingsFilePath(), QSettings::IniFormat);
+    s.setValue(QStringLiteral("Screensaver/afterDarkPath"), path);
+    notifyScreensaverChanged();
+}
+
+void DockConfig::notifyScreensaverChanged()
+{
+    for (DockConfig *cfg : std::as_const(s_instances))
+        emit cfg->screensaverChanged();
+}
+
 QStringList DockConfig::neonQuickColors()
 {
     return {QStringLiteral("#00e5ff"),  // cyan

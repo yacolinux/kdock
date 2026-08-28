@@ -344,6 +344,7 @@ void SettingsDialog::buildTabs()
     // Next to DarkMode: a purely visual dock effect (a neon halo around the
     // panels), global with an opt-in-per-monitor list like the Desktop tab.
     addTab(createNeonTab(), tr("Neon"));
+    addTab(createScreensaverTab(), tr("Screensaver"));
     // Next to DarkMode on purpose: it is the other feature that rewrites the
     // desktop's appearance, and the two are interlocked (dark mode suspends it).
     m_colorAutoDefaults = nullptr;
@@ -4287,6 +4288,137 @@ QWidget *SettingsDialog::createNeonTab()
     connect(styleCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
             [](int idx) { DockConfig::setNeonGlowMode(idx); });
 
+    layout->addStretch();
+    return tab;
+}
+
+QWidget *SettingsDialog::createScreensaverTab()
+{
+    auto *tab = new QWidget;
+    auto *layout = new QVBoxLayout(tab);
+    auto *info = new QLabel(
+        tr("Cubre los monitores seleccionados después de un período sin actividad "
+           "de teclado o mouse. La configuración es única para todos los monitores; "
+           "cada checkbox decide dónde se aplica. Un click sobre el salvapantallas "
+           "lo cierra."), tab);
+    info->setWordWrap(true);
+    layout->addWidget(info);
+
+    auto *master = new QCheckBox(tr("Activar Screensaver"), tab);
+    master->setChecked(DockConfig::screensaverEnabled());
+    master->setToolTip(tr("El apagado conserva la selección de monitores y el resto "
+                          "de la configuración."));
+    layout->addWidget(master);
+
+    auto *coverDocks = new QCheckBox(tr("Cubrir Docks"), tab);
+    coverDocks->setChecked(DockConfig::screensaverCoverDocks());
+    coverDocks->setToolTip(tr("Usa la capa overlay para cubrir también los docks visibles."));
+    layout->addWidget(coverDocks);
+
+    auto *form = new QFormLayout;
+    auto *timeout = new QSpinBox(tab);
+    timeout->setRange(1, 1440);
+    timeout->setSingleStep(1);
+    timeout->setSuffix(tr(" minutos"));
+    timeout->setValue(qMax(1, qRound(DockConfig::screensaverTimeoutSeconds() / 60.0)));
+    timeout->setToolTip(tr("Tiempo de inactividad antes de cubrir los monitores marcados."));
+    form->addRow(tr("Tiempo límite:"), timeout);
+
+    auto *slideshowInterval = new QSpinBox(tab);
+    slideshowInterval->setRange(1, 1440);
+    slideshowInterval->setSingleStep(1);
+    slideshowInterval->setSuffix(tr(" minutos"));
+    slideshowInterval->setValue(qMax(
+        1, qRound(DockConfig::screensaverSlideshowIntervalSeconds() / 60.0)));
+    slideshowInterval->setToolTip(
+        tr("Intervalo propio del slideshow del Screensaver; no modifica Wallpapers."));
+    form->addRow(tr("Intervalo del slideshow:"), slideshowInterval);
+
+    auto *engine = new QComboBox(tab);
+    engine->addItem(tr("Slideshow de wallpapers"));
+    engine->addItem(tr("After Dark CSS"));
+    engine->setCurrentIndex(DockConfig::screensaverEngine());
+    engine->setToolTip(tr("El slideshow usa la carpeta configurada para el wallpaper "
+                          "del escritorio actual. After Dark carga las animaciones CSS "
+                          "de la colección bryanbraun/after-dark-css."));
+    form->addRow(tr("Engine:"), engine);
+
+    auto *pathRow = new QWidget(tab);
+    auto *pathLayout = new QHBoxLayout(pathRow);
+    pathLayout->setContentsMargins(0, 0, 0, 0);
+    auto *path = new QLineEdit(DockConfig::screensaverAfterDarkPath(), pathRow);
+    path->setPlaceholderText(tr("vacío: colección pública After Dark CSS"));
+    auto *browse = new QPushButton(QIcon::fromTheme(QStringLiteral("folder-open")),
+                                   tr("Buscar…"), pathRow);
+    pathLayout->addWidget(path, 1);
+    pathLayout->addWidget(browse);
+    form->addRow(tr("Carpeta local all/:"), pathRow);
+    layout->addLayout(form);
+
+    layout->addWidget(new QLabel(tr("Monitores (marcá dónde querés el cobertor):"), tab));
+    auto *monitors = new QListWidget(tab);
+    monitors->setMaximumHeight(170);
+    layout->addWidget(monitors);
+
+    const auto reload = [this, monitors, master] {
+        QSignalBlocker block(monitors);
+        const QString keep = monitors->currentItem()
+                                 ? monitors->currentItem()->data(Qt::UserRole).toString()
+                                 : QString();
+        monitors->clear();
+        QStringList names = m_manager ? m_manager->connectedScreens() : QStringList();
+        if (names.isEmpty())
+            for (QScreen *screen : QGuiApplication::screens())
+                names << screen->name();
+        for (const QString &name : names) {
+            auto *item = new QListWidgetItem(name, monitors);
+            item->setData(Qt::UserRole, name);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(DockConfig::screensaverScreenEnabled(name)
+                                    ? Qt::Checked : Qt::Unchecked);
+            if (name == keep)
+                monitors->setCurrentItem(item);
+        }
+        monitors->setEnabled(master->isChecked());
+    };
+    reload();
+
+    connect(master, &QCheckBox::toggled, this, [reload](bool on) {
+        DockConfig::setScreensaverEnabled(on);
+        reload();
+    });
+    connect(coverDocks, &QCheckBox::toggled, this,
+            [](bool on) { DockConfig::setScreensaverCoverDocks(on); });
+    connect(monitors, &QListWidget::itemChanged, this, [](QListWidgetItem *item) {
+        DockConfig::setScreensaverScreenEnabled(
+            item->data(Qt::UserRole).toString(), item->checkState() == Qt::Checked);
+    });
+    connect(timeout, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [](int minutes) { DockConfig::setScreensaverTimeoutSeconds(minutes * 60); });
+    connect(slideshowInterval, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [](int minutes) {
+                DockConfig::setScreensaverSlideshowIntervalSeconds(minutes * 60);
+            });
+    connect(engine, &QComboBox::currentIndexChanged, this,
+            [](int index) { DockConfig::setScreensaverEngine(index); });
+    connect(path, &QLineEdit::textEdited, this,
+            [](const QString &value) { DockConfig::setScreensaverAfterDarkPath(value.trimmed()); });
+    connect(browse, &QPushButton::clicked, this, [this, path] {
+        const QString chosen = QFileDialog::getExistingDirectory(
+            this, tr("Carpeta after-dark-css/all"), path->text());
+        if (!chosen.isEmpty())
+            path->setText(chosen);
+        if (!chosen.isEmpty())
+            DockConfig::setScreensaverAfterDarkPath(chosen);
+    });
+
+    auto *note = new QLabel(
+        tr("La carpeta local debe ser la carpeta all/ del repositorio After Dark CSS "
+           "y contener archivos HTML. Si queda vacía se usan sus páginas publicadas; "
+           "el engine de wallpapers no descarga imágenes ni ejecuta procesos externos."), tab);
+    note->setWordWrap(true);
+    note->setStyleSheet(QStringLiteral("color: gray;"));
+    layout->addWidget(note);
     layout->addStretch();
     return tab;
 }

@@ -495,6 +495,17 @@ cmake --build build -j
 sudo cmake --install build     # instala los seis binarios y sus .desktop
 ```
 
+Para hacer todo el ciclo, incluida la actualización del host de la bandeja y el reinicio
+ordenado de Kdock y sus accesorios, podés usar:
+
+```sh
+tools/install-and-restart.sh
+```
+
+El script usa los nombres D-Bus de Kdock como contrato de sesión. La bandeja normalmente se
+conserva durante un reinicio común, pero se recicla durante una instalación para no dejarla
+ejecutando el binario anterior.
+
 > Si tu entorno exporta `CC="ccache gcc"` / `CXX="ccache g++"`, CMake AutoMoc falla:
 > configurá con `env -u CC -u CXX cmake …`.
 

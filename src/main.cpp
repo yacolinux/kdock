@@ -72,6 +72,7 @@
 #include "volumecontrol.h"
 #include "audiocontrol.h"
 #include "windowmonitor.h"
+#include "screensavermanager.h"
 
 // In-tree layer-shell integration (see layershell.cpp)
 Q_IMPORT_PLUGIN(KDockLayerShellPlugin)
@@ -375,6 +376,7 @@ int main(int argc, char *argv[])
     MonitorControl monitorControl;
     MaxMinControl maxmin;
     VirtualDesktops virtualDesktops;
+    ScreensaverManager screensaver(&virtualDesktops);
     ActiveWindowControl activeWindow(monitor, &virtualDesktops);
     WallpaperControl wallpaperControl;
     DesktopWallpapers desktopWallpapers(&virtualDesktops);
@@ -475,6 +477,7 @@ int main(int argc, char *argv[])
     shared.kwinScripts = &kwinScripts;
     shared.keyboard = &keyboard;
     shared.desktops = &virtualDesktops;
+    shared.screensaver = &screensaver;
     shared.desktopWallpapers = &desktopWallpapers;
     shared.lxqtWallpapers = &lxqtWallpapers;
     shared.appPreviews = &appPreviews;

@@ -482,6 +482,17 @@ cmake --build build -j
 sudo cmake --install build     # installs the six binaries and their .desktop files
 ```
 
+To run the complete cycle, including refreshing the tray host and orderly restarting Kdock
+and its accessories, use:
+
+```sh
+tools/install-and-restart.sh
+```
+
+The script uses Kdock's D-Bus service names as the session contract. The tray is normally kept
+alive across an ordinary restart, but is recycled during installation so it cannot keep the
+previous executable mapped.
+
 > If your environment exports `CC="ccache gcc"` / `CXX="ccache g++"`, CMake's AutoMoc fails:
 > configure with `env -u CC -u CXX cmake …`.
 

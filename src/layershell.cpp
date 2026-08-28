@@ -6,6 +6,7 @@
 
 #include <QEvent>
 #include <QDynamicPropertyChangeEvent>
+#include <QCoreApplication>
 #include <QMargins>
 #include <QScreen>
 #include <QWindow>
@@ -44,7 +45,15 @@ bool LayerShellIntegration::initialize(QWaylandDisplay *display)
 QWaylandShellSurface *LayerShellIntegration::createShellSurface(QWaylandWindow *window)
 {
     QWindow *w = window->window();
-    if (isActive() && w && w->property("kdock.layershell").toBool())
+    // QWebEngineView creates its QWidget-backed QWindow while the widget is
+    // being constructed, before ScreensaverWindow can attach the dynamic
+    // kdock.layershell property. Recognize that one top-level here as well;
+    // its title is assigned before the native handle is requested and is
+    // stable for the lifetime of the window.
+    const bool isScreensaver = w && w->title() == QStringLiteral("kdock Screensaver");
+    const bool screensaverCreating = qApp->property("kdock.screensaverCreating").toBool();
+    if (isActive() && w && (w->property("kdock.layershell").toBool()
+                            || isScreensaver || screensaverCreating))
         return new LayerSurface(this, window);
     if (m_xdgFallback)
         return m_xdgFallback->createShellSurface(window);
@@ -60,8 +69,19 @@ LayerSurface::LayerSurface(LayerShellIntegration *shell, QWaylandWindow *window)
 
     bool ok = false;
     m_layer = w->property("kdock.layer").toUInt(&ok);
-    if (!ok)
+    if (!ok) {
         m_layer = ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+        // A QWidget can create its QWindow while winId() is still running,
+        // before the caller gets a chance to attach QWindow properties. The
+        // screensaver marks that narrow construction window on qApp so its
+        // first layer-shell surface receives the selected layer too.
+        if (qApp->property("kdock.screensaverCreating").toBool()) {
+            bool appLayerOk = false;
+            const uint appLayer = qApp->property("kdock.screensaverLayer").toUInt(&appLayerOk);
+            if (appLayerOk)
+                m_layer = appLayer;
+        }
+    }
 
     // Pin the surface to a specific output; a null output lets the compositor
     // choose. DockWindow resolves the target monitor's wl_output and stashes it

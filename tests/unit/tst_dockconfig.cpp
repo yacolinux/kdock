@@ -132,6 +132,45 @@ private slots:
         DockConfig::setNeonGlowMode(0);
     }
 
+    void screensaverSettingsAreSharedAndClamped()
+    {
+        DockConfig cfg(freshDockId("screensaver"));
+        QSignalSpy spy(&cfg, &DockConfig::screensaverChanged);
+
+        DockConfig::setScreensaverEnabled(true);
+        DockConfig::setScreensaverScreenEnabled(QStringLiteral("DP-1"), true);
+        DockConfig::setScreensaverTimeoutSeconds(1);
+        QCOMPARE(DockConfig::screensaverSlideshowIntervalSeconds(), 60);
+        DockConfig::setScreensaverSlideshowIntervalSeconds(1);
+        DockConfig::setScreensaverEngine(99);
+        DockConfig::setScreensaverAfterDarkPath(QStringLiteral("/tmp/after-dark"));
+
+        QVERIFY(DockConfig::screensaverEnabled());
+        QVERIFY(DockConfig::screensaverScreenEnabled(QStringLiteral("DP-1")));
+        QCOMPARE(DockConfig::screensaverTimeoutSeconds(), 10);
+        QCOMPARE(DockConfig::screensaverSlideshowIntervalSeconds(), 5);
+        QCOMPARE(DockConfig::screensaverEngine(), 1);
+        QVERIFY(!DockConfig::screensaverCoverDocks());
+        DockConfig::setScreensaverCoverDocks(true);
+        QVERIFY(DockConfig::screensaverCoverDocks());
+        QCOMPARE(DockConfig::screensaverAfterDarkPath(), QStringLiteral("/tmp/after-dark"));
+        QVERIFY(spy.count() >= 5);
+
+        // Shared settings must be visible from another dock instance too.
+        DockConfig other(freshDockId("screensaver-other"));
+        QVERIFY(other.screensaverScreenEnabled(QStringLiteral("DP-1")));
+
+        DockConfig::setScreensaverTimeoutSeconds(999999);
+        QCOMPARE(DockConfig::screensaverTimeoutSeconds(), 86400);
+        DockConfig::setScreensaverEnabled(false);
+        DockConfig::setScreensaverScreenEnabled(QStringLiteral("DP-1"), false);
+        DockConfig::setScreensaverTimeoutSeconds(300);
+        DockConfig::setScreensaverSlideshowIntervalSeconds(60);
+        DockConfig::setScreensaverEngine(0);
+        DockConfig::setScreensaverCoverDocks(false);
+        DockConfig::setScreensaverAfterDarkPath(QString());
+    }
+
     // Las dos son compartidas (kdock.conf), como showTooltips: se configuran
     // una vez y valen para todos los docks.
     void hideTimingsAreSharedAndClamped()

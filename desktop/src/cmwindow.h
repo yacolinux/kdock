@@ -33,6 +33,7 @@ class AppearanceControl;
 class CmWindow : public QQuickView
 {
     Q_OBJECT
+    Q_PROPERTY(QString screenName READ screenName CONSTANT)
     // Tab currently on screen ("" = Principal). Lives here rather than in QML so
     // the D-Bus "show this section" call has somewhere to land.
     Q_PROPERTY(QString currentTab READ currentTab WRITE setCurrentTab NOTIFY currentTabChanged)
@@ -66,6 +67,7 @@ public:
     // has the same problem and reuses the same two settings, so both follow the
     // user's choice without a second pair of options.
     QString iconSuffix() const;
+    QString screenName() const { return m_screenName; }
 
     qreal originShiftX() const { return originShift(true); }
     qreal originShiftY() const { return originShift(false); }

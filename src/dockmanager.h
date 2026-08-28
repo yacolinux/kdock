@@ -62,6 +62,7 @@ class QtCompat;
 class KWinScripts;
 class KeyboardControl;
 class AppPreviews;
+class ScreensaverManager;
 
 class DockManager : public QObject
 {
@@ -103,6 +104,7 @@ public:
         // purpose: captures are serialized process-wide and two docks pointing
         // at the same window reuse the one image.
         AppPreviews *appPreviews = nullptr;
+        ScreensaverManager *screensaver = nullptr;
         // ColorAuto. Injected after construction (setAutoColorScheme): it needs
         // the manager itself to reach the docks, so the two cannot both be
         // built with the other already in hand.
@@ -257,6 +259,9 @@ public:
     QtCompat *qtCompat() const { return m_shared.qtCompat; }
     KWinScripts *kwinScripts() const { return m_shared.kwinScripts; }
     KeyboardControl *keyboard() const { return m_shared.keyboard; }
+    ScreensaverManager *screensaver() const { return m_shared.screensaver; }
+    void activateScreensaver(const QString &screenName = QString(), int engine = -1,
+                             const QString &page = QString());
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

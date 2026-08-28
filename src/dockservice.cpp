@@ -239,3 +239,10 @@ bool DockService::setWallpaper(const QString &screenName, const QString &path)
 
     return m_manager->lxqtWallpapers()->setWallpaper(screen, path);
 }
+
+void DockService::activateScreensaver(const QString &screenName, int engine,
+                                      const QString &page)
+{
+    if (m_manager)
+        m_manager->activateScreensaver(screenName, engine, page);
+}

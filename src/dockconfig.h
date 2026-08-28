@@ -537,6 +537,30 @@ public:
     // Emits neonChanged() on every live dock, like notifyDarkModeChanged().
     static void notifyNeonChanged();
 
+    // Screensaver: one shared policy for the session, with an explicit list of
+    // monitor connectors. The list is intentionally independent from enabled
+    // docks: a monitor can be covered even when no dock is configured there.
+    static bool screensaverEnabled();
+    static void setScreensaverEnabled(bool on);
+    static QStringList screensaverScreens();
+    static bool screensaverScreenEnabled(const QString &connector);
+    static void setScreensaverScreenEnabled(const QString &connector, bool on);
+    static int screensaverTimeoutSeconds();
+    static void setScreensaverTimeoutSeconds(int seconds);
+    static int screensaverSlideshowIntervalSeconds();
+    static void setScreensaverSlideshowIntervalSeconds(int seconds);
+    static bool screensaverCoverDocks();
+    static void setScreensaverCoverDocks(bool on);
+    // 0 = wallpaper slideshow, 1 = After Dark CSS.
+    static int screensaverEngine();
+    static void setScreensaverEngine(int engine);
+    // Optional local checkout of after-dark-css/all. Empty uses the public
+    // GitHub Pages collection, which keeps the binary small and still supports
+    // a completely offline local checkout when configured.
+    static QString screensaverAfterDarkPath();
+    static void setScreensaverAfterDarkPath(const QString &path);
+    static void notifyScreensaverChanged();
+
     // Like favoritesShared(), but for the menu *appearance/behavior* group
     // (menu icon, popup width/height, power row, columns). Stored under
     // "shareMenuConfig"; when on, those keys live in the shared settings file.
@@ -1240,6 +1264,7 @@ signals:
     void darkModeChanged();
     // One signal for the whole neon group, same reasoning as darkModeChanged().
     void neonChanged();
+    void screensaverChanged();
     // One signal for the ColorAuto trio, same reasoning as darkModeChanged().
     void autoColorChanged();
     void groupWindowsChanged();
