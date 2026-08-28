@@ -30,6 +30,7 @@
 #include "powercontrol.h"
 #include "windowmonitor.h"
 #include "settingsdialog.h"
+#include "screensavermanager.h"
 #include "systraylauncher.h"
 #include "thumbnailimageprovider.h"
 #include "controlmanagerlauncher.h"
@@ -73,7 +74,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        DisksControl *disks, NetworkControl *network,
                        AppearanceControl *appearance, WindowMonitor *monitor,
                        VirtualDesktops *desktops, WeatherControl *weather,
-                       AutoColorScheme *autoColors, AppPreviews *appPreviews)
+                       AutoColorScheme *autoColors, AppPreviews *appPreviews,
+                       ScreensaverManager *screensaver)
     : m_config(config)
     , m_theme(theme)
     , m_model(model)
@@ -93,6 +95,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_desktops(desktops)
     , m_autoColors(autoColors)
     , m_appPreviews(appPreviews)
+    , m_screensaver(screensaver)
 {
     setColor(Qt::transparent);
     setFlags(Qt::FramelessWindowHint);
@@ -173,6 +176,7 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // built here.
     rootContext()->setContextProperty(QStringLiteral("autoColors"), m_autoColors);
     rootContext()->setContextProperty(QStringLiteral("appPreviews"), m_appPreviews);
+    rootContext()->setContextProperty(QStringLiteral("screensaver"), m_screensaver);
     rootContext()->setContextProperty(QStringLiteral("dockIsPrimary"), m_primary);
     rootContext()->setContextProperty(QStringLiteral("apps"), m_apps);
     rootContext()->setContextProperty(QStringLiteral("showdesktop"), monitor);

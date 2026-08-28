@@ -257,3 +257,13 @@ void DockLink::activateScreensaver(const QString &screenName, int engine,
     msg.setArguments({screenName, engine, page});
     QDBusConnection::sessionBus().asyncCall(msg);
 }
+
+void DockLink::activateScreensaverAll(int engine, const QString &page)
+{
+    if (!m_available)
+        return;
+    QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kIface,
+                                                      QStringLiteral("activateScreensaverAll"));
+    msg.setArguments({engine, page});
+    QDBusConnection::sessionBus().asyncCall(msg);
+}

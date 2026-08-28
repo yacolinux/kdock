@@ -262,6 +262,7 @@ public:
     ScreensaverManager *screensaver() const { return m_shared.screensaver; }
     void activateScreensaver(const QString &screenName = QString(), int engine = -1,
                              const QString &page = QString());
+    void activateScreensaverAll(int engine = -1, const QString &page = QString());
 
 signals:
     // Emitted whenever the set of enabled/known docks changes in a way that

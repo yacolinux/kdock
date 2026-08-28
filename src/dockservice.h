@@ -105,6 +105,7 @@ public slots:
     Q_SCRIPTABLE bool setWallpaper(const QString &screenName, const QString &path);
     Q_SCRIPTABLE void activateScreensaver(const QString &screenName, int engine,
                                           const QString &page);
+    Q_SCRIPTABLE void activateScreensaverAll(int engine, const QString &page);
 
     // Three parallel lists rather than one a(ssb): plain `as` needs no
     // qDBusRegisterMetaType on either side (see CLAUDE.md on struct properties).

@@ -1173,6 +1173,7 @@ Item {
         case "closewindow": return config.showCloseWindow && activeWindow && activeWindow.available
         case "nextwallpaper": return config.showNextWallpaper && wallpaperControl && wallpaperControl.available
         case "nextwallpaperqt": return config.showNextWallpaperQt && wallpaperControl && wallpaperControl.available
+        case "screensaver": return config.showScreensaver && screensaver
         case "darkmode": return config.showDarkMode
         case "pager": return config.showPager && virtualDesktops && virtualDesktops.count > 0
         // Shown whenever the flag is on, even with ColorAuto switched off: the
@@ -1234,6 +1235,7 @@ Item {
         case "closewindow": return closeWindowComp
         case "nextwallpaper": return nextWallpaperComp
         case "nextwallpaperqt": return nextWallpaperQtComp
+        case "screensaver": return screensaverComp
         case "darkmode": return darkModeComp
         case "pager": return pagerComp
         case "colorauto": return colorAutoComp
@@ -1268,6 +1270,7 @@ Item {
                || token === "battery" || token === "clipboard" || token === "disks"
                || token === "network" || token === "weather" || token === "iconthemes"
                || token === "colorschemes"
+               || token === "screensaver"
     }
 
     function sectionTooltip(token) {
@@ -1287,6 +1290,7 @@ Item {
         case "closewindow": return qsTr("Close window (right-click: send to next desktop, staying here)")
         case "nextwallpaper": return qsTr("Next wallpaper image")
         case "nextwallpaperqt": return qsTr("Next wallpaper: click this monitor, right-click every monitor")
+        case "screensaver": return qsTr("Screensaver: click this monitor, right-click for all monitors")
         case "darkmode": return qsTr("Modo normal (clic derecho: modo oscuro)")
         case "colorauto": return qsTr("Generar color del fondo (clic derecho: configurar)")
         case "iconthemes": return qsTr("Iconset de KDE")
@@ -4361,6 +4365,111 @@ Item {
                 opacity: 0.85
                 scale: parent.hovered ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+        }
+    }
+
+    // Manual screensaver controls. Left click activates the configured engine
+    // on this dock's monitor. Right click mirrors the desktop canvas menu and
+    // adds both the all-monitors action and one action per connected monitor.
+    // These calls deliberately bypass Screensaver/enabled and its monitor list.
+    Component {
+        id: screensaverComp
+        Item {
+            id: screensaverRoot
+            property bool hovered: false
+            implicitWidth: root.widgetIconPx
+            implicitHeight: root.widgetIconPx
+
+            Image {
+                anchors.centerIn: parent
+                width: root.widgetIconPx
+                height: width
+                source: "image://icon/preferences-desktop-screensaver" + root.widgetIconSuffix
+                sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
+                                    root.widgetIconPx * Screen.devicePixelRatio)
+                opacity: 0.85
+                scale: screensaverRoot.hovered ? 1.12 : 1.0
+                Behavior on scale { NumberAnimation { duration: 120 } }
+            }
+
+            ToolTip {
+                popupType: Popup.Window
+                visible: config.showTooltips && !root.menuOpen && screensaverMouse.containsMouse
+                delay: 400
+                text: qsTr("Screensaver: clic para este monitor, clic derecho para todos")
+                onVisibleChanged: root.tooltipVisible = visible
+            }
+
+            MouseArea {
+                id: screensaverMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onContainsMouseChanged: screensaverRoot.hovered = containsMouse
+                onClicked: (mouse) => {
+                    if (mouse.button === Qt.RightButton) {
+                        screensaverMenu.popup()
+                        return
+                    }
+                    if (screensaver)
+                        screensaver.activate(config.screenName, -1, "")
+                }
+            }
+
+            Menu {
+                id: screensaverMenu
+                popupType: Popup.Window
+                delegate: SubMenuDelegate {}
+                width: Math.max(implicitWidth + 64, 250)
+                onAboutToShow: root.menuOpen = true
+                onClosed: root.menuOpen = false
+
+                Menu {
+                    title: qsTr("Slideshow")
+                    property string menuIcon: "view-preview"
+                    popupType: Popup.Window
+                    width: Math.max(implicitWidth + 64, 250)
+                    IconMenuItem {
+                        text: qsTr("Activar Todos")
+                        iconName: "view-preview"
+                        onTriggered: if (screensaver) screensaver.activateAll(0, "")
+                    }
+                    MenuSeparator {}
+                    Repeater {
+                        model: Qt.application.screens
+                        delegate: IconMenuItem {
+                            required property var modelData
+                            text: modelData.name
+                            iconName: "view-preview"
+                            onTriggered: if (screensaver)
+                                             screensaver.activate(modelData.name, 0, "")
+                        }
+                    }
+                }
+
+                Menu {
+                    title: qsTr("After Dark CSS")
+                    property string menuIcon: "preferences-desktop-screensaver"
+                    popupType: Popup.Window
+                    width: Math.max(implicitWidth + 64, 250)
+                    IconMenuItem {
+                        text: qsTr("Activar Todos")
+                        iconName: "preferences-desktop-screensaver"
+                        onTriggered: if (screensaver) screensaver.activateAll(1, "")
+                    }
+                    MenuSeparator {}
+                    Repeater {
+                        model: Qt.application.screens
+                        delegate: IconMenuItem {
+                            required property var modelData
+                            text: modelData.name
+                            iconName: "preferences-desktop-screensaver"
+                            onTriggered: if (screensaver)
+                                             screensaver.activate(modelData.name, 1, "")
+                        }
+                    }
+                }
             }
         }
     }

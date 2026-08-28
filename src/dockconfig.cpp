@@ -1351,6 +1351,7 @@ void DockConfig::load()
     m_showCloseWindow = m_settings.value(QStringLiteral("showCloseWindow"), false).toBool();
     m_showNextWallpaper = m_settings.value(QStringLiteral("showNextWallpaper"), false).toBool();
     m_showNextWallpaperQt = m_settings.value(QStringLiteral("showNextWallpaperQt"), false).toBool();
+    m_showScreensaver = m_settings.value(QStringLiteral("showScreensaver"), false).toBool();
     m_showDarkMode = m_settings.value(QStringLiteral("showDarkMode"), false).toBool();
     m_showPager = m_settings.value(QStringLiteral("showPager"), false).toBool();
     m_showColorAuto = m_settings.value(QStringLiteral("showColorAuto"), false).toBool();
@@ -1418,6 +1419,7 @@ QStringList DockConfig::knownWidgetTokens()
             QStringLiteral("movetoscreen"), QStringLiteral("maxmin"),
             QStringLiteral("closewindow"),
             QStringLiteral("nextwallpaper"), QStringLiteral("nextwallpaperqt"),
+            QStringLiteral("screensaver"),
             QStringLiteral("darkmode"),
             QStringLiteral("pager"),       QStringLiteral("colorauto"),
             QStringLiteral("autohide"),
@@ -2351,6 +2353,15 @@ void DockConfig::setShowNextWallpaperQt(bool show)
     emit showNextWallpaperQtChanged();
 }
 
+void DockConfig::setShowScreensaver(bool show)
+{
+    if (m_showScreensaver == show)
+        return;
+    m_showScreensaver = show;
+    m_settings.setValue(QStringLiteral("showScreensaver"), show);
+    emit showScreensaverChanged();
+}
+
 void DockConfig::setShowDarkMode(bool show)
 {
     if (m_showDarkMode == show)
@@ -2795,6 +2806,7 @@ QString DockConfig::defaultWidgetLabel(const QString &token)
         {QStringLiteral("closewindow"),   QStringLiteral("Close window")},
         {QStringLiteral("nextwallpaper"), QStringLiteral("Next wallpaper")},
         {QStringLiteral("nextwallpaperqt"), QStringLiteral("Avanzar Wallpaper QT")},
+        {QStringLiteral("screensaver"),   QStringLiteral("Screensaver")},
         {QStringLiteral("darkmode"),      QStringLiteral("Modo oscuro")},
         {QStringLiteral("pager"),         QStringLiteral("Escritorios")},
         {QStringLiteral("colorauto"),     QStringLiteral("Generar Color")},

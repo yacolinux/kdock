@@ -77,6 +77,12 @@ void DockManager::activateScreensaver(const QString &screenName, int engine,
         m_shared.screensaver->activate(screenName, engine, page);
 }
 
+void DockManager::activateScreensaverAll(int engine, const QString &page)
+{
+    if (m_shared.screensaver)
+        m_shared.screensaver->activateAll(engine, page);
+}
+
 QString DockManager::primaryDockId() const
 {
     // The primary dock (systray/relanzadores host) is the lowest-slot enabled
@@ -720,7 +726,8 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
         m_shared.monitorControl, m_shared.maxmin, m_shared.activeWindow, m_shared.wallpaperControl, m_shared.power,
         m_shared.relanzadores, m_shared.scriptRunners, m_shared.clipboardHistory,
         m_shared.disks, m_shared.network, m_shared.appearance, m_shared.monitor,
-        m_shared.desktops, m_shared.weather, m_shared.autoColors, m_shared.appPreviews);
+        m_shared.desktops, m_shared.weather, m_shared.autoColors, m_shared.appPreviews,
+        m_shared.screensaver);
     window->setManager(this);
     window->setPrimary(primary);
     window->show();

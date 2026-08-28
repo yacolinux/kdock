@@ -131,6 +131,7 @@ class DockConfig : public QObject
     Q_PROPERTY(bool showCloseWindow READ showCloseWindow WRITE setShowCloseWindow NOTIFY showCloseWindowChanged)
     Q_PROPERTY(bool showNextWallpaper READ showNextWallpaper WRITE setShowNextWallpaper NOTIFY showNextWallpaperChanged)
     Q_PROPERTY(bool showNextWallpaperQt READ showNextWallpaperQt WRITE setShowNextWallpaperQt NOTIFY showNextWallpaperQtChanged)
+    Q_PROPERTY(bool showScreensaver READ showScreensaver WRITE setShowScreensaver NOTIFY showScreensaverChanged)
     Q_PROPERTY(bool showDarkMode READ showDarkMode WRITE setShowDarkMode NOTIFY showDarkModeChanged)
     Q_PROPERTY(bool showPager READ showPager WRITE setShowPager NOTIFY showPagerChanged)
     Q_PROPERTY(bool showColorAuto READ showColorAuto WRITE setShowColorAuto NOTIFY showColorAutoChanged)
@@ -798,6 +799,7 @@ public:
     bool showCloseWindow() const { return m_showCloseWindow; }
     bool showNextWallpaper() const { return m_showNextWallpaper; }
     bool showNextWallpaperQt() const { return m_showNextWallpaperQt; }
+    bool showScreensaver() const { return m_showScreensaver; }
     bool showDarkMode() const { return m_showDarkMode; }
     // Virtual-desktop pager (token "pager"): the numbers of KWin's desktops,
     // click to switch.
@@ -1010,6 +1012,7 @@ public:
     void setShowCloseWindow(bool show);
     void setShowNextWallpaper(bool show);
     void setShowNextWallpaperQt(bool show);
+    void setShowScreensaver(bool show);
     void setShowDarkMode(bool show);
     void setShowPager(bool show);
     void setShowColorAuto(bool show);
@@ -1255,6 +1258,7 @@ signals:
     void showCloseWindowChanged();
     void showNextWallpaperChanged();
     void showNextWallpaperQtChanged();
+    void showScreensaverChanged();
     void showDarkModeChanged();
     void showPagerChanged();
     void showColorAutoChanged();
@@ -1410,6 +1414,7 @@ private:
     bool m_showCloseWindow = false;
     bool m_showNextWallpaper = false;
     bool m_showNextWallpaperQt = false;
+    bool m_showScreensaver = false;
     bool m_showDarkMode = false;
     bool m_showPager = false;
     bool m_showColorAuto = false;

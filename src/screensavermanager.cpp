@@ -173,6 +173,20 @@ void ScreensaverManager::activate(const QString &screenName, int engine,
         window->showSaver(engine, page);
 }
 
+void ScreensaverManager::activateAll(int engine, const QString &page)
+{
+    // This is a manual command, not the idle policy: do not consult
+    // Screensaver/enabled or Screensaver/screens here.
+    for (QScreen *screen : QGuiApplication::screens()) {
+        if (!screen)
+            continue;
+        const QString name = screen->name();
+        ensureWindow(name);
+        if (auto *window = m_windows.value(name))
+            window->showSaver(engine, page);
+    }
+}
+
 void ScreensaverManager::hideAll()
 {
     for (ScreensaverWindow *window : std::as_const(m_windows))

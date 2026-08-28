@@ -50,8 +50,11 @@ public:
 
     // Manual activation intentionally ignores the per-monitor enabled flag.
     // engine < 0 uses the configured engine; page selects one After Dark page.
-    void activate(const QString &screenName = QString(), int engine = -1,
-                  const QString &page = QString());
+    Q_INVOKABLE void activate(const QString &screenName = QString(), int engine = -1,
+                              const QString &page = QString());
+    // Manual activation intentionally ignores the global enabled flag and the
+    // configured monitor list, just like activating one named monitor.
+    Q_INVOKABLE void activateAll(int engine = -1, const QString &page = QString());
     void hideAll();
     void reload();
 

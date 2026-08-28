@@ -246,3 +246,9 @@ void DockService::activateScreensaver(const QString &screenName, int engine,
     if (m_manager)
         m_manager->activateScreensaver(screenName, engine, page);
 }
+
+void DockService::activateScreensaverAll(int engine, const QString &page)
+{
+    if (m_manager)
+        m_manager->activateScreensaverAll(engine, page);
+}

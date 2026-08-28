@@ -62,6 +62,8 @@ public:
     // setting toggle: kdock decides whether to ignore the configured policy.
     Q_INVOKABLE void activateScreensaver(const QString &screenName, int engine = -1,
                                          const QString &page = QString());
+    Q_INVOKABLE void activateScreensaverAll(int engine = -1,
+                                             const QString &page = QString());
     // ColorAuto (see src/autocolorscheme.h). Both run in the dock's process on
     // purpose: the engine keeps which of its two generated schemes is current,
     // and that has to exist exactly once for the whole session.

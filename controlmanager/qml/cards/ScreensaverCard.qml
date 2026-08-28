@@ -3,6 +3,7 @@
 // same per-monitor D-Bus entry point.
 
 import QtQuick
+import ".."
 
 Item {
     id: card
@@ -25,6 +26,31 @@ Item {
             opacity: 0.6
             font.pixelSize: Math.max(7, Math.round((11) * cmConfig.fontScale))
             font.bold: true
+        }
+
+        Flow {
+            width: parent.width
+            spacing: 4
+
+            CmButton {
+                fg: card.fg
+                compact: card.compact
+                icon: "view-preview"
+                label: qsTr("Activar Todos")
+                tip: qsTr("Activar Screensaver en todos los monitores conectados")
+                enabled: card.available
+                onClicked: dock.activateScreensaverAll(0, "")
+            }
+
+            CmButton {
+                fg: card.fg
+                compact: card.compact
+                icon: "preferences-desktop-screensaver"
+                label: qsTr("Activar Todos")
+                tip: qsTr("Activar Screensaver en todos los monitores conectados")
+                enabled: card.available
+                onClicked: dock.activateScreensaverAll(1, "")
+            }
         }
 
         Flow {

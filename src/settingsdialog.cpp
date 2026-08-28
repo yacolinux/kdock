@@ -2154,6 +2154,15 @@ QWidget *SettingsDialog::createWidgetsTab()
             &DockConfig::setShowNextWallpaperQt);
     form->addRow(tr("Avanzar Wallpaper QT:"), showNextWallpaperQt);
 
+    auto *showScreensaver = new QCheckBox(tr("Show Screensaver controls"), tab);
+    showScreensaver->setChecked(m_config->showScreensaver());
+    showScreensaver->setToolTip(tr("Shows the Screensaver widget. Left-click activates the "
+                                   "configured engine on this monitor; right-click offers "
+                                   "this monitor and all connected monitors. Manual activation "
+                                   "ignores the Screensaver enabled setting."));
+    connect(showScreensaver, &QCheckBox::toggled, m_config, &DockConfig::setShowScreensaver);
+    form->addRow(tr("Screensaver:"), showScreensaver);
+
     auto *showDarkMode = new QCheckBox(tr("Show dark-mode button"), tab);
     showDarkMode->setChecked(m_config->showDarkMode());
     showDarkMode->setToolTip(tr("Left-click switches this dock to the normal color "
