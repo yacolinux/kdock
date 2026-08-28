@@ -18,6 +18,8 @@
 #include "sandbox.h"
 #include "windowmonitor.h"
 
+#include <QDir>
+#include <QFile>
 #include <QSettings>
 #include <QTest>
 
@@ -42,6 +44,13 @@ FakeWindow *openWindow(WindowMonitor *monitor, const QString &appId)
     w->setParent(monitor);
     monitor->registerWindow(w);
     return w;
+}
+
+void writeDesktop(const QString &path, const QString &body)
+{
+    QFile f(path);
+    QVERIFY2(f.open(QIODevice::WriteOnly | QIODevice::Text), qPrintable(path));
+    f.write(body.toUtf8());
 }
 } // namespace
 
@@ -211,6 +220,54 @@ private slots:
         // …y apagándolo, sí: el widget pasa a ser un bloque de apps completo.
         cfg.setWidgetOnlyPinned(token, false);
         QCOMPARE(widget.rowCount(), 2);
+    }
+
+    void pwaAliasesStayGroupedAndExcludedAcrossWidgets()
+    {
+        // Edge puede instalar una copia visible con "-_extid" y otra exacta
+        // NoDisplay con "-extid". KWin entrega a veces la segunda variante;
+        // ambos IDs tienen que terminar en la misma fila visible y en la misma
+        // clave para los filtros entre widgets.
+        const QString root = kdocktest::sandboxDir().path();
+        const QString appsDir = root + QStringLiteral("/data/applications");
+        QDir().mkpath(appsDir);
+        const QString ext = QStringLiteral("lgnggepjiihbfdbedefdhcffnmhcahbm");
+        const QString visibleId = QStringLiteral("msedge-_%1-Default").arg(ext);
+        const QString exactHiddenId = QStringLiteral("msedge-%1-Default").arg(ext);
+        writeDesktop(appsDir + QStringLiteral("/%1.desktop").arg(visibleId),
+                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit visible\n"
+                                    "Exec=msedge --app-id=%1\nIcon=reddit\n"
+                                    "StartupWMClass=crx__%1\n").arg(ext));
+        writeDesktop(appsDir + QStringLiteral("/%1.desktop").arg(exactHiddenId),
+                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit oculto\n"
+                                    "NoDisplay=true\nExec=msedge --app-id=%1\nIcon=reddit\n"
+                                    "StartupWMClass=crx__%1\n").arg(ext));
+
+        const QString screen = freshDockId("pwa-alias");
+        DockConfig owner(screen);
+        DockConfig monitorDock(DockConfig::makeDockId(screen, 1));
+        const QString ownerToken = owner.insertAppsWidget(0);
+        const QString localToken = owner.insertAppsWidget(1);
+        const QString monitorToken = monitorDock.insertAppsWidget(0);
+        owner.setWidgetApps(ownerToken, {visibleId});
+        owner.setWidgetOnlyPinned(localToken, false);
+        owner.setWidgetExcludeOthers(localToken, true);
+        monitorDock.setWidgetOnlyPinned(monitorToken, false);
+        monitorDock.setWidgetExcludeMonitor(monitorToken, true);
+
+        DesktopEntryIndex apps;
+        WindowMonitor monitor;
+        DockModel ownerModel(&owner, &apps, &monitor, nullptr, ownerToken);
+        DockModel localModel(&owner, &apps, &monitor, nullptr, localToken);
+        DockModel monitorModel(&monitorDock, &apps, &monitor, nullptr, monitorToken);
+        openWindow(&monitor, exactHiddenId);
+
+        QCOMPARE(ownerModel.rowCount(), 1);
+        QCOMPARE(ownerModel.index(0).data(DockModel::WindowCountRole).toInt(), 1);
+        QCOMPARE(ownerModel.index(0).data(DockModel::NameRole).toString(),
+                 QStringLiteral("Reddit visible"));
+        QCOMPARE(localModel.rowCount(), 0);
+        QCOMPARE(monitorModel.rowCount(), 0);
     }
 
     void lateCreatedWidgetTracksExistingWindowChanges()

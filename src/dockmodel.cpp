@@ -226,7 +226,7 @@ bool DockModel::groupsWindows() const
 bool DockModel::listsApp(const QString &key) const
 {
     for (const QString &id : pinnedIds())
-        if (id.compare(key, Qt::CaseInsensitive) == 0)
+        if (keyForAppId(id, nullptr) == key)
             return true;
     return false;
 }
@@ -306,7 +306,10 @@ bool DockModel::acceptsStrayWindow(const QString &appId) const
         return false;
     if (!m_config->widgetExcludeOthers(m_widgetToken))
         return true;
-    return !m_config->appsPinnedElsewhere(m_widgetToken).contains(key);
+    for (const QString &id : m_config->appsPinnedElsewhere(m_widgetToken))
+        if (keyForAppId(id, nullptr) == key)
+            return false;
+    return true;
 }
 
 void DockModel::refreshMonitorPinned()
@@ -316,7 +319,9 @@ void DockModel::refreshMonitorPinned()
         return;
     }
     const QStringList ids = m_config->appsPinnedOnMonitor(m_widgetToken);
-    m_monitorPinned = QSet<QString>(ids.cbegin(), ids.cend());
+    m_monitorPinned.clear();
+    for (const QString &id : ids)
+        m_monitorPinned.insert(keyForAppId(id, nullptr));
 }
 
 void DockModel::rebuild()
@@ -327,8 +332,10 @@ void DockModel::rebuild()
 
     for (const QString &id : pinnedIds()) {
         Item item;
-        item.key = id.toLower();
-        item.entry = m_apps->byId(id);
+        item.entry = m_apps->forAppId(id);
+        item.key = item.entry.isValid() ? item.entry.id.toLower() : id.toLower();
+        if (!item.entry.isValid())
+            item.entry = m_apps->byId(id);
         item.fallbackAppId = id;
         item.pinned = true;
         m_items.append(item);

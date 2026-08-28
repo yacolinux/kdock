@@ -117,8 +117,29 @@ DesktopEntry DesktopEntryIndex::byId(const QString &id) const
 DesktopEntry DesktopEntryIndex::forAppId(const QString &appId) const
 {
     const QString lower = appId.toLower();
-    if (m_byLowerId.contains(lower))
-        return m_byLowerId.value(lower);
+    const DesktopEntry exact = m_byLowerId.value(lower);
+
+    // Chromium can leave a NoDisplay copy under the exact app_id while the
+    // visible launcher has the extra underscore used by some Chromium builds:
+    //   window:  msedge-<extid>-Default
+    //   visible: msedge-_<extid>-Default
+    // Returning the exact hidden copy makes the model key differ from the
+    // user's pinned launcher, so the icon stays idle and monitor-wide appsel
+    // filters fail to recognize it. Resolve a recognizable PWA deterministically
+    // before accepting an exact NoDisplay match; a visible exact entry still
+    // keeps the normal priority.
+    static const QRegularExpression pwaExtIdRe(
+        QStringLiteral("^(msedge|chrome|chromium|edge|brave|vivaldi)-[_-]?([a-p]{32})(?:-default)?$"));
+    const QRegularExpressionMatch pwaMatch = pwaExtIdRe.match(lower);
+    DesktopEntry pwa;
+    if (pwaMatch.hasMatch()) {
+        pwa = pwaEntry(pwaMatch.captured(1), pwaMatch.captured(2));
+        if (pwa.isValid() && (!exact.isValid() || exact.noDisplay))
+            return pwa;
+    }
+
+    if (exact.isValid())
+        return exact;
     if (m_wmClassToId.contains(lower))
         return m_byLowerId.value(m_wmClassToId.value(lower));
 
@@ -132,18 +153,6 @@ DesktopEntry DesktopEntryIndex::forAppId(const QString &appId) const
         if (it.key().endsWith(QLatin1Char('.') + lower))
             return it.value();
     }
-
-    // Chromium web apps (PWAs). KWin reports their app_id with an extra
-    // underscore before the 32-char extension id ("msedge-_<extid>-Default")
-    // while the .desktop file has none, so all four heuristics above miss and
-    // the window ends up in its own dock row instead of grouping under its
-    // launcher. Match on the extension id, which is the real identity.
-    // Only reached once 1-4 failed, so it cannot alter an existing match.
-    static const QRegularExpression pwaExtIdRe(
-        QStringLiteral("^(msedge|chrome|chromium|edge|brave|vivaldi)-[_-]?([a-p]{32})(?:-default)?$"));
-    const QRegularExpressionMatch pwaMatch = pwaExtIdRe.match(lower);
-    if (pwaMatch.hasMatch())
-        return pwaEntry(pwaMatch.captured(1), pwaMatch.captured(2));
 
     // Chromium browsers name their windows after the *install directory* of the
     // real binary when the window has no better identity of its own: a freshly

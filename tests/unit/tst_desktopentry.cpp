@@ -20,6 +20,7 @@
 namespace {
 // El id de extensión de una PWA de Chromium: 32 letras de la 'a' a la 'p'.
 const QString kExtId = QStringLiteral("lgnggepjiihbfdbedefdhcffnmhcahbm");
+const QString kLegacyExtId = QStringLiteral("abcdefghijklmnopabcdefghijklmnop");
 
 void writeDesktop(const QString &path, const QString &body)
 {
@@ -60,10 +61,23 @@ private slots:
         writeDesktop(m_appsDir + QStringLiteral("/microsoft-edge.desktop"),
                      QStringLiteral("[Desktop Entry]\nType=Application\nName=Microsoft Edge\n"
                                     "Exec=%1 %U\nIcon=microsoft-edge\n").arg(binary));
-        // Una PWA: el .desktop NO lleva el guion bajo de más que manda KWin.
+        // La PWA visible lleva el guion bajo que usan algunas instalaciones de
+        // Chromium, pero también existe una copia exacta NoDisplay con el id
+        // que KWin entrega actualmente. El índice debe elegir la visible.
+        writeDesktop(m_appsDir + QStringLiteral("/msedge-_%1-Default.desktop").arg(kExtId),
+                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit ED\n"
+                                    "Exec=%1 --app-id=%2\nIcon=reddit\n"
+                                    "StartupWMClass=crx__%2\n").arg(kExtId, kExtId));
         writeDesktop(m_appsDir + QStringLiteral("/msedge-%1-Default.desktop").arg(kExtId),
-                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit\n"
-                                    "Exec=%1 --app-id=%2\nIcon=reddit\n").arg(kExtId, kExtId));
+                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit oculto\n"
+                                    "NoDisplay=true\nExec=%1 --app-id=%2\nIcon=reddit\n"
+                                    "StartupWMClass=crx__%2\n").arg(kExtId, kExtId));
+        // Mantiene cubierto el caso inverso: una ventana con guion bajo y un
+        // lanzador visible cuyo id no lo tiene.
+        writeDesktop(m_appsDir + QStringLiteral("/msedge-%1-Default.desktop").arg(kLegacyExtId),
+                     QStringLiteral("[Desktop Entry]\nType=Application\nName=Reddit legacy\n"
+                                    "Exec=msedge --app-id=%1\nIcon=reddit\n"
+                                    "StartupWMClass=crx__%1\n").arg(kLegacyExtId));
     }
 
     void exactAndLastSegmentMatches()
@@ -90,12 +104,28 @@ private slots:
 
     void pwaArrivesWithAnExtraUnderscore()
     {
-        // KWin: "msedge-_<extid>-Default". El .desktop: "msedge-<extid>-Default".
+        // KWin también puede entregar la variante con guion bajo.
         DesktopEntryIndex apps;
         const DesktopEntry e =
-            apps.forAppId(QStringLiteral("msedge-_%1-Default").arg(kExtId));
+            apps.forAppId(QStringLiteral("msedge-_%1-Default").arg(kLegacyExtId));
         QVERIFY2(e.isValid(), "la PWA tiene que caer en su lanzador");
-        QCOMPARE(e.name, QStringLiteral("Reddit"));
+        QCOMPARE(e.id, QStringLiteral("msedge-%1-Default").arg(kLegacyExtId));
+        QCOMPARE(e.name, QStringLiteral("Reddit legacy"));
+    }
+
+    void pwaPrefersVisibleOverExactNoDisplayDuplicate()
+    {
+        // La ventana actual llega como "msedge-<extid>-Default", que coincide
+        // exactamente con la copia oculta. Esa copia no puede ser la identidad
+        // del launcher: el modelo necesita la entrada visible que el usuario
+        // tiene anclada.
+        DesktopEntryIndex apps;
+        const DesktopEntry e =
+            apps.forAppId(QStringLiteral("msedge-%1-Default").arg(kExtId));
+        QVERIFY2(e.isValid(), "la PWA tiene que caer en su lanzador visible");
+        QCOMPARE(e.id, QStringLiteral("msedge-_%1-Default").arg(kExtId));
+        QCOMPARE(e.name, QStringLiteral("Reddit ED"));
+        QVERIFY(!e.noDisplay);
     }
 
     void anUnknownAppIdResolvesToNothing()
