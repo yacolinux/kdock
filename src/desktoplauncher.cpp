@@ -212,6 +212,14 @@ void DesktopLauncher::applyState(const QStringList &connectedScreens)
         else
             quitOn(connector);
     }
+    // A removed monitor is no longer in `connected`, but its connector remains
+    // in the persistent enabled list so it can start again when reconnected.
+    // Reconcile those entries too, otherwise its canvas survives the unplug and
+    // CmWindow may move it onto the primary screen.
+    for (const QString &connector : wanted) {
+        if (!connected.contains(connector))
+            quitOn(connector);
+    }
 }
 
 // --- aggregate helpers -----------------------------------------------------

@@ -581,6 +581,18 @@ int main(int argc, char *argv[])
     SystrayLauncher::startIfPreloading();
     // The desktop-widget canvases: one per enabled monitor, if the master
     // switch is on (Configuración → Desktop).
+    // The startup pass above is not enough for a monitor that is connected
+    // later: unlike DockManager, DesktopLauncher is a static helper and has
+    // no owner that listens to QGuiApplication's hotplug signals. Defer the
+    // reconciliation one event-loop turn so Qt has finished updating its
+    // screen list before we inspect it.
+    const auto scheduleDesktopHotplug = [](QScreen *) {
+        QTimer::singleShot(0, qGuiApp, [] { DesktopLauncher::applyState(); });
+    };
+    QObject::connect(qGuiApp, &QGuiApplication::screenAdded, qGuiApp,
+                     scheduleDesktopHotplug);
+    QObject::connect(qGuiApp, &QGuiApplication::screenRemoved, qGuiApp,
+                     scheduleDesktopHotplug);
     DesktopLauncher::startEnabled();
 
     // And the one global shortcut kdock publishes of its own, with no default
