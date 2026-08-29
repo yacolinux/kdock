@@ -50,6 +50,13 @@ jobs:
             command -v "$tool" > /dev/null || { echo "falta $tool"; exit 1; }
           done
 
+      - name: Preparar runtime XDG
+        run: |
+          runtime_dir=/tmp/kdock-runtime
+          mkdir -p "$runtime_dir"
+          chmod 700 "$runtime_dir"
+          echo "XDG_RUNTIME_DIR=$runtime_dir" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - name: Configurar
