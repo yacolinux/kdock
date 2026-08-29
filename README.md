@@ -2,7 +2,7 @@
 
 # kdock  ·  RELEASE 0.5.0
 
-![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
+![Ejemplo de configuración de Kdock](screenshots/apps-seleccionables-clean.jpg)
 
 *Ejemplo de configuración de Kdock*
 
@@ -29,10 +29,10 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 
 | | |
 |---|---|
-| ![Dock al fondo, panel completo con etiquetas debajo](screenshots/dock-bottom-labels.jpg)<br>*Abajo, de borde a borde, etiqueta debajo del ícono* | ![Dock vertical a la izquierda, solo íconos](screenshots/dock-left-icons-only.jpg)<br>*Izquierda, compacto, solo íconos* |
-| ![Dock vertical a la izquierda con etiquetas](screenshots/dock-left-labels.jpg)<br>*Izquierda, etiqueta al costado* | ![Dock vertical a la izquierda con ícono y etiqueta invertidos](screenshots/dock-left-labels-reversed.jpg)<br>*La misma, con el orden ícono/etiqueta invertido* |
-| ![Dock vertical a la derecha con etiquetas](screenshots/dock-right-labels.jpg)<br>*Derecha, con los widgets abajo* | ![Dock arriba con etiquetas al costado](screenshots/dock-top-labels.jpg)<br>*Arriba, etiqueta al costado* |
-| ![Dock arriba en modo compacto](screenshots/dock-top-compact.jpg)<br>*Arriba, compacto, etiqueta encima* | |
+| ![Dock vertical a la izquierda, solo íconos](screenshots/dock-left-icons-only.jpg)<br>*Izquierda, compacto, solo íconos* | ![Dock vertical a la izquierda con etiquetas](screenshots/dock-left-labels.jpg)<br>*Izquierda, etiqueta al costado* |
+| ![Dock vertical a la izquierda con ícono y etiqueta invertidos](screenshots/dock-left-labels-reversed.jpg)<br>*La misma, con el orden ícono/etiqueta invertido* | ![Dock vertical a la derecha con etiquetas](screenshots/dock-right-labels.jpg)<br>*Derecha, con los widgets abajo* |
+| ![Dock arriba con etiquetas al costado](screenshots/dock-top-labels.jpg)<br>*Arriba, etiqueta al costado* | ![Dock arriba en modo compacto](screenshots/dock-top-compact.jpg)<br>*Arriba, compacto, etiqueta encima* |
+| ![Dock al fondo, panel completo con etiquetas debajo](screenshots/dock-bottom-labels.jpg)<br>*Abajo, de borde a borde, etiqueta debajo del ícono* | |
 
 ## Características
 

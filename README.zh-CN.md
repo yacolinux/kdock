@@ -2,7 +2,7 @@
 
 # kdock  ·  RELEASE 0.5.0
 
-![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
+![Ejemplo de configuración de Kdock](screenshots/apps-seleccionables-clean.jpg)
 
 *kdock 配置示例*
 
@@ -28,10 +28,10 @@ Dock 在不同边缘和标签排列方式下的样子：
 
 | | |
 |---|---|
-| ![Dock al fondo, panel completo con etiquetas debajo](screenshots/dock-bottom-labels.jpg)<br>*底部，通栏，标签在图标下方* | ![Dock vertical a la izquierda, solo íconos](screenshots/dock-left-icons-only.jpg)<br>*左侧，紧凑模式，仅图标* |
-| ![Dock vertical a la izquierda con etiquetas](screenshots/dock-left-labels.jpg)<br>*左侧，标签在旁边* | ![Dock vertical a la izquierda con ícono y etiqueta invertidos](screenshots/dock-left-labels-reversed.jpg)<br>*同上，图标/标签顺序反转* |
-| ![Dock vertical a la derecha con etiquetas](screenshots/dock-right-labels.jpg)<br>*右侧，widget 在下方* | ![Dock arriba con etiquetas al costado](screenshots/dock-top-labels.jpg)<br>*顶部，标签在旁边* |
-| ![Dock arriba en modo compacto](screenshots/dock-top-compact.jpg)<br>*顶部，紧凑模式，标签在上方* | |
+| ![Dock vertical a la izquierda, solo íconos](screenshots/dock-left-icons-only.jpg)<br>*左侧，紧凑模式，仅图标* | ![Dock vertical a la izquierda con etiquetas](screenshots/dock-left-labels.jpg)<br>*左侧，标签在旁边* |
+| ![Dock vertical a la izquierda con ícono y etiqueta invertidos](screenshots/dock-left-labels-reversed.jpg)<br>*同上，图标/标签顺序反转* | ![Dock vertical a la derecha con etiquetas](screenshots/dock-right-labels.jpg)<br>*右侧，widget 在下方* |
+| ![Dock arriba con etiquetas al costado](screenshots/dock-top-labels.jpg)<br>*顶部，标签在旁边* | ![Dock arriba en modo compacto](screenshots/dock-top-compact.jpg)<br>*顶部，紧凑模式，标签在上方* |
+| ![Dock al fondo, panel completo con etiquetas debajo](screenshots/dock-bottom-labels.jpg)<br>*底部，通栏，标签在图标下方* | |
 
 ## 特性
 

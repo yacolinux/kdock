@@ -25,7 +25,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm \
             base-devel cmake ninja git python \
-            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-5compat \
+            qt6-base qt6-declarative qt6-wayland qt6-tools qt6-5compat qt6-webengine \
             xorg-server-xvfb xorg-xauth xorg-xwininfo dbus
           # xorg-xauth va explícito: xvfb-run lo NECESITA (arma un .Xauthority
           # para el display nuevo) y en Arch xorg-server-xvfb no lo arrastra, a

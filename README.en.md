@@ -2,7 +2,7 @@
 
 # kdock  ·  RELEASE 0.5.0
 
-![Kdock configuration example](screenshots/nueva-portada.jpg)
+![Kdock configuration example](screenshots/apps-seleccionables-clean.jpg)
 
 *Kdock configuration example*
 
@@ -29,10 +29,10 @@ The dock, across different edges and label layouts:
 
 | | |
 |---|---|
-| ![Dock at the bottom, full-width panel with labels underneath](screenshots/dock-bottom-labels.jpg)<br>*Bottom, edge to edge, label under the icon* | ![Vertical dock on the left, icons only](screenshots/dock-left-icons-only.jpg)<br>*Left, compact, icons only* |
-| ![Vertical dock on the left with labels](screenshots/dock-left-labels.jpg)<br>*Left, label to the side* | ![Vertical dock on the left with icon and label reversed](screenshots/dock-left-labels-reversed.jpg)<br>*Same, with the icon/label order reversed* |
-| ![Vertical dock on the right with labels](screenshots/dock-right-labels.jpg)<br>*Right, with the widgets at the bottom* | ![Dock at the top with labels to the side](screenshots/dock-top-labels.jpg)<br>*Top, label to the side* |
-| ![Dock at the top in compact mode](screenshots/dock-top-compact.jpg)<br>*Top, compact, label above* | |
+| ![Vertical dock on the left, icons only](screenshots/dock-left-icons-only.jpg)<br>*Left, compact, icons only* | ![Vertical dock on the left with labels](screenshots/dock-left-labels.jpg)<br>*Left, label to the side* |
+| ![Vertical dock on the left with icon and label reversed](screenshots/dock-left-labels-reversed.jpg)<br>*Same, with the icon/label order reversed* | ![Vertical dock on the right with labels](screenshots/dock-right-labels.jpg)<br>*Right, with the widgets at the bottom* |
+| ![Dock at the top with labels to the side](screenshots/dock-top-labels.jpg)<br>*Top, label to the side* | ![Dock at the top in compact mode](screenshots/dock-top-compact.jpg)<br>*Top, compact, label above* |
+| ![Dock at the bottom, full-width panel with labels underneath](screenshots/dock-bottom-labels.jpg)<br>*Bottom, edge to edge, label under the icon* | |
 
 ## Features
 
