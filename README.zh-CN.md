@@ -1,6 +1,6 @@
 [Español](README.md) | [English](README.en.md) | **中文**
 
-# kdock  ·  RELEASE 0.1.11
+# kdock  ·  RELEASE 0.5.0
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -14,7 +14,7 @@
 ![Wayland](https://img.shields.io/badge/Wayland-layer--shell-lightgrey)
 
 kdock **不链接 KDE Frameworks，也不链接 Plasma**。Wayland 协议直接从其 XML 用
-`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到六个独立的二进制文件，
+`qtwaylandscanner` 生成，其余一切都通过 D-Bus 或 CLI 解决。最终得到九个独立的二进制文件，
 没有需要安装的插件，也不用拖带半个 Plasma 作为依赖。
 
 在 **KDE Plasma 6 / KWin** 上日常使用测试；任务栏部分在 wlroots 系合成器
@@ -46,6 +46,9 @@ Dock 在不同边缘和标签排列方式下的样子：
   （wlroots）。
 - **固定启动器**，来自手动解析的 XDG `.desktop` 文件，支持按应用分组窗口（包括
   **Chromium/Edge 的 Web 应用**，它们上报的 `app_id` 是变形的，需要专门的启发式规则）。
+- **可选应用**：应用区块可以重复多次，每个实例都有独立的启动器列表。可以只显示已固定的
+  应用，排除已经分配到其他 widget 或本显示器 Dock 的应用，也可以取消窗口分组；还可从右键
+  菜单或设置面板手动重新加载。
 - **每个显示器一个 Dock**，可选启用：每个都有独立的配置（边缘、大小、widget、固定项）
   和热插拔处理。每屏最多 6 个 Dock。
 - **不同虚拟桌面上不同的 Dock**（KDE/KWin）：除了随显示器变化外，一个 Dock 还可以绑定到
@@ -107,6 +110,8 @@ Dock 在不同边缘和标签排列方式下的样子：
   相同）。生成的方案是**临时的**：每次变化都会重写，关闭该选项时会被删除。它也能和暗色模式
   相处：暗色模式开启期间 ColorAuto 会自行让位，退出后自动恢复。在它自己的选项卡中配置，一次
   对所有 Dock 生效。
+- **Dock 面板霓虹光效**：可选择显示器并调整强度和大小，提供内侧边框或外侧光晕。外侧光晕
+  不占用输入区域，也不会溢出到相邻显示器；它可以跟随暗色模式，也可以按 Dock 禁用。
 - **手动「生成颜色」**，即使 ColorAuto 关闭也能用：可以从它自己的选项卡、Dock 的 widget
   （左键生成，右键打开配置），或控制面板的卡片触发。在同一张壁纸上再次按下会**切换到该图像的
   下一个颜色**——候选色按色相拉开距离，所以每次点击都看得出变化——可以一直试到满意为止。满意
@@ -213,7 +218,7 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
 
 | Widget | 功能 | 后端 |
 |---|---|---|
-| 可选应用 | 应用区块作为可重复的分区，拥有自己的启动器列表：一个 Dock 可以放**多个**。每个实例有三个筛选开关——*仅显示已固定*、*不显示其他「可选应用」中已固定的应用*（同一 Dock）以及*不显示本显示器上已固定的应用*（该屏幕上的任意 Dock）——由此可让某个 widget 成为兜底区块：显示所有已打开、且没有被其他 widget 画出来的窗口 | 合成器协议 |
+| 可选应用 | 应用区块作为可重复的分区，拥有自己的启动器列表：一个 Dock 可以放**多个**。每个实例可仅显示已固定应用，排除其他 widget 或本显示器中已固定的应用，并可选择*取消窗口分组*；还支持手动重新加载，因此适合构建不重复的兜底区块 | 合成器协议 |
 | 音量 | 默认 sink：滚轮调节、静音、音量显示 | `wpctl` / `pactl`（PipeWire） |
 | 亮度 | 屏幕亮度 | `brightnessctl` |
 | 电池 | 电量、状态和电源配置文件 | UPower + power-profiles-daemon |
@@ -238,6 +243,7 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
 | Script Runner | 执行可配置的 shell 脚本 | `sh` |
 | 磁贴菜单 | 打开和关闭全屏磁贴菜单 | `kdock-tilemenu`（D-Bus） |
 | Control Manager | 打开控制面板：音频、各显示器亮度、电源、日历、播放、网络、天气、壁纸和系统。可以在 Dock 上绘制自己的文本（或时钟），并使用自己的字体 | `kdock-controlmanager`（D-Bus） |
+| 屏保 | 空闲一段时间后覆盖选定的显示器；使用壁纸幻灯片或 After Dark CSS 场景 | Wayland idle + Qt WebEngine |
 
 ### `kdock-previews`（配套二进制文件）
 
@@ -260,6 +266,12 @@ Eleven），这样这个玩笑才能用界面所使用的语言来表达。它�
   有自己的长度，则移动整条预览条；若占满整条边缘，则移动条内的卡片。
 - 捕获方式为**窗口切换到前台时各拍一次**（或周期性刷新，实验性功能），可按显示器/虚拟
   桌面/最小化窗口过滤，并可选自动隐藏。
+
+### Dock 应用悬停预览
+
+将鼠标悬停在 **Apps** 或**可选应用**中的已打开应用图标上，会显示一个**无边框小窗口**，
+其中是该窗口的截图，并带有单独的最小化、最大化和关闭按钮。指针停留在预览上时它会保持
+显示；在 KWin 上需要下文所述的截图权限。
 
 ### `kdock-tilemenu`（配套二进制文件）
 
@@ -367,18 +379,36 @@ Menu 小程序，名字也由此而来）。这是第三个独立的二进制文
 
 ---
 
+### `kdock-desktop`（配套二进制文件）
+
+**全屏桌面 widget 画布**：每台显示器一个透明的 layer-shell 表面，位于普通窗口和 Dock
+之下。它复用 `kdock-controlmanager` 的卡片，将布局保存在独立的 `desktop.conf` 中，并为
+已连接显示器启动；不需要 KWin 特殊权限。
+
+### `kdock-systray`（配套二进制文件）
+
+**系统托盘主机**，负责 StatusNotifierItem 和 DBusMenu。它是常驻进程，收集整个会话的项目并
+显示自己的 layer-shell 窗口；Dock 上的 `systray` widget 只负责显示或隐藏它。配置独立保存
+在 `systray.conf`，并避免多个可见 Dock 重复显示托盘。
+
+### `kdock-setwallpaper`（配套二进制文件）
+
+用于 Dolphin 和 PCManFM-Qt“打开方式”菜单的无窗口**设置壁纸工具**。LXQt 下优先使用运行中
+的 Dock，Plasma 下使用备用路径，并可用 `--screen <connector>` 指定显示器；不需要 KWin
+特殊权限。
+
 ## 依赖要求
 
 **编译时**——只需要 Qt 6（≥ 6.5）和 CMake/Ninja：
 
 ```sh
 sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
-                 qt6-wayland-private-dev cmake ninja-build
+                 qt6-wayland-private-dev qt6-webengine-dev cmake ninja-build
 ```
 
 Qt 模块：Core、Gui、Qml、Quick、Widgets、DBus、**Network**（仅天气用到）和
-WaylandClient（还需要
-WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）。运行时需要**两个 QML 模块**：
+WaylandClient（还需要 WaylandClient 的私有头文件，这是 layer-shell 集成所必需的）以及
+用于屏保的 WebEngineWidgets。运行时需要**两个 QML 模块**：
 `QtQuick.Controls` 和 `Qt5Compat.GraphicalEffects`（Debian/Ubuntu 上的
 `qml6-module-qt5compat-graphicaleffects` 包，Arch 上的 `qt6-5compat`），Dock 与预览卡片的
 阴影会用到它们。**缺少后者 Dock 根本无法启动**：QML 加载失败，窗口一片空白。
@@ -409,11 +439,25 @@ CI）。
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # 安装六个二进制文件及其 .desktop 文件
+sudo cmake --install build     # 安装九个二进制文件及其 .desktop 文件
 ```
 
 > 如果你的环境导出了 `CC="ccache gcc"` / `CXX="ccache g++"`，CMake 的 AutoMoc 会失败：
 > 请用 `env -u CC -u CXX cmake …` 来配置。
+
+## Release
+
+`0.5.0` 目前准备以仅源代码形式发布。GitHub Actions 在推送 `v*` 格式的 tag 后运行，并附加两个
+可复现的源代码压缩包：`kdock-<version>.tar.gz` 和 `kdock-<version>.zip`。它们不包含编译
+后的二进制文件或用户配置。
+
+也可以从本地 commit 或 tag 生成：
+
+```sh
+tools/make-source-archives.sh v0.5.0
+```
+
+创建 tag 和发布 GitHub Release 仍由维护者明确执行；普通构建不会自动发布任何内容。
 
 ## KWin 权限（重要）
 
@@ -422,10 +466,11 @@ KWin 将窗口列表和截图视为**特权接口**，只授予给一个进程�
 `Exec=` 进行比对，因此这个字段是 CMake 在安装时生成的：
 
 ```ini
-# kdock.desktop
+# kdock.desktop — 需要两项权限
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 
-# kdock-previews.desktop — necesita las dos
+# kdock-previews.desktop — 同样需要两项权限
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
 X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 ```
@@ -437,10 +482,10 @@ kbuildsycoca6
 ```
 
 `kdock-tilemenu` 不在此列，因为它不需要任何特权：可以从任意位置运行，不需要
-`.desktop` 文件，也不需要刷新索引。**`kdock-calendar`** 和 **`kdock-controlmanager`**
-（其 layer-shell 表面是公开的）同理。
+`.desktop` 文件，也不需要刷新索引。**`kdock-calendar`**、**`kdock-controlmanager`**、
+**`kdock-desktop`**、**`kdock-systray`** 和 **`kdock-setwallpaper`** 同理。
 
-如果你从其他路径运行前两者中的某一个（开发阶段的 `build/kdock`），把 `.desktop` 文件
+如果你在开发阶段从其他路径运行 `kdock` 或 `kdock-previews`，把对应的 `.desktop` 文件
 复制到 `~/.local/share/applications/`，并将 `Exec=` 指向*那个*二进制文件的绝对路径。
 没有这一步，Dock 依然能启动，只是没有窗口列表；而 `kdock-previews` 如果缺少第二个键，
 所有卡片都会显示应用图标而不是截图——看起来像渲染 bug，实际上是权限问题。
@@ -473,6 +518,9 @@ kdock
   kdock-<monitor>[-<n>].conf  # 每个 Dock 一个文件
   previews.conf               # kdock-previews（共享配置 + 每屏一份）
   tilemenu.conf               # kdock-tilemenu：选项和磁贴布局
+  desktop.conf                # kdock-desktop：画布和卡片
+  systray.conf                # kdock-systray：常驻托盘
+  weather.conf                # kdock-weather：城市和单位
   clipboard-history.txt
 ```
 
@@ -539,12 +587,15 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
 | `tilemenu/` | 磁贴菜单配套二进制文件（独立源码树，复用 `src/` 中的 8 个文件） |
 | `calendar/` | 月历配套二进制文件（独立源码树，完全自包含） |
 | `controlmanager/` | 控制面板配套二进制文件（独立源码树，复用 `src/` 中的 16 个文件） |
+| `desktop/` | 全屏桌面画布 |
 | `weather/` | 天气配套二进制文件（独立源码树，复用 `src/` 中的 5 个文件） |
-| `protocols/` | 内置的 Wayland 协议（layer-shell、foreign-toplevel、plasma-window、xdg-shell） |
+| `systray/` | 常驻系统托盘主机 |
+| `setwallpaper/` | 文件管理器壁纸辅助程序 |
+| `protocols/` | 内置的 Wayland 协议（layer-shell、foreign-toplevel、plasma-window、xdg-shell、ext-idle-notify） |
 | `translations/` | 翻译层（`capabase.md` + 每种语言一个 `.md`）。首次启动时复制到 home 目录，并在那里编辑 |
 | `tests/` | 测试套件：`run.sh` 加四个 ctest 层级（`static`、`unit`、`qml`、`live`）。见 `tests/README.md` |
-| `.github/` | CI 工作流：在带有较新 Qt 的容器中构建并运行三个可移植层级 |
-| `tools/` | `gen-capabase.py`（从代码重新生成 `capabase.md`）、`sync-translations.py`（将新增的键传播到其他语言）以及 `gen-alt-layers.py`（重新生成九个 ALT 层） |
+| `.github/` | CI 和 release 工作流：构建/测试项目，并在发布 tag 时打包源代码压缩包 |
+| `tools/` | `gen-capabase.py`（从代码重新生成 `capabase.md`）、`sync-translations.py`（将新增的键传播到其他语言）、`gen-alt-layers.py`（重新生成九个 ALT 层）以及 `make-source-archives.sh`（打包 release） |
 | `screenshots/` | README 中使用的截图。`.gitignore` 有意忽略了 `*.jpg`/`*.png`（桌面截图可能泄露过多信息）：这里的图片是逐张审核后用 `git add -f` 添加的 |
 | `AGENTS.md` | 架构文档：每个 widget、Wayland 相关的坑、QML↔C++ 对照表 |
 | `CLAUDE.md` | 如何编译、测试和安装；无 GUI 的测试工具 |
@@ -571,9 +622,10 @@ Dock 在启动当前桌面所需的一套 Dock 时，RSS 约为 240 MB；每个�
   （Plasma 会因为许多其它原因重写它）——如果结果和当前已应用的完全相同，它什么都不碰。它还会在系统
   设置的列表中留下**一个**临时方案：那就是当前生效的那个，无法避免，因为
   `plasma-apply-colorscheme` 只能应用以文件形式存在的方案。
-- **翻译**：Dock 本体、它的配置面板，以及 `kdock-previews` 和 `kdock-tilemenu` 的面板都会
-  跟随所选语言。`kdock-calendar` 是例外：由于它完全自包含（不使用 `src/` 中的任何文件），
-  仍然停留在 capabase。
+- **翻译**：Dock 本体、它的配置面板、`kdock-previews`、`kdock-tilemenu` 以及较新的附件 UI
+  会跟随所选语言；部分附件专用字符串仍可能回退到英文。
+- **屏保**：需要合成器支持所需的 layer-shell/idle 协议；公共 After Dark CSS 画廊需要网络，
+  除非配置了本地 checkout。
 - layer-shell 集成使用了 QtWaylandClient 的**私有**头文件（与 layer-shell-qt 相同）：
   Qt 的新大版本可能需要相应调整。
 

@@ -1,6 +1,6 @@
 **Español** | [English](README.en.md) | [中文](README.zh-CN.md)
 
-# kdock  ·  RELEASE 0.1.11
+# kdock  ·  RELEASE 0.5.0
 
 ![Ejemplo de configuración de Kdock](screenshots/nueva-portada.jpg)
 
@@ -15,7 +15,7 @@
 
 kdock **no enlaza contra KDE Frameworks ni contra Plasma**. Los protocolos Wayland se
 generan directamente desde sus XML con `qtwaylandscanner`, y todo lo demás se resuelve por
-D-Bus o por CLI. El resultado son seis binarios sueltos, sin plugins que instalar y sin
+D-Bus o por CLI. El resultado son nueve binarios sueltos, sin plugins que instalar y sin
 arrastrar medio Plasma como dependencia.
 
 Probado a diario en **KDE Plasma 6 / KWin**; la barra de tareas también funciona en
@@ -47,6 +47,10 @@ El dock, en distintos bordes y disposiciones de etiqueta:
 - **Lanzadores anclados** desde archivos `.desktop` XDG, parseados a mano, con agrupación de
   ventanas por aplicación (incluidas las **web apps de Chromium/Edge**, que reportan un
   `app_id` deformado y necesitan heurísticas propias).
+- **Apps Seleccionables**: el bloque de aplicaciones puede repetirse varias veces, cada instancia
+  con su propia lista de lanzadores. Incluye filtros para mostrar solo anclados, excluir apps ya
+  asignadas a otro widget o a cualquier dock del monitor, y una opción para desagrupar ventanas.
+  También puede recargarse manualmente desde su menú contextual o desde Configuración.
 - **Un dock por monitor**, opt-in: cada uno con su configuración independiente (borde,
   tamaño, widgets, anclados) y manejo de hotplug. Hasta 6 docks por pantalla.
 - **Y docks distintos por escritorio virtual** (KDE/KWin): además de variar de monitor a
@@ -169,6 +173,13 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   que elijas —cualquiera, no solo el principal— aunque en uno solo por vez: dos bandejas a la
   vista duplicarían cada ícono. Docks que nunca se ven juntos, en cambio, pueden tener cada
   uno la suya, así un escritorio virtual con docks propios no se queda sin bandeja.
+- **Vista previa al pasar el mouse** sobre un ícono de aplicación: muestra una captura de la
+  ventana abierta y permite minimizarla, maximizarla o cerrarla individualmente. Es opcional y
+  usa la captura de ventanas de KWin (`org.kde.KWin.ScreenShot2`).
+- **Salvapantallas integrado**: se activa por inactividad, por monitor o en todos los monitores,
+  con slideshow de los fondos configurados o animaciones CSS de After Dark. Se puede elegir un
+  checkout local para trabajar sin red, decidir si cubre los docks y cambiar de escena desde el
+  botón superpuesto.
 - **Docks de solo widgets**: apagando los íconos de aplicaciones (General → *Íconos de apps*),
   un dock queda como barra de widgets, bandeja y lanzadores propios, y adelgaza a la medida
   de lo que le queda.
@@ -262,7 +273,7 @@ Frameworks:
 
 | Widget | Qué hace | Backend |
 |---|---|---|
-| Apps Seleccionables | El bloque de apps como sección repetible, con su propia lista de lanzadores: un dock puede tener **varios**. Tres filtros por instancia — *Ver solo anclados*, *No ver apps ancladas en otros Seleccionables* (del mismo dock) y *No ver apps ancladas en el monitor* (de cualquier dock de esa pantalla) — con los que un widget se vuelve el bloque de sobrantes: todo lo que está abierto y no dibuja ya ningún otro | Protocolo del compositor |
+| Apps Seleccionables | El bloque de apps como sección repetible, con su propia lista de lanzadores: un dock puede tener **varios**. Filtros por instancia — *Ver solo anclados*, excluir apps ancladas en otros widgets o en el monitor, y *Desagrupar ventanas* — más recarga manual para construir bloques de sobrantes sin duplicados | Protocolo del compositor |
 | Volumen | Sink por defecto: scroll, mute, nivel | `wpctl` / `pactl` (PipeWire) |
 | Brillo | Brillo de pantalla | `brightnessctl` |
 | Batería | Carga, estado y perfil de energía | UPower + power-profiles-daemon |
@@ -287,6 +298,7 @@ Frameworks:
 | Script Runner | Ejecuta un script shell configurable | `sh` |
 | Menú de mosaicos | Abre y cierra el menú de pantalla completa | `kdock-tilemenu` (D-Bus) |
 | Control Manager | Abre el panel de control: audio, brillo por monitor, energía, calendario, reproducción, red, clima, fondos y sistema. Puede dibujar texto propio (o el reloj) en el dock, con su fuente | `kdock-controlmanager` (D-Bus) |
+| Salvapantallas | Cubre los monitores seleccionados tras un tiempo de inactividad; slideshow de wallpapers o escenas After Dark CSS | Wayland idle + Qt WebEngine |
 
 ### `kdock-previews` (binario accesorio)
 
@@ -314,6 +326,13 @@ KWin**.
   dentro de ella si ocupa todo el borde.
 - Capturas **una por ventana al pasar a primer plano** (o refresco periódico, experimental),
   filtros por monitor / escritorio virtual / minimizadas, y auto-ocultado opcional.
+
+### Vista previa de aplicaciones en el dock
+
+Al pasar el mouse por un ícono del bloque **Apps** o de **Apps Seleccionables** que tenga ventanas
+abiertas, aparece una **micro ventana sin decoraciones** con la captura de esa ventana. Incluye
+botones para minimizarla, maximizarla o cerrarla individualmente y permanece visible mientras el
+puntero esté sobre ella. En KWin necesita el permiso de captura indicado más abajo.
 
 ### `kdock-tilemenu` (binario accesorio)
 
@@ -446,18 +465,40 @@ botón de la tarjeta del panel, o `kdock-weather` a secas.
 
 ---
 
+### `kdock-desktop` (binario accesorio)
+
+**Lienzo de widgets de escritorio** a pantalla completa: una superficie layer-shell por monitor,
+transparente y debajo de las ventanas normales y del dock. Reutiliza las tarjetas de
+`kdock-controlmanager`, permite colocar widgets sobre el fondo y guarda su configuración en
+`desktop.conf`. Se inicia por monitor conectado, no necesita permisos especiales de KWin y funciona
+como base para widgets de escritorio persistentes.
+
+### `kdock-systray` (binario accesorio)
+
+**Host de la bandeja del sistema** para StatusNotifierItem y DBusMenu. Es un proceso residente que
+recoge los íconos de toda la sesión y muestra su propia ventana layer-shell; el widget `systray`
+del dock solo la abre o la oculta. Tiene configuración propia (`systray.conf`) y evita duplicar la
+bandeja cuando hay varios docks visibles.
+
+### `kdock-setwallpaper` (binario accesorio)
+
+Herramienta sin ventana para **establecer una imagen como fondo** desde «Abrir con» en Dolphin o
+PCManFM-Qt. Usa el dock bajo LXQt y Plasma como respaldo, y permite forzar el monitor con
+`--screen <conector>`. No requiere permisos especiales de KWin.
+
 ## Requisitos
 
 **Para compilar** — solo Qt 6 (≥ 6.5) y CMake/Ninja:
 
 ```sh
 sudo apt install qt6-base-dev qt6-declarative-dev qt6-wayland-dev \
-                 qt6-wayland-private-dev cmake ninja-build
+                 qt6-wayland-private-dev qt6-webengine-dev cmake ninja-build
 ```
 
 Módulos de Qt: Core, Gui, Qml, Quick, Widgets, DBus, **Network** (solo para el clima) y
 WaylandClient (más los headers
-privados de WaylandClient, que la integración layer-shell necesita). En runtime hacen falta
+privados de WaylandClient, que la integración layer-shell necesita) y WebEngineWidgets para el
+salvapantallas. En runtime hacen falta
 **dos módulos QML**: `QtQuick.Controls` y `Qt5Compat.GraphicalEffects` (paquete
 `qml6-module-qt5compat-graphicaleffects` en Debian/Ubuntu, `qt6-5compat` en Arch), que el
 dock y las tarjetas de vista previa usan para las sombras. **Sin el segundo el dock no
@@ -465,9 +506,9 @@ arranca**: el QML no carga y la ventana queda vacía.
 
 **En runtime**, cada dependencia es opcional y solo apaga su widget si falta: `wpctl` o
 `pactl` (volumen y mezclador), `brightnessctl` (brillo), UDisks2 (discos), NetworkManager
-(red), UPower (batería). El clima es lo único que sale a internet, y solo si configurás una
-ciudad. Los widgets de Overview, mover-ventana y siguiente-fondo solo
-aparecen bajo KDE.
+(red), UPower (batería). El clima consulta internet solo si configurás una ciudad; el motor After
+Dark del salvapantallas usa sus páginas públicas si no configurás un checkout local. Los widgets
+de Overview, mover-ventana y siguiente-fondo solo aparecen bajo KDE.
 
 ## Tests
 
@@ -492,7 +533,7 @@ Cada corrida usa un `XDG_DATA_HOME` descartable y herramientas de sistema falsas
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # instala los seis binarios y sus .desktop
+sudo cmake --install build     # instala los nueve binarios y sus .desktop
 ```
 
 Para hacer todo el ciclo, incluida la actualización del host de la bandeja y el reinicio
@@ -509,6 +550,21 @@ ejecutando el binario anterior.
 > Si tu entorno exporta `CC="ccache gcc"` / `CXX="ccache g++"`, CMake AutoMoc falla:
 > configurá con `env -u CC -u CXX cmake …`.
 
+## Releases
+
+El release `0.5.0` queda preparado inicialmente como solo código fuente. El workflow de GitHub Actions se activa al
+subir un tag con formato `v*` y adjunta dos artefactos reproducibles: `kdock-<versión>.tar.gz` y
+`kdock-<versión>.zip`. No incluyen binarios compilados ni archivos de configuración del usuario.
+
+Para generarlos localmente desde un commit o tag:
+
+```sh
+tools/make-source-archives.sh v0.5.0
+```
+
+La creación del tag y la publicación en GitHub siguen siendo pasos explícitos del mantenedor;
+este repositorio no publica releases automáticamente desde una build normal.
+
 ## Permisos en KWin (importante)
 
 KWin trata la lista de ventanas y las capturas como **interfaces privilegiadas**, y solo se
@@ -517,8 +573,9 @@ las concede a un proceso cuyo `.desktop` **instalado** las declare. Resuelve
 en tiempo de instalación:
 
 ```ini
-# kdock.desktop
+# kdock.desktop — necesita las dos
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
+X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2
 
 # kdock-previews.desktop — necesita las dos
 X-KDE-Wayland-Interfaces=org_kde_plasma_window_management
@@ -532,10 +589,11 @@ kbuildsycoca6
 ```
 
 `kdock-tilemenu` no aparece acá porque no pide nada privilegiado: se puede correr desde donde
-sea, sin `.desktop` y sin refrescar el índice. Lo mismo vale para **`kdock-calendar`** y para
-**`kdock-controlmanager`** (su superficie layer-shell es pública).
+sea, sin `.desktop` y sin refrescar el índice. Lo mismo vale para **`kdock-calendar`**,
+**`kdock-controlmanager`**, **`kdock-desktop`**, **`kdock-systray`** y
+**`kdock-setwallpaper`**.
 
-Si ejecutás uno de los otros dos desde otra ruta (`build/kdock` durante desarrollo), copiá el
+Si ejecutás `kdock` o `kdock-previews` desde otra ruta durante el desarrollo, copiá el
 `.desktop` a `~/.local/share/applications/` con el `Exec=` apuntando a la ruta absoluta de
 *ese* binario. Sin esto el dock arranca igual, pero sin lista de ventanas; y
 `kdock-previews`, sin la segunda clave, deja todas las tarjetas con el ícono de la app en vez
@@ -571,6 +629,9 @@ La configuración vive en el directorio de datos XDG:
   kdock-<monitor>[-<n>].conf  # un archivo por dock
   previews.conf               # kdock-previews (compartido + uno por pantalla)
   tilemenu.conf               # kdock-tilemenu: opciones y disposición de los mosaicos
+  desktop.conf                # kdock-desktop: lienzo y tarjetas
+  systray.conf                # kdock-systray: bandeja residente
+  weather.conf                # kdock-weather: ciudades y unidades
   clipboard-history.txt
 ```
 
@@ -652,12 +713,15 @@ Construir un dock cuesta ~0,4–1,5 s según cuántos widgets tenga (medible con
 | `tilemenu/` | Binario accesorio del menú de mosaicos (árbol propio, reusa 8 archivos de `src/`) |
 | `calendar/` | Binario accesorio del calendario de mes (árbol propio, autocontenido) |
 | `controlmanager/` | Binario accesorio del panel de control (árbol propio, reusa 16 archivos de `src/`) |
+| `desktop/` | Binario accesorio del lienzo de widgets de escritorio (árbol propio, reusa el panel de control) |
 | `weather/` | Binario accesorio del clima (árbol propio, reusa 5 archivos de `src/`) |
-| `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell) |
+| `systray/` | Binario accesorio residente de la bandeja del sistema |
+| `setwallpaper/` | Utilidad para «Abrir con» que establece el fondo del monitor actual |
+| `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell, ext-idle-notify) |
 | `translations/` | Las capas de traducción (`capabase.md` + un `.md` por idioma). Se copian al home en el primer arranque y se editan ahí |
 | `tests/` | La suite: `run.sh` y cuatro tiers en ctest (`static`, `unit`, `qml`, `live`). Ver `tests/README.md` |
-| `.github/` | El workflow de CI: compila y corre los tres tiers portables en un container con Qt reciente |
-| `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código), `sync-translations.py` (propaga las claves nuevas a los demás idiomas) y `gen-alt-layers.py` (regenera las nueve capas ALT) |
+| `.github/` | Workflows de CI y release: compila/prueba y, al publicar un tag, arma los archivos fuente |
+| `tools/` | `gen-capabase.py` (reconstruye `capabase.md` desde el código), `sync-translations.py` (propaga las claves nuevas a los demás idiomas), `gen-alt-layers.py` (regenera las nueve capas ALT) y `make-source-archives.sh` (empaqueta releases) |
 | `screenshots/` | Capturas del README. `.gitignore` ignora `*.jpg`/`*.png` a propósito (una captura de escritorio muestra de más): las de acá se revisaron una por una y se agregaron con `git add -f` |
 | `AGENTS.md` | Documento de arquitectura: cada widget, las trampas de Wayland, la tabla QML↔C++ |
 | `CLAUDE.md` | Cómo compilar, probar e instalar; arneses de prueba sin GUI |
@@ -688,8 +752,8 @@ Construir un dock cuesta ~0,4–1,5 s según cuántos widgets tenga (medible con
   al que ya está puesto, no toca nada. Además deja **un** esquema temporal visible en la lista de
   Preferencias del Sistema: es el que está aplicado, y no se puede evitar porque
   `plasma-apply-colorscheme` solo sabe aplicar esquemas que existan como archivo.
-- **Traducciones**: el dock, su panel de configuración y los paneles de `kdock-previews` y
-  `kdock-tilemenu` siguen el idioma elegido. `kdock-calendar` es la excepción: al ser
+- **Traducciones**: el dock, su panel de configuración y los paneles de sus accesorios siguen el
+  idioma elegido. `kdock-calendar` es la excepción: al ser
   autocontenido (sin archivos de `src/`), sigue en capabase.
 - La integración layer-shell usa headers **privados** de QtWaylandClient (igual que
   layer-shell-qt): una versión mayor nueva de Qt puede pedir ajustes.

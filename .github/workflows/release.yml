@@ -1,0 +1,43 @@
+name: Release source archives
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  source-archives:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Build source archives
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n 's/^project(kdock VERSION \([^ ]*\).*/\1/p' CMakeLists.txt)
+          tag="${RELEASE_REF#v}"
+          test "$version" = "$tag" || {
+            echo "CMake version $version does not match tag $RELEASE_REF" >&2
+            exit 1
+          }
+          tools/make-source-archives.sh "$RELEASE_REF" "$version"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_REF#v}"
+          gh release create "$RELEASE_REF" \
+            "dist/kdock-${version}.tar.gz" \
+            "dist/kdock-${version}.zip" \
+            --title "kdock ${version}" \
+            --generate-notes
