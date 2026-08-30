@@ -545,6 +545,8 @@ public:
     static void setScreensaverEnabled(bool on);
     static QStringList screensaverScreens();
     static bool screensaverScreenEnabled(const QString &connector);
+    // Unchecking the last selected monitor also disables the shared master
+    // switch; selecting a monitor never changes the master by itself.
     static void setScreensaverScreenEnabled(const QString &connector, bool on);
     static int screensaverTimeoutSeconds();
     static void setScreensaverTimeoutSeconds(int seconds);

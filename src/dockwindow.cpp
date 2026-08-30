@@ -479,9 +479,19 @@ void DockWindow::applyLayerProperties()
     setProperty("kdock.exclusiveEdge", exclusiveEdge);
     setProperty("kdock.margins", QVariant::fromValue(margins));
     setProperty("kdock.layer", 2u); // top
-    // Only the plain always-visible mode reserves a strut. Auto-hide, dodge and
-    // "windows go below" all let maximized windows use the whole edge.
-    setProperty("kdock.exclusiveZone", m_config->reservesSpace() ? thickness() + m : 0);
+    applyExclusiveZone();
+}
+
+void DockWindow::applyExclusiveZone()
+{
+    // A revealed auto-hide dock must not be painted over by maximized windows,
+    // but keeping its strut while it is hidden would waste the edge it is
+    // supposed to give back. The QML transition calls setHidden(false) when
+    // the panel starts coming in and setHidden(true) after it has slid out.
+    const bool reserve = m_config->reservesSpace()
+                         || (m_config->hideMode() == DockConfig::AutoHide && !m_hidden);
+    setProperty("kdock.exclusiveZone",
+                reserve ? thickness() + m_config->effectiveMargin() : 0);
 }
 
 void DockWindow::setHidden(bool hidden)
@@ -493,6 +503,7 @@ void DockWindow::setHidden(bool hidden)
     // is: see the edgeM comment in applyLayerProperties() for why re-anchoring
     // on this transition is the one thing this must not do.
     applyHiddenMask();
+    applyExclusiveZone();
 }
 
 void DockWindow::setGapRects(const QVariantList &rects)

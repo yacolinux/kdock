@@ -630,7 +630,7 @@ ocultamiento"), y son cuatro:
 | valor | clave | zona exclusiva | se oculta |
 |---|---|---|---|
 | 0 | `AlwaysVisible` (default) | `thickness + margen` | nunca |
-| 1 | `AutoHide` | 0 | salvo hover / menú abierto / arrastre |
+| 1 | `AutoHide` | `thickness + margen` mientras visible, 0 escondido | salvo hover / menú abierto / arrastre |
 | 2 | `DodgeWindows` (*intelligent hide*) | 0 | mientras una ventana llegue a su rectángulo |
 | 3 | `WindowsBelow` (*las ventanas pasan abajo*) | 0 | nunca |
 
@@ -639,8 +639,10 @@ ocultamiento"), y son cuatro:
   widget `autohide` y el menú, y lo que se sigue escribiendo al `.conf` para que una config que
   vuelva a un kdock viejo siga ocultándose. `load()` migra al revés: sin clave `hideMode`, un
   `autohide=true` siembra el modo 1.
-- **Una sola pregunta para la zona exclusiva**: `DockConfig::reservesSpace()` (solo el modo 0).
-  `applyLayerProperties()` la usa; cualquier modo nuevo entra por ahí.
+- `DockConfig::reservesSpace()` sigue describiendo el modo 0, que reserva siempre. En `AutoHide`,
+  `DockWindow::applyExclusiveZone()` reserva `thickness + margen` mientras el panel está
+  desplegado y libera la zona al terminar de esconderse; `DodgeWindows` y `WindowsBelow` siguen
+  sin zona exclusiva.
 - **El dodge se calcula en `DockWindow::updateWindowsOverlap()`** y sale a QML como la property
   `windowsOverlap`. Recorre `WindowMonitor::windows` salteando minimizadas, `skipTaskbar` y las
   que no están en el escritorio actual (lista vacía = *todos* los escritorios, ver

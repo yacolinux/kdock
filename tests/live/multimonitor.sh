@@ -48,8 +48,8 @@ dst_screen=${screens[1]}
 kdock_info "monitores: $src_screen -> $dst_screen"
 printf '[General]\nenabledScreens=%s\nknownScreens=%s,%s\n' \
     "$src_screen" "$src_screen" "$dst_screen" > "$XDG_DATA_HOME/kdock/kdock.conf"
-# autohide=true: la instancia de prueba no reserva espacio, así que no le
-# re-acomoda las ventanas maximizadas al usuario.
+# La instancia arranca auto-oculta: mientras está escondida no reserva espacio,
+# así que no le re-acomoda las ventanas maximizadas al usuario.
 printf '[General]\nedge=1\nhideMode=1\niconSize=32\nshowSystray=false\n' \
     > "$XDG_DATA_HOME/kdock/kdock-$src_screen.conf"
 

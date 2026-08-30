@@ -90,7 +90,8 @@ The dock, across different edges and label layouts:
   on hover), **Intelligent hide** (stays out while nothing bothers it and hides only when a
   window reaches its rectangle — Latte's *dodge*) and **Windows go below** (always visible but
   without reserving space, so a maximized window uses the whole edge and runs underneath).
-  The last three ask for no *exclusive zone*, so they don't shrink your maximize area.
+  Auto-hide reserves the space while revealed and releases it once hidden; the other two ask
+  for no *exclusive zone*, so they don't shrink your maximize area.
   Intelligent hide only looks at windows on the **current virtual desktop** and ignores
   minimized ones; with center alignment it dodges on the whole edge band, because on Wayland it
   is the compositor — not the client — that decides where a centered surface lands.

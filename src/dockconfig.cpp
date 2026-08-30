@@ -703,6 +703,11 @@ void DockConfig::setScreensaverScreenEnabled(const QString &connector, bool on)
         list.removeAll(connector);
     }
     s.setValue(QStringLiteral("Screensaver/screens"), list);
+    // The global switch is only meaningful while at least one monitor is
+    // selected. Keep that invariant here, at the shared configuration layer,
+    // so every UI path that unchecks the last monitor also stops idle tracking.
+    if (!on && list.isEmpty())
+        s.setValue(QStringLiteral("Screensaver/enabled"), false);
     notifyScreensaverChanged();
 }
 

@@ -493,6 +493,12 @@ int main(int argc, char *argv[])
 
     DockManager manager(shared);
     autoColors.setManager(&manager);
+    // ScreensaverWindow owns top-level Wayland surfaces outside DockManager.
+    // Release them while the event loop is still alive; waiting for the stack
+    // destructor after app.exec() returns can leave a stale xdg/layer surface
+    // visible in KWin during the restart handoff.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &screensaver,
+                     &ScreensaverManager::hideAll);
     // The dock's own D-Bus service — register early so `org.kdock.Dock` answers
     // quickly after a restart. Previously it was at the very end, after wallpapers
     // / darkAppearance / previews, so `dockIds` took ~2.8s to appear and the dock

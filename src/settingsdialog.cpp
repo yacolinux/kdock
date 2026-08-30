@@ -4396,6 +4396,23 @@ QWidget *SettingsDialog::createScreensaverTab()
         DockConfig::setScreensaverEnabled(on);
         reload();
     });
+    // The master is shared and can change because the last monitor was
+    // unchecked, or because a newly connected monitor reactivated the policy.
+    // Bind this connection to the tab: buildTabs() destroys tabs on a dock
+    // switch, so it must not retain controls from an earlier tab.
+    connect(m_config, &DockConfig::screensaverChanged, tab, [reload, master, tab] {
+        // setScreensaverScreenEnabled() can emit this while QListWidget is
+        // delivering itemChanged. Rebuild on the next turn so we never delete
+        // the item whose signal is still being processed.
+        QTimer::singleShot(0, tab, [reload, master] {
+            const QSignalBlocker block(master);
+            master->setChecked(DockConfig::screensaverEnabled());
+            reload();
+        });
+    });
+    connect(qGuiApp, &QGuiApplication::screenAdded, tab, [reload, tab](QScreen *) {
+        QTimer::singleShot(0, tab, reload);
+    });
     connect(coverDocks, &QCheckBox::toggled, this,
             [](bool on) { DockConfig::setScreensaverCoverDocks(on); });
     connect(monitors, &QListWidget::itemChanged, this, [](QListWidgetItem *item) {

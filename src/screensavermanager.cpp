@@ -42,7 +42,15 @@ ScreensaverManager::ScreensaverManager(VirtualDesktops *desktops, QObject *paren
     setParent(parent);
     connect(this, &QWaylandClientExtension::activeChanged,
             this, &ScreensaverManager::ensureIdleNotification);
-    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { reload(); });
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen *screen) {
+        // A monitor can disappear and later return with its Screensaver
+        // selection intact. Re-enable the shared idle policy when that happens;
+        // otherwise the configured monitor stays selected but the manager never
+        // starts tracking inactivity again.
+        if (screen && DockConfig::screensaverScreenEnabled(screen->name()))
+            DockConfig::setScreensaverEnabled(true);
+        reload();
+    });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { reload(); });
     m_configTimer = new QTimer(this);
     m_configTimer->setInterval(1000);
@@ -54,9 +62,17 @@ ScreensaverManager::ScreensaverManager(VirtualDesktops *desktops, QObject *paren
 
 ScreensaverManager::~ScreensaverManager()
 {
+    if (m_configTimer)
+        m_configTimer->stop();
     hideAll();
+    // QWebEngineView tears down renderer/GPU state asynchronously. At this
+    // point the application's event loop is already stopping, so deleting a
+    // window synchronously can abort inside QWebEnginePagePrivate::~. The
+    // native surfaces have been hidden/destroyed above; let Qt reclaim the
+    // widgets if another event turn is available, otherwise process exit will
+    // reclaim them safely.
     for (ScreensaverWindow *window : std::as_const(m_windows))
-        delete window;
+        window->deleteLater();
     m_windows.clear();
 }
 
@@ -113,7 +129,8 @@ void ScreensaverManager::ensureWindow(const QString &screenName)
 {
     if (screenName.isEmpty() || m_windows.contains(screenName))
         return;
-    int monitorIndex = 0;
+
+    int monitorIndex = -1;
     const auto screens = QGuiApplication::screens();
     for (int i = 0; i < screens.size(); ++i) {
         if (screens.at(i)->name() == screenName) {
@@ -121,6 +138,12 @@ void ScreensaverManager::ensureWindow(const QString &screenName)
             break;
         }
     }
+    // Config survives monitor unplug/replacement and connector names can be
+    // stale. Never show a QWidget without a matching output: QWindow would
+    // otherwise fall back to its default 640x480 xdg toplevel.
+    if (monitorIndex < 0)
+        return;
+
     auto *window = new ScreensaverWindow(screenName, m_desktops, nullptr, monitorIndex);
     connect(window, &ScreensaverWindow::userDismissed, this, [this] { hideAll(); });
     m_windows.insert(screenName, window);
@@ -139,7 +162,13 @@ void ScreensaverManager::removeMissingWindows()
             ++it;
             continue;
         }
-        delete it.value();
+        // Do not synchronously destroy a live QWebEngineView from the config
+        // timer. Its renderer/GPU teardown can run after the Wayland surface
+        // disappeared and abort the whole kdock process. hideSaver() drops
+        // the native surface first; the QObject is deleted on a later event
+        // turn, when Qt WebEngine can finish its own cleanup.
+        it.value()->hideSaver();
+        it.value()->deleteLater();
         it = m_windows.erase(it);
     }
 }

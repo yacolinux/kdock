@@ -309,8 +309,25 @@ void ScreensaverWindow::hideSaver()
 {
     hide();
     stop();
+    // Hiding a QWidget only unmaps its platform surface. On Wayland, keeping
+    // the QWaylandWindow around lets a stale layer/xdg role survive a restart
+    // or a monitor selection change; KWin may then show the old 640x480
+    // surface as a small normal window. Drop the role and native window so
+    // the next activation is forced through the screensaver layer-shell path.
+    destroySurface();
     m_activeEngine = -1;
     m_changeButton->hide();
+}
+
+void ScreensaverWindow::destroySurface()
+{
+    QWindow *handle = windowHandle();
+    if (!handle)
+        return;
+
+    if (auto *waylandWindow = dynamic_cast<QtWaylandClient::QWaylandWindow *>(handle->handle()))
+        waylandWindow->reset();
+    handle->destroy();
 }
 
 void ScreensaverWindow::refreshConfig()

@@ -162,8 +162,15 @@ private slots:
 
         DockConfig::setScreensaverTimeoutSeconds(999999);
         QCOMPARE(DockConfig::screensaverTimeoutSeconds(), 86400);
-        DockConfig::setScreensaverEnabled(false);
+        DockConfig::setScreensaverScreenEnabled(QStringLiteral("DP-2"), true);
+        DockConfig::setScreensaverEnabled(true);
+        // Unchecking one of several selected monitors keeps the shared policy
+        // on; unchecking the last one must stop idle tracking entirely.
         DockConfig::setScreensaverScreenEnabled(QStringLiteral("DP-1"), false);
+        QVERIFY(DockConfig::screensaverEnabled());
+        DockConfig::setScreensaverScreenEnabled(QStringLiteral("DP-2"), false);
+        QVERIFY(!DockConfig::screensaverEnabled());
+        DockConfig::setScreensaverEnabled(false);
         DockConfig::setScreensaverTimeoutSeconds(300);
         DockConfig::setScreensaverSlideshowIntervalSeconds(60);
         DockConfig::setScreensaverEngine(0);
