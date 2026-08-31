@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QDBusConnection>
 #include <QQuickStyle>
 #include <QTextStream>
 #include <QTimer>
@@ -245,6 +246,13 @@ int main(int argc, char *argv[])
         return 0;
     }
 
+    // Claim the per-screen D-Bus name before constructing AudioControl and the
+    // QML window. Those can take long enough for several hotplug callbacks to
+    // launch duplicate canvases for the same monitor.
+    CmService service;
+    if (QDBusConnection::sessionBus().isConnected() && !service.registerOnBus())
+        return 0;
+
     // Same translation layer as kdock, and the same setting: this binary does
     // not choose a language, it follows the dock's. BaseOnly because an ALT
     // layer only renames the dock's widgets and apps — here it means nothing.
@@ -352,8 +360,7 @@ int main(int argc, char *argv[])
     CmWindow window(&config, &theme, &layout, &model, backends);
     QObject::connect(&translations, &Translations::changed, &window,
                      [&window] { window.retranslate(); });
-    CmService service(&window);
-    service.registerOnBus();
+    service.setWindow(&window);
 
     // LXQt wallpaper lifecycle for the local fallback renderer. When kdock is
     // available its own LxqtWallpapers draws the desktop; otherwise this process

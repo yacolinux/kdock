@@ -33,7 +33,11 @@ public:
     // Tell a running panel that its .conf changed underneath it.
     static void callReloadConfig();
 
-    explicit CmService(CmWindow *window, QObject *parent = nullptr);
+    explicit CmService(CmWindow *window = nullptr, QObject *parent = nullptr);
+
+    // Claim the single-instance name before the relatively expensive backends
+    // and QML window are built, closing the startup race with duplicate launches.
+    void setWindow(CmWindow *window) { m_window = window; }
 
     // Claims the name and exports the slots. False when the name was taken
     // between alreadyRunning() and here (or when there is no bus).
