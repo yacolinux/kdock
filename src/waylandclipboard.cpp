@@ -148,7 +148,18 @@ void writeAllAsync(int fd, const QByteArray &data)
     auto *offset = new qsizetype(0);
     auto *payload = new QByteArray(data);
 
-    const auto finish = [notifier, offset, payload, fd] {
+    // As with readAllAsync(), the timeout and the socket notifier are two
+    // independent event sources. A notifier activation may already be queued
+    // when the watchdog fires (or the other way around), so cleanup must be
+    // idempotent and must stop the watchdog before releasing its captured
+    // state. Without this, clicking an image/text entry could leave a stale
+    // write callback behind and abort kdock with a double free.
+    auto *watchdog = new QTimer(notifier);
+    const auto finish = [notifier, offset, payload, fd, watchdog] {
+        if (notifier->property("kdock.transferDone").toBool())
+            return;
+        notifier->setProperty("kdock.transferDone", true);
+        watchdog->stop();
         notifier->setEnabled(false);
         delete offset;
         delete payload;
@@ -156,7 +167,6 @@ void writeAllAsync(int fd, const QByteArray &data)
         notifier->deleteLater();
     };
 
-    auto *watchdog = new QTimer(notifier);
     watchdog->setSingleShot(true);
     watchdog->setInterval(kTransferTimeoutMs);
     QObject::connect(watchdog, &QTimer::timeout, notifier, finish);

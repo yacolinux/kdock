@@ -630,7 +630,7 @@ ocultamiento"), y son cuatro:
 | valor | clave | zona exclusiva | se oculta |
 |---|---|---|---|
 | 0 | `AlwaysVisible` (default) | `thickness + margen` | nunca |
-| 1 | `AutoHide` | `thickness + margen` mientras visible, 0 escondido | salvo hover / menú abierto / arrastre |
+| 1 | `AutoHide` | 0 | salvo hover / menú abierto / arrastre |
 | 2 | `DodgeWindows` (*intelligent hide*) | 0 | mientras una ventana llegue a su rectángulo |
 | 3 | `WindowsBelow` (*las ventanas pasan abajo*) | 0 | nunca |
 
@@ -639,10 +639,8 @@ ocultamiento"), y son cuatro:
   widget `autohide` y el menú, y lo que se sigue escribiendo al `.conf` para que una config que
   vuelva a un kdock viejo siga ocultándose. `load()` migra al revés: sin clave `hideMode`, un
   `autohide=true` siembra el modo 1.
-- `DockConfig::reservesSpace()` sigue describiendo el modo 0, que reserva siempre. En `AutoHide`,
-  `DockWindow::applyExclusiveZone()` reserva `thickness + margen` mientras el panel está
-  desplegado y libera la zona al terminar de esconderse; `DodgeWindows` y `WindowsBelow` siguen
-  sin zona exclusiva.
+- **Una sola pregunta para la zona exclusiva**: `DockConfig::reservesSpace()` (solo el modo 0).
+  `applyLayerProperties()` la usa; cualquier modo nuevo entra por ahí.
 - **El dodge se calcula en `DockWindow::updateWindowsOverlap()`** y sale a QML como la property
   `windowsOverlap`. Recorre `WindowMonitor::windows` salteando minimizadas, `skipTaskbar` y las
   que no están en el escritorio actual (lista vacía = *todos* los escritorios, ver
@@ -1826,6 +1824,14 @@ esa config), solo hacen **avanzar**.
   diálogo de KDE, que **previsualiza imágenes**, sin que kdock dependa de KDE Frameworks. La
   miniatura se decodifica con `QImageReader::setScaledSize()`, no cargando el archivo entero.
 
+### Screensaver (`src/screensavermanager.cpp` + `src/screensaverwindow.cpp`, 2026-08-31)
+
+- After Dark se carga en `QWebEngineView` como una superficie layer-shell por monitor. En
+  monitores cuyo `wl_output` llega con `InvertedLandscapeOrientation`, Chromium puede ignorar la
+  transformación de 180 grados y dibujar la escena cabeza abajo. `ScreensaverWindow` lo corrige
+  después de `loadFinished` aplicando esa rotación al documento **solo** para After Dark; el modo
+  wallpaper no pasa por WebEngine y no se modifica.
+
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.
 - **Font size (both clocks)**: `config.clockFontSize` (px, `0` = automatic → the historic factors `iconSize*0.35` for `clock` and `*0.455` for `clock2`; the date line derives from it with ratio `0.57`). Set in Settings → Widgets → "Clock font size" (`setSpecialValueText("Automatic")`). The widget's `Item` grows with the font via `Math.max(widgetIconSize, column.implicitWidth)`, so a large font does not get clipped.
@@ -1838,8 +1844,8 @@ esa config), solo hacen **avanzar**.
 - Text-only clipboard manager, exposed to QML as `clipboardHistory` context property. Token `"clipboard"`, gated by `config.showClipboard` (default **off**, opt-in). A **drop-only anchor** block (owns its own mouse handling, popup and context menu), like `menu`/`apps`. Icon `edit-paste`.
 - **Shared singleton**: `ClipboardHistory` is a system-wide singleton created in `main.cpp`, packed into `DockManager::Shared`, and passed to every `DockWindow` → one global history shared by all docks/monitors.
 - **Capture (`ext-data-control-v1`)**: `WaylandClipboard` (`src/waylandclipboard.{h,cpp}`, built from `protocols/ext-data-control-v1.xml` through `qt_generate_wayland_protocol_client_sources`) binds `ext_data_control_manager_v1` and gets a device for the seat (`QNativeInterface::QWaylandApplication::seat()`). That protocol is **focus-independent** — it is what clipboard managers use — so the history now fills while the dock has no keyboard focus at all, which is the whole point (see the caveat entry below, now resolved). It is **not** on KWin's restricted-interface list (`kwin/src/wayland_server.cpp`), so nothing is declared in `kdock.desktop` and ksycoca is not involved. `QClipboard::dataChanged` stays wired as the fallback for X11/Xvfb and is skipped whenever the Wayland backend is active. Text and images are kept, deduplicated (an existing copy moves to the top), capped at `kMaxEntries` (50) plus `kMaxImages` (20) and 8 MB per image. An offer that advertises `x-kde-passwordManagerHint` (Klipper/KWallet's "this is a password") is ignored.
-- **Transfers are asynchronous, in both directions**: reading is `pipe2` + `offer->receive()` + `wl_display_flush()` + a `QSocketNotifier(Read)` until EOF with a 5 s watchdog; serving a paste is `O_NONBLOCK` + `QSocketNotifier(Write)` in chunks. A blocking `read()`/`write()` on the GUI thread would freeze the dock whenever the app on the other side is slow (a multi-MB screenshot does not fit in the 64 KB pipe buffer). `SIGPIPE` is ignored process-wide because the reader can vanish mid-transfer. While kdock owns the selection its own `DataControlSource` is alive, and the selection event the compositor echoes back is ignored — reading it would mean reading from our own process.
-- **`setClipboard(text)` / `setClipboardImage(file)`** (used when the user clicks a row) take the selection through the same protocol, so pasting a history entry works without the dock ever taking focus; on the fallback path they go through `QClipboard` and `m_ownText` skips the echo.
+- **Transfers are asynchronous, in both directions**: reading is `pipe2` + `offer->receive()` + `wl_display_flush()` + a `QSocketNotifier(Read)` until EOF with a 5 s watchdog; serving a paste is `O_NONBLOCK` + `QSocketNotifier(Write)` in chunks. A blocking `read()`/`write()` on the GUI thread would freeze the dock whenever the app on the other side is slow (a multi-MB screenshot does not fit in the 64 KB pipe buffer). Both completion paths are idempotent and stop their watchdog before releasing transfer state; a queued notifier event must not double-free after a timeout. `SIGPIPE` is ignored process-wide because the reader can vanish mid-transfer. While kdock owns the selection its own `DataControlSource` is alive, and the selection event the compositor echoes back is ignored — reading it would mean reading from our own process.
+- **`setClipboard(text)` / `setClipboardImage(file)`** (used when the user clicks a row) take the selection through the same protocol, so pasting a history entry works without the dock ever taking focus; on the fallback path they go through `QClipboard` and `m_ownText` skips the echo. Rewriting the JSON index and text export is serialized from an immutable snapshot on a worker thread, so a large history cannot freeze or tear down the dock after a click.
 - **Persistence** (survives full shutdowns): the storage is a JSON index at `~/.local/share/kdock/clipboard-history.json` (ordered `{type:"text",text}` / `{type:"image",file,w,h}`) plus one PNG per image entry under `~/.local/share/kdock/clipboard-images/`, named `img-<sha1>.png` — the hash is the dedup key, and a PNG arriving as PNG is stored verbatim (only other formats are transcoded, and only the header is decoded to get the size). `clipboard-history.txt` is still written on every save as a **derived, human-readable export** (`=== kdock clipboard entry ===` delimiters, images as `[Imagen 1920 × 1080 — clipboard-images/…]`), which is what *Ver historial actual* and *Guardar historial* use. A history from before the index existed is migrated from that `.txt` on first load; PNGs no entry refers to are swept on load and on `clearHistory()`.
 - **Left click** = `ClipboardPopup` (modeled on `AppMenuPopup`, same modal `Popup.Window` + `dockWindow.setKeyboardInteractive` + `focusRetry` keyboard dance): a search field on top and a scrollable list (~10 rows visible). Search filters case-insensitively (`entries(query)`). Clicking a row copies it to the active clipboard and closes. Size is `config.clipboardPopupWidth`/`clipboardPopupHeight` (Settings → Widgets).
 - **Right click** = `Menu` with three `IconMenuItem`s: **Borrar Historial** (`clearHistory()`), **Ver historial actual** (`openInEditor()` → `QDesktopServices::openUrl` the plain-text export in the default editor), **Guardar historial** (`saveHistoryDialog()` → `QFileDialog::getSaveFileName` then export), plus a checkable **Guardar imágenes** bound to `clipboardHistory.captureImages` (stored in `QSettings` under `clipboard/captureImages`, like `audio/maxVolume`: `ClipboardHistory` is a shared singleton, so it does not belong in the per-dock `DockConfig`).

@@ -18,6 +18,8 @@
 #include <QMimeData>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QSaveFile>
+#include <QThread>
 #include <QTextStream>
 #include <QUrl>
 
@@ -26,12 +28,70 @@ namespace {
 // so "Ver historial actual" (open in editor) is legible.
 const QString kDelimiter = QStringLiteral("=== kdock clipboard entry ===");
 
+QString snapshotPreviewOf(const ClipboardHistory::Entry &entry)
+{
+    if (entry.isImage())
+        return entry.imageSize.isValid()
+                   ? QObject::tr("Imagen %1 × %2").arg(entry.imageSize.width())
+                         .arg(entry.imageSize.height())
+                   : QObject::tr("Imagen");
+    QString t = entry.text.trimmed();
+    const int nl = t.indexOf(QLatin1Char('\n'));
+    if (nl >= 0)
+        t = t.left(nl) + QStringLiteral(" …");
+    if (t.size() > 120)
+        t = t.left(120) + QStringLiteral("…");
+    return t;
+}
+
 QString dataDir()
 {
     const QString dir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
                         + QStringLiteral("/kdock");
     QDir().mkpath(dir);
     return dir;
+}
+
+void writeSnapshot(const QList<ClipboardHistory::Entry> &entries,
+                   const QString &indexPath, const QString &textPath)
+{
+    QJsonArray array;
+    for (const ClipboardHistory::Entry &e : entries) {
+        QJsonObject o;
+        if (e.isImage()) {
+            o.insert(QStringLiteral("type"), QStringLiteral("image"));
+            o.insert(QStringLiteral("file"), e.imageFile);
+            o.insert(QStringLiteral("w"), e.imageSize.width());
+            o.insert(QStringLiteral("h"), e.imageSize.height());
+        } else {
+            o.insert(QStringLiteral("type"), QStringLiteral("text"));
+            o.insert(QStringLiteral("text"), e.text);
+        }
+        array.append(o);
+    }
+    QJsonObject root;
+    root.insert(QStringLiteral("entries"), array);
+
+    QSaveFile index(indexPath);
+    if (index.open(QIODevice::WriteOnly)) {
+        index.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        index.commit();
+    }
+
+    QSaveFile text(textPath);
+    if (!text.open(QIODevice::WriteOnly | QIODevice::Text))
+        return;
+    QTextStream out(&text);
+    out.setEncoding(QStringConverter::Utf8);
+    for (const ClipboardHistory::Entry &e : entries) {
+        out << kDelimiter << '\n';
+        if (e.isImage())
+            out << QStringLiteral("[%1 — clipboard-images/%2]")
+                       .arg(snapshotPreviewOf(e), e.imageFile) << '\n';
+        else
+            out << e.text << '\n';
+    }
+    text.commit();
 }
 } // namespace
 
@@ -70,6 +130,16 @@ ClipboardHistory::ClipboardHistory(QObject *parent)
         connect(cb, &QClipboard::dataChanged, this, &ClipboardHistory::captureClipboard);
         captureClipboard();
     }
+}
+
+ClipboardHistory::~ClipboardHistory()
+{
+    // The worker only owns its immutable snapshot and does not call back into
+    // this object. Wait before QObject destroys the QThread child; otherwise a
+    // dock restart while a large history is being flushed would terminate the
+    // process from QThread's destructor.
+    if (m_saveThread)
+        m_saveThread->wait();
 }
 
 QString ClipboardHistory::historyFilePath()
@@ -276,7 +346,7 @@ void ClipboardHistory::setClipboard(const QString &text)
     else if (QClipboard *cb = QGuiApplication::clipboard())
         cb->setText(text);
     pushText(text);
-    save();
+    saveAsync();
     emit changed();
 }
 
@@ -307,8 +377,32 @@ void ClipboardHistory::setClipboardImage(const QString &fileName)
             break;
         }
     }
-    save();
+    saveAsync();
     emit changed();
+}
+
+void ClipboardHistory::saveAsync()
+{
+    m_saveAgain = true;
+    if (m_saveThread)
+        return;
+
+    const QList<Entry> snapshot = m_entries;
+    const QString indexPath = indexFilePath();
+    const QString textPath = historyFilePath();
+    m_saveAgain = false;
+    m_saveThread = QThread::create([snapshot, indexPath, textPath] {
+        writeSnapshot(snapshot, indexPath, textPath);
+    });
+    m_saveThread->setParent(this);
+    connect(m_saveThread, &QThread::finished, this, [this] {
+        QThread *thread = m_saveThread;
+        m_saveThread = nullptr;
+        thread->deleteLater();
+        if (m_saveAgain)
+            saveAsync();
+    });
+    m_saveThread->start();
 }
 
 void ClipboardHistory::clearHistory()

@@ -63,6 +63,10 @@ ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops 
     setContextMenuPolicy(Qt::NoContextMenu);
     settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
     settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
+    connect(this, &QWebEngineView::loadFinished, this, [this](bool ok) {
+        if (ok && m_activeEngine == 1)
+            applyContentOrientation();
+    });
     // QWidget top-levels expose their QWindow lazily. Force that handle before
     // show(), then set the same pre-role properties used by DockWindow; the
     // layer-shell integration reads them when the window gets its shell role.
@@ -246,6 +250,39 @@ void ScreensaverWindow::applyLayerProperties()
         handle->setProperty("kdock.exclusiveZone", -1);
         handle->setProperty("kdock.margins", QVariant::fromValue(QMargins()));
     }
+}
+
+void ScreensaverWindow::applyContentOrientation()
+{
+    QScreen *screen = nullptr;
+    for (QScreen *candidate : QGuiApplication::screens()) {
+        if (candidate && candidate->name() == m_screenName) {
+            screen = candidate;
+            break;
+        }
+    }
+    if (!screen)
+        return;
+
+    // Qt reports the wl_output transform through QScreen::orientation().
+    // Chromium's WebEngine widget can miss the 180° output transform on a
+    // layer-shell surface, leaving After Dark upside down only on that
+    // monitor. Compensate in the document; wallpaper mode is not WebEngine and
+    // must remain untouched.
+    int rotation = 0;
+    switch (screen->orientation()) {
+    case Qt::InvertedLandscapeOrientation:
+        rotation = 180;
+        break;
+    default:
+        return;
+    }
+
+    const QString js = QStringLiteral(
+        "document.documentElement.style.transform='rotate(%1deg)';"
+        "document.documentElement.style.transformOrigin='center center';")
+                           .arg(rotation);
+    page()->runJavaScript(js);
 }
 
 void ScreensaverWindow::updateScreen()

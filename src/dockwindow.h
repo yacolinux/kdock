@@ -165,10 +165,6 @@ signals:
 
 private:
     void applyLayerProperties();
-    // Auto-hide reserves the dock's space only while its panel is visible.
-    // AlwaysVisible remains reserved regardless of m_hidden; the other modes
-    // deliberately let windows use the edge.
-    void applyExclusiveZone();
     // Recreate the layer surface on the configured output (or the primary
     // one). applyScreen() does it synchronously; scheduleApplyScreen()
     // coalesces bursts of screen hotplug/config events into a single

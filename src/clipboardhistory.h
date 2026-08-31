@@ -21,6 +21,7 @@
 #include <QVariantList>
 
 class WaylandClipboard;
+class QThread;
 
 class ClipboardHistory : public QObject
 {
@@ -29,6 +30,7 @@ class ClipboardHistory : public QObject
     Q_PROPERTY(bool captureImages READ captureImages WRITE setCaptureImages NOTIFY captureImagesChanged)
 public:
     explicit ClipboardHistory(QObject *parent = nullptr);
+    ~ClipboardHistory() override;
 
     static constexpr int kMaxEntries = 50;
     // Images are orders of magnitude bigger than text, so they get their own,
@@ -94,6 +96,7 @@ private:
     void save() const;
     void writeIndex() const;
     void writeTextExport(const QString &path) const;
+    void saveAsync();
     // Deletes PNGs no entry refers to (evicted entries, leftovers from a crash).
     void sweepOrphanImages() const;
     static QString previewOf(const Entry &entry);
@@ -105,4 +108,6 @@ private:
     QString m_ownText;
     bool m_captureImages = true;
     WaylandClipboard *m_wayland = nullptr;
+    QThread *m_saveThread = nullptr;
+    bool m_saveAgain = false;
 };

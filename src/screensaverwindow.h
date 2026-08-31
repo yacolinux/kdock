@@ -38,6 +38,7 @@ private:
     QString currentWallpaperFolder() const;
     int currentWallpaperDesktop() const;
     void applyLayerProperties();
+    void applyContentOrientation();
     void destroySurface();
 
     void resizeEvent(QResizeEvent *event) override;

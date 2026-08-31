@@ -5,7 +5,8 @@ Comment=Standalone Qt dock (Wayland layer-shell)
 Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock
 Icon=preferences-desktop-icons
 Categories=Utility;
-NoDisplay=true
+# Keep this entry visible to application runners such as KRunner and Rofi.
+# It is also used by KWin to authorize the privileged Wayland interfaces below.
 # Both keys are matched by KWin against the *absolute* path in Exec= (it resolves
 # the caller's /proc/<pid>/exe through KApplicationTrader). Without the first
 # there is no window list at all. Without the second every CaptureWindow call

@@ -92,8 +92,7 @@ El dock, en distintos bordes y disposiciones de etiqueta:
   a la vista mientras nada lo moleste y se esconde solo cuando una ventana llega a su
   rectángulo — el *dodge* de Latte) y **Las ventanas pasan por debajo** (siempre visible pero
   sin reservar espacio, así una ventana maximizada usa el borde entero y pasa por abajo).
-  Auto-hide reserva el espacio mientras está desplegado y lo libera al ocultarse; los otros dos
-  modos no piden *exclusive zone*, así que no te recortan el área de maximizado. El
+  Los tres últimos no piden *exclusive zone*, así que no te recortan el área de maximizado. El
   ocultamiento inteligente mira solo las ventanas del **escritorio virtual actual** e ignora las
   minimizadas; con alineación centrada esquiva sobre la franja del borde entero, porque en
   Wayland el compositor —no el cliente— decide dónde queda una superficie centrada.
