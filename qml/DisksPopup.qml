@@ -1,7 +1,7 @@
 // DisksPopup.qml - list of removable volumes (UDisks2). Each row shows the
 // label + mount point/size and a mount/unmount button; ejectable drives get an
 // eject button. Clicking a mounted row opens it in the file manager. Modeled on
-// ClipboardPopup but non-modal (no text input, so no keyboard grab needed).
+// the clipboard window but non-modal (no text input, so no keyboard grab needed).
 
 import QtQuick
 import QtQuick.Controls

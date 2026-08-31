@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=kdock Clipboard
+GenericName=Clipboard history
+Comment=Historial de texto e imágenes del portapapeles
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/kdock-clipboard
+Icon=edit-paste
+Categories=Utility;
+NoDisplay=true

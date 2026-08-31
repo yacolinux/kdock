@@ -1,5 +1,6 @@
 #include "apprestart.h"
 
+#include "clipboardlauncher.h"
 #include "controlmanagerlauncher.h"
 #include "desktoplauncher.h"
 #include "previewslauncher.h"
@@ -11,7 +12,7 @@
 #include <QThread>
 
 namespace {
-// Long enough for three processes to notice the D-Bus call and tear down,
+// Long enough for resident processes to notice the D-Bus call and tear down,
 // short enough that a wedged one does not hold the restart hostage: past this
 // the dock relaunches anyway (worst case an accessory survives, exactly like
 // before this existed).
@@ -21,7 +22,8 @@ constexpr int kPollMs = 25;
 bool anyAccessoryRunning()
 {
     return PreviewsLauncher::running() || TileMenuLauncher::running()
-           || ControlManagerLauncher::running() || DesktopLauncher::running();
+           || ControlManagerLauncher::running() || DesktopLauncher::running()
+           || ClipboardLauncher::running();
 }
 } // namespace
 
@@ -31,6 +33,7 @@ void kdock::restartAll(const QStringList &extraArgs)
     TileMenuLauncher::quitRunning();
     ControlManagerLauncher::quitRunning();
     DesktopLauncher::quitRunning();
+    ClipboardLauncher::quitRunning();
 
     // Waiting is not politeness, it is the whole trick: the relaunched kdock
     // brings the accessories back through startIfEnabled()/startIfPreloading(),

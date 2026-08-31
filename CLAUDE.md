@@ -81,7 +81,7 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
    el estilo por omisión, medí `height()` de cada control custom, no alcanza con que el QML
    cargue.
 
-**Son nueve binarios**, los nueve los compila el mismo `cmake --build build`:
+**Son diez binarios**, los diez los compila el mismo `cmake --build build`:
 
 - `kdock`;
 - `kdock-previews` (`build/previews/kdock-previews`, árbol `previews/`): tiras de vista previa
@@ -102,6 +102,10 @@ Aplicarlo correctamente llevó cuatro iteraciones (matchean los commits):
   `weather` del dock y el botón de la tarjeta *Clima* del panel. **Instancia única pero NO
   residente**: cerrar la ventana termina el proceso, así que nunca se queda con el binario
   viejo mapeado después de un `install`. Detalles en `AGENTS.md` → *Clima*.
+- `kdock-clipboard` (`build/clipboard/kdock-clipboard`, árbol `clipboard/`): historial de
+  portapapeles en un proceso separado. El widget `clipboard` de `kdock` solo lo togglea cerca
+  del monitor y borde pulsados; la ventana es normal, redimensionable, con `Fija` y ocultado
+  después de copiar. Detalles en `AGENTS.md` → *Clipboard history*.
 - `kdock-desktop` (`build/desktop/kdock-desktop`, árbol `desktop/`): **copia repropósito de
   `kdock-controlmanager`** convertida en lienzo de widgets de escritorio. Misma UI, tarjetas y
   backends, pero la ventana es una superficie layer-shell **a pantalla completa, siempre
@@ -165,12 +169,13 @@ cierres la terminal: `tr '\0' '\n' < /proc/$(pgrep -x kdock)/environ | grep -E '
 devuelve `TERM=xterm-256color` y `WINDOWID=0`. Va en `Terminal=false` (arreglado 2026-08-20).
 
 Los accesorios se reinician distinto y sin riesgo de dejar la pantalla pelada: cada uno sale
-por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu` / `org.kdock.ControlManager`, método
-`quit`) y vuelve a levantarse solo — el de previews al prender su casilla, los otros dos en el
+por D-Bus (`org.kdock.Previews` / `org.kdock.TileMenu` / `org.kdock.ControlManager` /
+`org.kdock.Clipboard`, método `quit`) y vuelve a levantarse solo — el de previews al prender su
+casilla, los otros cuatro en el
 próximo clic de su widget (o enseguida, si tienen *Precargar*). O sea que actualizar
 `kdock-tilemenu` es `install` + matarlo; no hace falta tocar el dock.
 
-**Desde 2026-08-10 *Dock → Reiniciar* ya los baja a los tres** (`src/apprestart.cpp`), así que
+**Desde 2026-08-10 *Dock → Reiniciar* ya los baja a los cuatro** (`src/apprestart.cpp`), así que
 para el usuario alcanza con eso. Pero **un accesorio que quedó corriendo no muestra el arreglo
 que acabás de instalar**, y desde afuera se ve idéntico a "el bug sigue": el proceso tiene
 mapeado el binario que el `install` reemplazó. La comprobación son dos segundos y no hay que
@@ -183,14 +188,14 @@ ls -l /proc/$(pgrep -f /usr/local/bin/kdock-controlmanager | head -1)/exe   # "(
 Pasó tal cual: se probó un arreglo del panel de control contra una instancia del día anterior
 y el bug "seguía" (2026-08-10).
 
-El install escribe **dieciocho** cosas: los nueve binarios y sus nueve `.desktop`. Después de
+El install escribe **veinte** cosas: los diez binarios y sus diez `.desktop`. Después de
 instalar hay que refrescar ksycoca, pero **solo por los dos primeros**: KWin busca ahí los
 `.desktop` para conceder los privilegios (sin eso `kdock-previews` se queda sin capturas y las
 tarjetas caen a ícono, y desde 2026-08-17 `kdock` se queda sin las vistas previas al hoverear
 un ícono — el mismo `org.kde.KWin.ScreenShot2`, concedido **por ejecutable**). **`kdock-tilemenu`, `kdock-calendar`, `kdock-controlmanager`,
-`kdock-weather`, `kdock-desktop`, `kdock-systray` y `kdock-setwallpaper` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
+`kdock-weather`, `kdock-clipboard`, `kdock-desktop`, `kdock-systray` y `kdock-setwallpaper` no necesitan el refresco** —no piden ningún privilegio, y su `.desktop` es solo para el nombre y
 el ícono del gestor de tareas (el de `kdock-setwallpaper`, además, para aparecer en «Abrir con»)—, así que si lo único que tocaste fue uno de esos, saltealo
-y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las nueve líneas
+y evitás el riesgo de abajo. **La salida del propio `install` te lo dice**: si las diez líneas
 de `.desktop` dicen `Up-to-date`, ksycoca ya los tiene y no hay nada que refrescar, sin importar
 cuántos binarios se hayan reemplazado. (El panel de control **es** una superficie layer-shell, pero
 `zwlr_layer_shell_v1` no está en la lista restringida de KWin: se lo anuncia a cualquier
@@ -950,9 +955,9 @@ arranque** (autostart temprano) o **liberar el nombre** desactivando el módulo 
 (`~/.kde-opt/config/kded6rc` → `[Module-statusnotifierwatcher]\nautoload=false`). Es un cambio de
 sesión: preguntá antes.
 
-### Arnés del portapapeles en la sesión real (klipper como control)
+### Arnés de `kdock-clipboard` en la sesión real (klipper como control)
 
-Bajo Xvfb **no hay data-control** (es X11), así que el backend nuevo del portapapeles solo se
+Bajo Xvfb **no hay data-control** (es X11), así que el backend del accesorio solo se
 puede probar en la sesión Wayland de verdad. Una sonda que linkee `waylandclipboard.cpp` (o
 `clipboardhistory.cpp`) e imprima lo que captura alcanza, y **Klipper sirve de control desde la
 CLI** en las dos direcciones:
@@ -963,8 +968,8 @@ qdbus6 org.kde.klipper /klipper getClipboardContents                  # tras nue
 spectacle-custom -b -n -c                                             # copia una imagen
 ```
 
-Lo que prueba de verdad: la sonda **no abre ninguna ventana ni toma foco**, así que si ve el
-texto, la captura en segundo plano funciona (que es justo lo que no andaba). Con
+Lo que prueba de verdad: `kdock-clipboard` **no abre la ventana ni toma foco cuando está oculto**,
+así que si ve el texto, la captura en segundo plano funciona. Con
 `XDG_DATA_HOME` a un directorio descartable se ve además el JSON y los PNG que quedan en
 disco. Para el caso de las contraseñas, una segunda sonda con `QMimeData` que traiga
 `x-kde-passwordManagerHint` confirma que **no** se guarda.

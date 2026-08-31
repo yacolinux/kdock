@@ -1151,7 +1151,7 @@ Item {
         case "tilemenu": return config.showTileMenu && tileLauncher
         case "controlmanager": return config.showControlManager && cmLauncher
         case "apps": return config.showAppIcons
-        case "clipboard": return config.showClipboard && clipboardHistory
+        case "clipboard": return config.showClipboard && clipboardLauncher
         case "disks": return config.showDisks && disks && disks.available
         case "network": return config.showNetwork && network && network.available
         // Sin ciudad configurada el widget se muestra igual, con un ícono neutro:
@@ -1267,7 +1267,7 @@ Item {
                || token === "scriptrunners" || token === "menu" || token === "tilemenu"
                || token === "controlmanager"
                || token === "session"
-               || token === "battery" || token === "clipboard" || token === "disks"
+               || token === "battery" || token === "disks"
                || token === "network" || token === "weather" || token === "iconthemes"
                || token === "colorschemes"
                || token === "screensaver"
@@ -1300,6 +1300,7 @@ Item {
         case "settings": return qsTr("Configure kdock")
         case "tilemenu": return qsTr("Menú de mosaicos (pantalla completa)")
         case "controlmanager": return qsTr("Control Manager")
+        case "clipboard": return qsTr("Portapapeles")
         case "weather": return weather && weather.configured
                         ? weather.cityLabel + " — " + weather.conditionText
                         : qsTr("Clima: elegí una ciudad")
@@ -1327,6 +1328,8 @@ Item {
         else if (token === "settings") dockWindow.openSettings()
         else if (token === "clock2") clock2.launch()
         else if (token === "colorauto" && autoColors) autoColors.generateNow()
+        else if (token === "clipboard" && clipboardLauncher)
+            clipboardLauncher.toggle(config.screenName)
     }
 
     // Widgets whose right click is an action of their own instead of the
@@ -3327,27 +3330,23 @@ Item {
         }
     }
 
-    // Clipboard history. Block: it owns its own button mouse handling, the
-    // history popup (left click) and a context menu (right click).
+    // Clipboard history. The history lives in kdock-clipboard, an independent
+    // process. This block intentionally contains only the launcher icon, so a
+    // clipboard crash cannot destroy the dock's QML engine.
     Component {
         id: clipboardComp
         Item {
             id: clipRoot
-            // Alias context properties to avoid self-shadowing inside
-            // ClipboardPopup's same-named required properties.
-            property var _theme: theme
-            property var _config: config
             implicitWidth: root.widgetIconPx
             implicitHeight: root.widgetIconPx
 
             ToolTip {
                 popupType: Popup.Window
-                visible: config.showTooltips && !root.menuOpen && clipMouse.containsMouse
-                         && !(clipLoader.item && clipLoader.item.visible)
+                visible: config.showTooltips && !root.menuOpen && clipHover.hovered
                 delay: 400
-                            text: qsTr("Portapapeles")
-                                        onVisibleChanged: root.tooltipVisible = visible
-                        }
+                text: qsTr("Portapapeles")
+                onVisibleChanged: root.tooltipVisible = visible
+            }
 
             Image {
                 id: clipIcon
@@ -3357,93 +3356,10 @@ Item {
                 source: "image://icon/edit-paste" + root.widgetIconSuffix
                 sourceSize: Qt.size(root.widgetIconPx * Screen.devicePixelRatio,
                                     root.widgetIconPx * Screen.devicePixelRatio)
-                scale: clipMouse.containsMouse
-                        || (clipLoader.item && clipLoader.item.visible) ? 1.12 : 1.0
+                scale: clipHover.hovered ? 1.12 : 1.0
                 Behavior on scale { NumberAnimation { duration: 120 } }
             }
-            MouseArea {
-                id: clipMouse
-                anchors.fill: parent
-                hoverEnabled: true
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                // The modal popup dismisses itself on the press that lands on
-                // this icon, so by onClicked it is already hidden. Suppress the
-                // reopen when the click is the one that just closed it.
-                onClicked: (mouse) => {
-                    if (mouse.button === Qt.RightButton) { clipMenu.popup(); return }
-                    if (clipLoader.active && clipLoader.item.visible) {
-                        clipLoader.item.close(); return
-                    }
-                    if (Date.now() - clipLoader.closedAt < 300) return
-                    clipLoader.active = true
-                    clipLoader.item.open()
-                }
-            }
-
-            Menu {
-                id: clipMenu
-                popupType: Popup.Window
-                // Mixing checkable items (which reserve a tick column) with
-                // IconMenuItem makes the implicit width come out short and the
-                // last letter is clipped by the popup border.
-                width: Math.max(implicitWidth + 64, 220)
-                IconMenuItem {
-                    text: qsTr("Borrar Historial")
-                    iconName: "edit-clear-history"
-                    onTriggered: clipboardHistory.clearHistory()
-                }
-                IconMenuItem {
-                    text: qsTr("Ver historial actual")
-                    iconName: "document-open"
-                    onTriggered: clipboardHistory.openInEditor()
-                }
-                IconMenuItem {
-                    text: qsTr("Guardar historial")
-                    iconName: "document-save"
-                    onTriggered: clipboardHistory.saveHistoryDialog()
-                }
-                MenuSeparator {}
-                MenuItem {
-                    text: qsTr("Guardar imágenes")
-                    checkable: true
-                    checked: clipboardHistory.captureImages
-                    onTriggered: clipboardHistory.captureImages = checked
-                }
-            }
-
-            Loader {
-                id: clipLoader
-                active: false
-                property double closedAt: 0
-                sourceComponent: ClipboardPopup {
-                    id: clipPopup
-                    theme: clipRoot._theme
-                    config: clipRoot._config
-                    parent: clipRoot
-                    onVisibleChanged: {
-                        root.menuOpen = visible
-                        if (!visible) {
-                            clipLoader.closedAt = Date.now()
-                            idleClipTimer.restart()
-                        }
-                    }
-                    x: {
-                        if (clipRoot._config.edge === 2) return clipRoot.width + 8
-                        if (clipRoot._config.edge === 3) return -width - 8
-                        return -width / 2 + clipRoot.width / 2
-                    }
-                    y: {
-                        if (clipRoot._config.edge === 0) return -height - 8
-                        if (clipRoot._config.edge === 1) return clipRoot.height + 8
-                        return 0
-                    }
-                    Timer {
-                        id: idleClipTimer
-                        interval: 30000
-                        onTriggered: clipLoader.active = false
-                    }
-                }
-            }
+            HoverHandler { id: clipHover }
         }
     }
 

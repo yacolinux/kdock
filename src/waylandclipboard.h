@@ -3,13 +3,13 @@
 // KDE's own KSystemClipboard both moved to it).
 //
 // Why this exists: on Wayland a client may only read wl_data_device while it
-// holds keyboard focus, and the dock is a keyboard-inert layer surface. Passive
+// holds keyboard focus, and a dock is a keyboard-inert layer surface. Passive
 // clipboard capture through QClipboard therefore only worked while a popup had
 // grabbed the keyboard. data-control is the protocol clipboard managers use and
 // is focus-independent, in both directions (reading the selection and owning it).
 //
 // Note: unlike org_kde_plasma_window_management, this interface is NOT on KWin's
-// restricted list, so nothing has to be declared in kdock.desktop and ksycoca is
+// restricted list, so nothing has to be declared in a desktop file and ksycoca is
 // not involved.
 //
 // If the compositor does not advertise the global (X11, Xvfb, older KWin),

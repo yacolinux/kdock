@@ -20,7 +20,6 @@
 #include "maxmincontrol.h"
 #include "monitorcontrol.h"
 #include "wallpapercontrol.h"
-#include "clipboardhistory.h"
 #include "diskscontrol.h"
 #include "appearancecontrol.h"
 #include "autocolorscheme.h"
@@ -36,6 +35,7 @@
 #include "controlmanagerlauncher.h"
 #include "weathercontrol.h"
 #include "weatherlauncher.h"
+#include "clipboardlauncher.h"
 #include "tilemenulauncher.h"
 #include "virtualdesktops.h"
 #include "theme.h"
@@ -70,7 +70,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
                        WallpaperControl *wallpaperControl, PowerControl *power,
                        RelanzadoresManager *relanzadores,
                        ScriptRunnersManager *scriptRunners,
-                       ClipboardHistory *clipboardHistory,
                        DisksControl *disks, NetworkControl *network,
                        AppearanceControl *appearance, WindowMonitor *monitor,
                        VirtualDesktops *desktops, WeatherControl *weather,
@@ -82,7 +81,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     , m_apps(apps)
     , m_relanzadores(relanzadores)
     , m_scriptRunners(scriptRunners)
-    , m_clipboardHistory(clipboardHistory)
     , m_monitor(monitor)
     , m_overview(overview)
     , m_desktopControl(desktopControl)
@@ -165,7 +163,6 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     rootContext()->setContextProperty(QStringLiteral("power"), m_power);
     rootContext()->setContextProperty(QStringLiteral("relanzadores"), m_relanzadores);
     rootContext()->setContextProperty(QStringLiteral("scriptRunners"), m_scriptRunners);
-    rootContext()->setContextProperty(QStringLiteral("clipboardHistory"), m_clipboardHistory);
     rootContext()->setContextProperty(QStringLiteral("disks"), disks);
     rootContext()->setContextProperty(QStringLiteral("network"), network);
     rootContext()->setContextProperty(QStringLiteral("appearance"), appearance);
@@ -197,6 +194,8 @@ DockWindow::DockWindow(DockConfig *config, Theme *theme, DockModel *model, Deskt
     // uses the launcher when clicked.
     m_weatherLauncher = new WeatherLauncher(this);
     rootContext()->setContextProperty(QStringLiteral("weatherLauncher"), m_weatherLauncher);
+    m_clipboardLauncher = new ClipboardLauncher(this);
+    rootContext()->setContextProperty(QStringLiteral("clipboardLauncher"), m_clipboardLauncher);
     rootContext()->setContextProperty(QStringLiteral("weather"), weather);
 
     // The autohide mask is a rectangle derived from the surface size, so it goes

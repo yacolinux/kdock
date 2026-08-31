@@ -110,8 +110,6 @@ class DockConfig : public QObject
     Q_PROPERTY(int menuGridSpacing READ menuGridSpacing WRITE setMenuGridSpacing NOTIFY menuGridSpacingChanged)
     Q_PROPERTY(QString menuEditorApp READ menuEditorApp WRITE setMenuEditorApp NOTIFY menuEditorAppChanged)
     Q_PROPERTY(bool showClipboard READ showClipboard WRITE setShowClipboard NOTIFY showClipboardChanged)
-    Q_PROPERTY(int clipboardPopupWidth READ clipboardPopupWidth WRITE setClipboardPopupWidth NOTIFY clipboardPopupWidthChanged)
-    Q_PROPERTY(int clipboardPopupHeight READ clipboardPopupHeight WRITE setClipboardPopupHeight NOTIFY clipboardPopupHeightChanged)
     Q_PROPERTY(bool showDisks READ showDisks WRITE setShowDisks NOTIFY showDisksChanged)
     Q_PROPERTY(bool showNetwork READ showNetwork WRITE setShowNetwork NOTIFY showNetworkChanged)
     Q_PROPERTY(bool showWeather READ showWeather WRITE setShowWeather NOTIFY showWeatherChanged)
@@ -785,8 +783,6 @@ public:
     // right-click. A .desktop id, or a plain command as a fallback.
     QString menuEditorApp() const { return m_menuEditorApp; }
     bool showClipboard() const { return m_showClipboard; }
-    int clipboardPopupWidth() const { return m_clipboardPopupWidth; }
-    int clipboardPopupHeight() const { return m_clipboardPopupHeight; }
     bool showDisks() const { return m_showDisks; }
     bool showNetwork() const { return m_showNetwork; }
     bool showWeather() const { return m_showWeather; }
@@ -1004,8 +1000,6 @@ public:
     Q_INVOKABLE void setWeatherFontSize(int px);
     void setShowIconThemes(bool show);
     void setShowColorSchemes(bool show);
-    void setClipboardPopupWidth(int w);
-    void setClipboardPopupHeight(int h);
     void setShowOverview(bool show);
     void setShowClock2(bool show);
     void setShowMoveToDesktop(bool show);
@@ -1250,8 +1244,6 @@ signals:
     void weatherFontSizeChanged();
     void showIconThemesChanged();
     void showColorSchemesChanged();
-    void clipboardPopupWidthChanged();
-    void clipboardPopupHeightChanged();
     void showOverviewChanged();
     void showClock2Changed();
     void showMoveToDesktopChanged();
@@ -1406,8 +1398,6 @@ private:
     int m_weatherFontSize = 0;
     bool m_showIconThemes = false;
     bool m_showColorSchemes = false;
-    int m_clipboardPopupWidth = 360;
-    int m_clipboardPopupHeight = 460;
     bool m_showOverview = false;
     bool m_showClock2 = false;
     bool m_showMoveToDesktop = false;

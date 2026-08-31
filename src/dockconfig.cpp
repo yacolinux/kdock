@@ -1347,8 +1347,6 @@ void DockConfig::load()
     m_weatherFontSize = qBound(0, m_settings.value(QStringLiteral("weatherFontSize"), 0).toInt(), 96);
     m_showIconThemes = m_settings.value(QStringLiteral("showIconThemes"), false).toBool();
     m_showColorSchemes = m_settings.value(QStringLiteral("showColorSchemes"), false).toBool();
-    m_clipboardPopupWidth = m_settings.value(QStringLiteral("clipboardPopupWidth"), 360).toInt();
-    m_clipboardPopupHeight = m_settings.value(QStringLiteral("clipboardPopupHeight"), 460).toInt();
     m_showOverview = m_settings.value(QStringLiteral("showOverview"), false).toBool();
     m_showMoveToDesktop = m_settings.value(QStringLiteral("showMoveToDesktop"), false).toBool();
     m_showMoveToScreen = m_settings.value(QStringLiteral("showMoveToScreen"), false).toBool();
@@ -2266,24 +2264,6 @@ void DockConfig::setShowColorSchemes(bool show)
     m_showColorSchemes = show;
     m_settings.setValue(QStringLiteral("showColorSchemes"), show);
     emit showColorSchemesChanged();
-}
-
-void DockConfig::setClipboardPopupWidth(int w)
-{
-    if (m_clipboardPopupWidth == w)
-        return;
-    m_clipboardPopupWidth = w;
-    m_settings.setValue(QStringLiteral("clipboardPopupWidth"), w);
-    emit clipboardPopupWidthChanged();
-}
-
-void DockConfig::setClipboardPopupHeight(int h)
-{
-    if (m_clipboardPopupHeight == h)
-        return;
-    m_clipboardPopupHeight = h;
-    m_settings.setValue(QStringLiteral("clipboardPopupHeight"), h);
-    emit clipboardPopupHeightChanged();
 }
 
 void DockConfig::setShowOverview(bool show)

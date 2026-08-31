@@ -124,8 +124,8 @@ ClipboardHistory::ClipboardHistory(QObject *parent)
                 });
     }
 
-    // Fallback (and seed): QClipboard only reports changes while the dock holds
-    // keyboard focus, which on Wayland is just while a popup is open.
+    // Fallback (and seed): QClipboard only reports changes while the accessory
+    // holds keyboard focus on Wayland; ext-data-control is the passive path.
     if (QClipboard *cb = QGuiApplication::clipboard()) {
         connect(cb, &QClipboard::dataChanged, this, &ClipboardHistory::captureClipboard);
         captureClipboard();
@@ -136,7 +136,7 @@ ClipboardHistory::~ClipboardHistory()
 {
     // The worker only owns its immutable snapshot and does not call back into
     // this object. Wait before QObject destroys the QThread child; otherwise a
-    // dock restart while a large history is being flushed would terminate the
+    // accessory restart while a large history is being flushed would terminate the
     // process from QThread's destructor.
     if (m_saveThread)
         m_saveThread->wait();

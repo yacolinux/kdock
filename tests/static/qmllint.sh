@@ -1,5 +1,5 @@
 #!/bin/bash
-# qmllint sobre los cinco árboles de QML.
+# qmllint sobre los seis árboles de QML.
 #
 # El build NO valida el QML (rcc solo lo empaqueta), así que un error de sintaxis
 # recién aparece cuando el binario arranca — y si ya lo instalaste, el usuario se
@@ -38,7 +38,7 @@ case "$qmllint_help" in
     *) kdock_skip "el qmllint encontrado ($qmllint) no soporta --json: parece de Qt5" ;;
 esac
 
-trees=(qml previews/qml tilemenu/qml controlmanager/qml controlmanager/qml/cards)
+trees=(qml previews/qml tilemenu/qml controlmanager/qml controlmanager/qml/cards clipboard/qml)
 report=$(mktemp /tmp/kdock-qmllint.XXXXXX.json)
 trap 'rm -f "$report"' EXIT
 status=0

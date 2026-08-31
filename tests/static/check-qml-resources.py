@@ -2,9 +2,9 @@
 """Todo .qml del árbol tiene que estar en algún qt_add_resources.
 
 Un .qml que no entra al qrc no existe para el binario: el componente no carga y
-no hay error de compilación. Hay cuatro listas (raíz, previews, tilemenu y
-controlmanager, que además lista `qml/cards/*.qml` una por una), y agregar el
-archivo a mano es justo el paso que se olvida.
+no hay error de compilación. Hay cinco listas (raíz, previews, tilemenu,
+controlmanager y el accesorio clipboard, que además lista `qml/cards/*.qml` una
+por una), y agregar el archivo a mano es justo el paso que se olvida.
 
 Uso: check-qml-resources.py <repo>
 """
@@ -18,6 +18,7 @@ CMAKES = [
     repo / "previews" / "CMakeLists.txt",
     repo / "tilemenu" / "CMakeLists.txt",
     repo / "controlmanager" / "CMakeLists.txt",
+    repo / "clipboard" / "CMakeLists.txt",
 ]
 TREES = [
     repo / "qml",
@@ -25,6 +26,7 @@ TREES = [
     repo / "tilemenu" / "qml",
     repo / "controlmanager" / "qml",
     repo / "controlmanager" / "qml" / "cards",
+    repo / "clipboard" / "qml",
 ]
 
 declared = "\n".join(p.read_text(encoding="utf-8") for p in CMAKES if p.is_file())
@@ -36,7 +38,7 @@ for tree in TREES:
         continue
     for qml in sorted(tree.glob("*.qml")):
         checked += 1
-        # Basta con que el nombre aparezca en algún qt_add_resources: las cuatro
+        # Basta con que el nombre aparezca en algún qt_add_resources: las cinco
         # listas usan rutas relativas distintas (qml/X.qml, cards/X.qml, ...).
         if qml.name not in declared:
             missing.append(str(qml.relative_to(repo)))

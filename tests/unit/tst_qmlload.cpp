@@ -34,7 +34,6 @@ private:
             QStringLiteral("qrc:/qml/Dock.qml"),
             QStringLiteral("qrc:/qml/AppPreviewWindow.qml"),
             QStringLiteral("qrc:/qml/AppMenuPopup.qml"),
-            QStringLiteral("qrc:/qml/ClipboardPopup.qml"),
             QStringLiteral("qrc:/qml/DisksPopup.qml"),
             QStringLiteral("qrc:/qml/NetworkPopup.qml"),
             QStringLiteral("qrc:/qml/ThemeListPopup.qml"),

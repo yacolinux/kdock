@@ -15,7 +15,7 @@
 
 kdock **does not link against KDE Frameworks or Plasma**. Wayland protocols are generated
 directly from their XML with `qtwaylandscanner`, and everything else is resolved over D-Bus
-or the CLI. The result is nine standalone binaries, no plugins to install, and no need to
+or the CLI. The result is ten standalone binaries, no plugins to install, and no need to
 drag half of Plasma along as a dependency.
 
 Used daily on **KDE Plasma 6 / KWin**; the taskbar also works on wlroots compositors (sway,
@@ -275,7 +275,7 @@ Frameworks:
 | Disks | Removable drives: mount, unmount, eject, open | UDisks2 |
 | Network | A small window with three tabs: **Wi-Fi** (nearby networks, join with password), **Saved** and **Details** (IP, netmask, gateway, DNS, MAC, IPv6). A *Configure networks…* button opens the full editor | NetworkManager |
 | Weather | Condition icon and temperature; the click opens the forecast mini-app. Several saved cities, one of them current | Open-Meteo (HTTPS, no API key) |
-| Clipboard | Text and image history with search, persistent, captured in the background | `ext-data-control-v1` |
+| Clipboard | The widget only launches `kdock-clipboard`: searchable text and image history in a normal resizable window, with **Always on top** and hide-after-copy | `ext-data-control-v1` |
 | KDE iconset | Changes the icon set for the whole desktop, leaving the dock's own untouched | `plasma-changeicons` |
 | Color scheme | Applies a KDE color scheme to the whole desktop | `plasma-apply-colorscheme` |
 | Clock | 12/24 h, date, seconds (two variants) | — |
@@ -452,6 +452,18 @@ It is opened by the dock's *Weather* widget, by the panel card's button, or by r
 - With no city configured the dock widget **still shows up**, with a generic icon: the click
   takes you straight to picking one.
 
+### `kdock-clipboard` (companion binary)
+
+The dock's **Clipboard** widget is now a lightweight launcher for this separate application.
+`kdock-clipboard` owns the text and image history outside `kdock`, so a clipboard transfer, image
+decoder or UI failure cannot bring the dock down with it.
+
+The window is a normal, freely resizable toplevel with persistent size. It opens near the monitor
+and edge where the widget was clicked (Wayland may still adjust the final position), provides
+**Always on top**, and hides after copying by default; **Close after copying** makes it terminate
+only this companion process. The old actions are still available in the window: clear, open and
+save the history, plus optional image capture.
+
 ---
 
 ### `kdock-desktop` (companion binary)
@@ -518,7 +530,7 @@ touch your brightness, theme or configuration**. Details in [`tests/README.md`](
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # installs the nine binaries and their .desktop files
+sudo cmake --install build     # installs the ten binaries and their .desktop files
 ```
 
 To run the complete cycle, including refreshing the tray host and orderly restarting Kdock
@@ -614,6 +626,7 @@ The configuration lives in the XDG data directory:
   desktop.conf                # kdock-desktop: canvas and cards
   systray.conf                # kdock-systray: resident tray
   weather.conf                # kdock-weather: cities and units
+  clipboard.conf              # kdock-clipboard: size, always-on-top and close-after-copy
   clipboard-history.txt
 ```
 
@@ -649,9 +662,10 @@ per GL context. QtQuick.Controls doesn't release them after closing, so over a s
 session with half a dozen docks the process built up to **68 render threads + 136 Mesa
 threads** and a **571 MB heap**, with no ceiling. As of this version:
 
-- **Click popups** (the application menu, clipboard, disks, network and theme pickers) are
-  loaded on demand with `Loader { active: false }` and destroyed automatically after **30
-  seconds of inactivity**, using the pattern measured in `tilemenu/`.
+- **Click popups** (the application menu, disks, network and theme pickers) are loaded on demand
+  with `Loader { active: false }` and destroyed automatically after **30 seconds of inactivity**,
+  using the pattern measured in `tilemenu/`. The clipboard lives in the independent
+  `kdock-clipboard` process.
 
 - **Tooltips** remain per-element (original behavior): the attached API that made them share
   a single instance per window was tried and dropped, because it positions the tooltip at
@@ -690,6 +704,7 @@ costs ~0.4-1.5 s depending on how many widgets it carries (measurable with
 | `controlmanager/` | Companion control-panel binary (own tree, reuses 16 files from `src/`) |
 | `desktop/` | Full-screen desktop canvas |
 | `weather/` | Companion weather binary (own tree, reuses 5 files from `src/`) |
+| `clipboard/` | Companion clipboard-history binary (own tree, reuses the history backend) |
 | `systray/` | Resident system-tray host |
 | `setwallpaper/` | File-manager wallpaper helper |
 | `protocols/` | Vendored Wayland protocols (layer-shell, foreign-toplevel, plasma-window, xdg-shell, ext-idle-notify) |

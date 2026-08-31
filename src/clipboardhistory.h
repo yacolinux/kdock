@@ -5,12 +5,12 @@
 // per image entry in ~/.local/share/kdock/clipboard-images/.
 // ~/.local/share/kdock/clipboard-history.txt is still written on every save as
 // a human-readable export (it is what "Ver historial actual" opens).
-// A single shared instance is used by every dock.
+// This backend is compiled into kdock-clipboard, not into kdock. The accessory
+// owns one instance for the session, so clipboard failures stay outside the dock.
 //
 // Capture backend: on Wayland the history is fed by WaylandClipboard
-// (ext-data-control), which works while the dock has no keyboard focus. Where
-// that protocol is missing (X11, Xvfb) it falls back to QClipboard, which only
-// sees changes while the dock holds focus.
+// (ext-data-control), which works while the accessory has no keyboard focus.
+// Where that protocol is missing (X11, Xvfb) it falls back to QClipboard.
 
 #pragma once
 
@@ -59,7 +59,7 @@ public:
     Q_INVOKABLE QVariantList entries(const QString &query = QString()) const;
 
     // Put an existing history entry back on the system clipboard (and move it
-    // to the top). Used when the user clicks a row in the popup.
+    // to the top). Used when the user clicks a row in the accessory window.
     Q_INVOKABLE void setClipboard(const QString &text);
     Q_INVOKABLE void setClipboardImage(const QString &fileName);
 

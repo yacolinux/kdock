@@ -30,7 +30,7 @@ class DockManager;
 class SystrayLauncher;
 class RelanzadoresManager;
 class ScriptRunnersManager;
-class ClipboardHistory;
+class ClipboardLauncher;
 class DisksControl;
 class NetworkControl;
 class WeatherControl;
@@ -63,7 +63,6 @@ public:
                 WallpaperControl *wallpaperControl, PowerControl *power,
                RelanzadoresManager *relanzadores = nullptr,
                ScriptRunnersManager *scriptRunners = nullptr,
-               ClipboardHistory *clipboardHistory = nullptr,
                DisksControl *disks = nullptr, NetworkControl *network = nullptr,
                AppearanceControl *appearance = nullptr,
                WindowMonitor *monitor = nullptr,
@@ -196,7 +195,6 @@ private:
     DesktopEntryIndex *m_apps;
     RelanzadoresManager *m_relanzadores;
     ScriptRunnersManager *m_scriptRunners = nullptr;
-    ClipboardHistory *m_clipboardHistory = nullptr;
     WindowMonitor *m_monitor = nullptr;
     SettingsDialog *m_dialog = nullptr;
     DockManager *m_manager = nullptr;
@@ -219,6 +217,8 @@ private:
     ControlManagerLauncher *m_cmLauncher = nullptr;
     // Same, for kdock-weather (context property "weatherLauncher").
     WeatherLauncher *m_weatherLauncher = nullptr;
+    // Same, for kdock-clipboard (context property "clipboardLauncher").
+    ClipboardLauncher *m_clipboardLauncher = nullptr;
     // Same, for kdock-systray (context property "systrayLauncher").
     SystrayLauncher *m_systrayLauncher = nullptr;
     bool m_hidden = false;

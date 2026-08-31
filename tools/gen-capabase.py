@@ -30,10 +30,10 @@ OUT = ROOT / "translations" / "capabase.md"
 QML_DIRS = [ROOT / "qml", ROOT / "previews" / "qml", ROOT / "tilemenu" / "qml",
             ROOT / "controlmanager" / "qml", ROOT / "controlmanager" / "qml" / "cards",
             ROOT / "weather" / "qml", ROOT / "systray" / "qml",
-            ROOT / "desktop" / "qml"]
+            ROOT / "desktop" / "qml", ROOT / "clipboard" / "qml"]
 QML_CONTEXTS = {p.stem for d in QML_DIRS for p in d.glob("*.qml")}
 
-# The four binaries share one catalogue: the accessories' strings live in the
+# All binaries share one catalogue: the accessories' strings live in the
 # same .md files as the dock's (see AGENTS.md -> Capa de traducciones). Their
 # language is not chosen apart either — they follow kdock's, minus the ALT part.
 SCAN_DIRS = [ROOT / "src", ROOT / "qml",
@@ -42,7 +42,8 @@ SCAN_DIRS = [ROOT / "src", ROOT / "qml",
              ROOT / "controlmanager" / "src", ROOT / "controlmanager" / "qml",
              ROOT / "weather" / "src", ROOT / "weather" / "qml",
              ROOT / "systray" / "src", ROOT / "systray" / "qml",
-             ROOT / "desktop" / "src", ROOT / "desktop" / "qml"]
+             ROOT / "desktop" / "src", ROOT / "desktop" / "qml",
+             ROOT / "clipboard" / "src", ROOT / "clipboard" / "qml"]
 
 HEADER = """# capabase
 

@@ -14,7 +14,7 @@
 //
 // Modal on purpose: the password field needs key events, and the dock's layer
 // surface is keyboard-inert until it asks for the grab (same as AppMenuPopup
-// and ClipboardPopup).
+// and the standalone clipboard window).
 
 import QtQuick
 import QtQuick.Controls

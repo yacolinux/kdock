@@ -49,7 +49,6 @@ class WallpaperControl;
 class PowerControl;
 class RelanzadoresManager;
 class ScriptRunnersManager;
-class ClipboardHistory;
 class DisksControl;
 class NetworkControl;
 class WeatherControl;
@@ -89,7 +88,6 @@ public:
         PowerControl *power = nullptr;
         RelanzadoresManager *relanzadores = nullptr;
         ScriptRunnersManager *scriptRunners = nullptr;
-        ClipboardHistory *clipboardHistory = nullptr;
         DisksControl *disks = nullptr;
         NetworkControl *network = nullptr;
         WeatherControl *weather = nullptr;

@@ -54,7 +54,7 @@ void flushDisplay()
 }
 
 // Drain a pipe without blocking the GUI thread. A blocking read() here would
-// freeze the whole dock whenever the source client is slow (or never writes).
+// freeze the whole clipboard process whenever the source client is slow (or never writes).
 // Takes ownership of fd.
 template<typename Fn>
 void readAllAsync(int fd, Fn &&done)
@@ -138,7 +138,7 @@ void readAllAsync(int fd, Fn &&done)
 }
 
 // Feed a pipe without blocking. An image does not fit in the 64 KB pipe buffer,
-// so a blocking write() would stall the dock until the other side finished
+// so a blocking write() would stall the clipboard process until the other side finished
 // reading. Takes ownership of fd.
 void writeAllAsync(int fd, const QByteArray &data)
 {
@@ -153,7 +153,7 @@ void writeAllAsync(int fd, const QByteArray &data)
     // when the watchdog fires (or the other way around), so cleanup must be
     // idempotent and must stop the watchdog before releasing its captured
     // state. Without this, clicking an image/text entry could leave a stale
-    // write callback behind and abort kdock with a double free.
+    // write callback behind and abort the clipboard process with a double free.
     auto *watchdog = new QTimer(notifier);
     const auto finish = [notifier, offset, payload, fd, watchdog] {
         if (notifier->property("kdock.transferDone").toBool())
@@ -293,7 +293,7 @@ WaylandClipboard::WaylandClipboard(QObject *parent)
     setParent(parent);
 
     // Serving the clipboard means writing into pipes whose reader can vanish
-    // mid-transfer; the default SIGPIPE disposition would kill the dock.
+    // mid-transfer; the default SIGPIPE disposition would kill the accessory.
     ::signal(SIGPIPE, SIG_IGN);
 
     connect(this, &QWaylandClientExtension::activeChanged, this, &WaylandClipboard::ensureDevice);
@@ -332,7 +332,7 @@ void WaylandClipboard::onSelection(DataControlOffer *offer)
 
     int fds[2];
     if (::pipe2(fds, O_CLOEXEC) != 0) {
-        qWarning("kdock: clipboard pipe2 failed");
+        qWarning("kdock-clipboard: clipboard pipe2 failed");
         return;
     }
     offer->receive(textMime.isEmpty() ? imageMime : textMime, fds[1]);

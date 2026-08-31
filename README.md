@@ -15,7 +15,7 @@
 
 kdock **no enlaza contra KDE Frameworks ni contra Plasma**. Los protocolos Wayland se
 generan directamente desde sus XML con `qtwaylandscanner`, y todo lo demás se resuelve por
-D-Bus o por CLI. El resultado son nueve binarios sueltos, sin plugins que instalar y sin
+D-Bus o por CLI. El resultado son diez binarios sueltos, sin plugins que instalar y sin
 arrastrar medio Plasma como dependencia.
 
 Probado a diario en **KDE Plasma 6 / KWin**; la barra de tareas también funciona en
@@ -280,7 +280,7 @@ Frameworks:
 | Discos | Unidades extraíbles: montar, desmontar, expulsar, abrir | UDisks2 |
 | Red | Mini-ventana con tres solapas: **Wi-Fi** (redes cercanas, unirse con contraseña), **Guardadas** y **Detalles** (IP, máscara, puerta de enlace, DNS, MAC, IPv6). Botón *Configurar redes…* al editor completo | NetworkManager |
 | Clima | Ícono de la condición y temperatura; el clic abre la mini-app del pronóstico. Varias ciudades guardadas, con una activa | Open-Meteo (HTTPS, sin API key) |
-| Portapapeles | Historial de texto e imágenes con búsqueda, persistente, capturado en segundo plano | `ext-data-control-v1` |
+| Portapapeles | El widget solo lanza `kdock-clipboard`: historial de texto e imágenes con búsqueda, ventana normal redimensionable, opción **Fija** y ocultado después de copiar | `ext-data-control-v1` |
 | Iconset de KDE | Cambia el iconset de todo el escritorio, dejando intacto el del propio dock | `plasma-changeicons` |
 | Esquema de color | Aplica un esquema de color de KDE a todo el escritorio | `plasma-apply-colorscheme` |
 | Reloj | 12/24 h, fecha, segundos (dos variantes) | — |
@@ -463,6 +463,18 @@ botón de la tarjeta del panel, o `kdock-weather` a secas.
 - Sin ciudad configurada el widget del dock **igual se muestra**, con un ícono genérico: el clic
   lleva derecho a elegirla.
 
+### `kdock-clipboard` (binario accesorio)
+
+El widget **Portapapeles** del dock es ahora un launcher liviano de esta aplicación separada.
+`kdock-clipboard` mantiene el historial de texto e imágenes y se ejecuta fuera de `kdock`, de
+modo que un fallo en una transferencia, una imagen o la interfaz no puede tirar abajo el dock.
+
+La ventana es un toplevel normal, libremente redimensionable y con tamaño persistente. Se abre
+cerca del monitor y del borde donde se pulsó el widget (el compositor puede ajustar la posición
+final bajo Wayland), ofrece **Fija** y, por defecto, se oculta después de copiar; **Cerrar después
+de copiar** hace que termine solo este accesorio. También conserva las acciones para borrar, abrir
+y guardar el historial, además de la captura opcional de imágenes.
+
 ---
 
 ### `kdock-desktop` (binario accesorio)
@@ -533,7 +545,7 @@ Cada corrida usa un `XDG_DATA_HOME` descartable y herramientas de sistema falsas
 ```sh
 cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-sudo cmake --install build     # instala los nueve binarios y sus .desktop
+sudo cmake --install build     # instala los diez binarios y sus .desktop
 ```
 
 Para hacer todo el ciclo, incluida la actualización del host de la bandeja y el reinicio
@@ -632,6 +644,7 @@ La configuración vive en el directorio de datos XDG:
   desktop.conf                # kdock-desktop: lienzo y tarjetas
   systray.conf                # kdock-systray: bandeja residente
   weather.conf                # kdock-weather: ciudades y unidades
+  clipboard.conf              # kdock-clipboard: tamaño, Fija y cierre tras copiar
   clipboard-history.txt
 ```
 
@@ -674,9 +687,10 @@ contexto GL. QtQuick.Controls no los suelta después de cerrarlos, así que en u
 varias horas con media docena de docks el proceso acumulaba **68 hilos de render + 136 hilos
 Mesa** y un **heap de 571 MB**, sin techo. Desde esta versión:
 
-- Los **popups de clic** (el menú de aplicaciones, el portapapeles, los discos, la red y los
-  selectores de tema) se cargan bajo demanda con `Loader { active: false }` y se destruyen
-  automáticamente tras **30 segundos sin uso**, con el patrón medido en `tilemenu/`.
+- Los **popups de clic** (el menú de aplicaciones, los discos, la red y los selectores de tema)
+  se cargan bajo demanda con `Loader { active: false }` y se destruyen automáticamente tras **30
+  segundos sin uso**, con el patrón medido en `tilemenu/`. El portapapeles vive en el proceso
+  independiente `kdock-clipboard`.
 
 - Los **tooltips** son por elemento (comportamiento original): la API adjunta que los hacía
   compartir una sola instancia por ventana se probó y se descartó, porque posiciona el tooltip
@@ -715,6 +729,7 @@ Construir un dock cuesta ~0,4–1,5 s según cuántos widgets tenga (medible con
 | `controlmanager/` | Binario accesorio del panel de control (árbol propio, reusa 16 archivos de `src/`) |
 | `desktop/` | Binario accesorio del lienzo de widgets de escritorio (árbol propio, reusa el panel de control) |
 | `weather/` | Binario accesorio del clima (árbol propio, reusa 5 archivos de `src/`) |
+| `clipboard/` | Binario accesorio del historial del portapapeles (árbol propio, reusa el backend de historial) |
 | `systray/` | Binario accesorio residente de la bandeja del sistema |
 | `setwallpaper/` | Utilidad para «Abrir con» que establece el fondo del monitor actual |
 | `protocols/` | Protocolos Wayland vendoreados (layer-shell, foreign-toplevel, plasma-window, xdg-shell, ext-idle-notify) |

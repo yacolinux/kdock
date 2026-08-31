@@ -2033,22 +2033,6 @@ QWidget *SettingsDialog::createWidgetsTab()
     connect(showClipboard, &QCheckBox::toggled, m_config, &DockConfig::setShowClipboard);
     form->addRow(tr("Clipboard:"), showClipboard);
 
-    auto *clipW = new QSpinBox(tab);
-    clipW->setRange(240, 1600);
-    clipW->setSingleStep(20);
-    clipW->setSuffix(tr(" px"));
-    clipW->setValue(m_config->clipboardPopupWidth());
-    connect(clipW, QOverload<int>::of(&QSpinBox::valueChanged), m_config, &DockConfig::setClipboardPopupWidth);
-    form->addRow(tr("Clipboard width:"), clipW);
-
-    auto *clipH = new QSpinBox(tab);
-    clipH->setRange(200, 1600);
-    clipH->setSingleStep(20);
-    clipH->setSuffix(tr(" px"));
-    clipH->setValue(m_config->clipboardPopupHeight());
-    connect(clipH, QOverload<int>::of(&QSpinBox::valueChanged), m_config, &DockConfig::setClipboardPopupHeight);
-    form->addRow(tr("Clipboard height:"), clipH);
-
     auto *showDisks = new QCheckBox(tr("Show removable disks button (UDisks2)"), tab);
     showDisks->setChecked(m_config->showDisks());
     connect(showDisks, &QCheckBox::toggled, m_config, &DockConfig::setShowDisks);

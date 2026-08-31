@@ -19,7 +19,7 @@ qt_standard_project_setup()
 # (Q_PLUGIN_METADATA in src/layershell.cpp; Q_IMPORT_PLUGIN stays in main.cpp)
 # survive without any Q_INIT_RESOURCE bookkeeping.
 #
-# The three accessory binaries are deliberately NOT built on this: they compile
+# Accessory binaries are deliberately NOT built on this: they compile
 # their handful of ../src files themselves, which is what keeps them decoupled
 # from this target (see the comment at the top of controlmanager/CMakeLists.txt).
 add_library(kdock_core OBJECT
@@ -51,8 +51,6 @@ add_library(kdock_core OBJECT
     src/audiocontrol.cpp      src/audiocontrol.h
     src/clockwidget.cpp       src/clockwidget.h
     src/clockwidget2.cpp      src/clockwidget2.h
-    src/clipboardhistory.cpp  src/clipboardhistory.h
-    src/waylandclipboard.cpp  src/waylandclipboard.h
     src/overviewcontrol.cpp   src/overviewcontrol.h
     src/desktopcontrol.cpp    src/desktopcontrol.h
     src/virtualdesktops.cpp   src/virtualdesktops.h
@@ -89,6 +87,7 @@ add_library(kdock_core OBJECT
     src/weathercontrol.cpp      src/weathercontrol.h
     src/weatherconfig.cpp       src/weatherconfig.h
     src/weatherlauncher.cpp     src/weatherlauncher.h
+    src/clipboardlauncher.cpp   src/clipboardlauncher.h
     src/networksettings.cpp     src/networksettings.h
     src/networksettingswidget.cpp src/networksettingswidget.h
     src/connectioneditor.cpp    src/connectioneditor.h
@@ -115,16 +114,12 @@ qt_generate_wayland_protocol_client_sources(kdock_core FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-layer-shell-unstable-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/wlr-foreign-toplevel-management-unstable-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/plasma-window-management.xml
-    # Clipboard access without keyboard focus (see src/waylandclipboard.h).
-    # Unlike plasma-window-management this one is *not* in KWin's restricted
-    # interface list, so no .desktop privilege is involved.
-    ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-data-control-v1.xml
     ${CMAKE_CURRENT_SOURCE_DIR}/protocols/ext-idle-notify-v1.xml
 )
 
 qt_add_resources(kdock_core "qml"
     PREFIX "/"
-    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/NeonMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/ClipboardPopup.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
+    FILES qml/Dock.qml qml/Wallpaper.qml qml/AppPreviewWindow.qml qml/RelanzadorWidget.qml qml/RelanzadorPopup.qml qml/AppMenuPopup.qml qml/IconMenuItem.qml qml/SubMenuDelegate.qml qml/BackgroundColorMenu.qml qml/ModeMenu.qml qml/NeonMenu.qml qml/IconLabelMenu.qml qml/WidgetLabelMenu.qml qml/AppsWidgetMenu.qml qml/ScriptRunnerWidget.qml qml/DisksPopup.qml qml/NetworkPopup.qml qml/ThemeListPopup.qml
 )
 
 # Shipped translation layers. They are copied to
@@ -192,6 +187,7 @@ add_subdirectory(controlmanager)
 # desktop-widget canvas under the dock (see desktop/CMakeLists.txt).
 add_subdirectory(desktop)
 add_subdirectory(weather)
+add_subdirectory(clipboard)
 # kdock-systray: the system tray host+watcher and its window (see systray/CMakeLists.txt).
 add_subdirectory(systray)
 # kdock-setwallpaper: tiny "set this image as the current monitor's wallpaper"

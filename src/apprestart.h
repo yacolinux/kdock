@@ -1,7 +1,7 @@
 // "Reiniciar" for the whole kdock family, not just the dock process.
 //
-// The three resident accessories (kdock-previews, kdock-tilemenu,
-// kdock-controlmanager) are separate processes that outlive a kdock restart on
+// The resident accessories (kdock-previews, kdock-tilemenu, kdock-controlmanager,
+// kdock-desktop and kdock-clipboard) are separate processes that outlive a kdock restart on
 // purpose — that is what makes them instant on the next click. The price is
 // that restarting the dock alone leaves them running the binary that was on
 // disk when THEY started: right after an install, the old one. The fix the user

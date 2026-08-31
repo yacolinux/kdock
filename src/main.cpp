@@ -21,7 +21,6 @@
 #include "clockwidget.h"
 #include "clockwidget2.h"
 #include "configarchive.h"
-#include "clipboardhistory.h"
 #include "desktopentry.h"
 #include "desktopmaximize.h"
 #include "dockconfig.h"
@@ -397,7 +396,6 @@ int main(int argc, char *argv[])
     PowerControl power;
     RelanzadoresManager relanzadores(&apps);
     ScriptRunnersManager scriptRunners;
-    ClipboardHistory clipboardHistory;
     DisksControl disks;
     NetworkControl network;
     AppearanceControl appearance(&theme);
@@ -468,7 +466,6 @@ int main(int argc, char *argv[])
     shared.power = &power;
     shared.relanzadores = &relanzadores;
     shared.scriptRunners = &scriptRunners;
-    shared.clipboardHistory = &clipboardHistory;
     shared.disks = &disks;
     shared.network = &network;
     shared.weather = &weather;
