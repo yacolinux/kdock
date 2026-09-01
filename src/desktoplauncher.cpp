@@ -9,6 +9,7 @@
 #include <QGuiApplication>
 #include <QProcess>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTimer>
@@ -18,6 +19,16 @@ const auto kBinary = QStringLiteral("kdock-desktop");
 const auto kServiceBase = QStringLiteral("org.kdock.Desktop");
 const auto kInterface = QStringLiteral("org.kdock.Desktop");
 const auto kPath = QStringLiteral("/Desktop");
+constexpr int kStartProbeMs = 100;
+constexpr int kStartProbeCount = 50;
+
+// `runningOn()` is a D-Bus check, so it is necessarily false during the small
+// window between startDetached() and CmService::registerOnBus(). Keep a local
+// reservation during that window as a second line of defense: repeated
+// hotplug/applyState notifications cannot launch another copy for the same
+// connector before the child has claimed its per-monitor service name.
+QSet<QString> pendingStarts;
+QSet<QString> pendingStops;
 
 QString settingsFilePath()
 {
@@ -46,6 +57,27 @@ void callInstance(const QString &connector, const QString &method,
     // asyncCall: a wedged instance must not block the dock for the D-Bus default
     // of 25 s.
     QDBusConnection::sessionBus().asyncCall(msg);
+}
+
+void probeStart(const QString &connector, int remaining)
+{
+    if (!pendingStarts.contains(connector))
+        return;
+    if (DesktopLauncher::runningOn(connector)) {
+        pendingStarts.remove(connector);
+        if (pendingStops.contains(connector)) {
+            pendingStops.remove(connector);
+            callInstance(connector, QStringLiteral("quit"));
+        }
+        return;
+    }
+    if (remaining <= 0) {
+        pendingStarts.remove(connector);
+        return;
+    }
+    QTimer::singleShot(kStartProbeMs, [connector, remaining] {
+        probeStart(connector, remaining - 1);
+    });
 }
 } // namespace
 
@@ -151,19 +183,33 @@ bool DesktopLauncher::start(const QStringList &args)
 
 void DesktopLauncher::launchOn(const QString &connector)
 {
-    if (runningOn(connector))
+    // A stop requested while the child was still starting is superseded by a
+    // new desired state from applyState().
+    pendingStops.remove(connector);
+    if (runningOn(connector) || pendingStarts.contains(connector))
         return;
-    start({QStringLiteral("--screen"), connector});
+    if (start({QStringLiteral("--screen"), connector})) {
+        pendingStarts.insert(connector);
+        probeStart(connector, kStartProbeCount);
+    }
 }
 
 void DesktopLauncher::quitOn(const QString &connector)
 {
-    if (runningOn(connector))
+    if (pendingStarts.contains(connector))
+        pendingStops.insert(connector);
+    if (runningOn(connector)) {
+        pendingStarts.remove(connector);
+        pendingStops.remove(connector);
         callInstance(connector, QStringLiteral("quit"));
+    } else if (!pendingStarts.contains(connector)) {
+        pendingStops.remove(connector);
+    }
 }
 
 void DesktopLauncher::restartOn(const QString &connector)
 {
+    pendingStops.remove(connector);
     if (!runningOn(connector)) {
         launchOn(connector);
         return;
@@ -171,7 +217,7 @@ void DesktopLauncher::restartOn(const QString &connector)
     // The bus name is the single-instance lock; a new instance started now would
     // just forward to the dying one. Let the old one drop the name first.
     callInstance(connector, QStringLiteral("quit"));
-    QTimer::singleShot(600, [connector] { start({QStringLiteral("--screen"), connector}); });
+    QTimer::singleShot(600, [connector] { launchOn(connector); });
 }
 
 void DesktopLauncher::openSettingsOn(const QString &connector)

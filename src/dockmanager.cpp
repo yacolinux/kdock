@@ -592,23 +592,19 @@ void DockManager::sync()
             alive << id;
     const QStringList wanted = wantedDocks(currentDesktop());
 
-    // Tear down docks that lost their monitor or were disabled, or whose
-    // primary role changed (the primary dock is the only one that hosts
-    // relanzadores by default, so a change of primary monitor means recreating
-    // the affected instances). A dock the *desktop* doesn't want is not in this
-    // group: it survives, just hidden.
-    const QStringList shown = m_instances.keys();
-    for (const QString &id : shown) {
+    // Tear down docks that lost their monitor, were disabled, or are not wanted
+    // on the current virtual desktop. The config remains on disk (and its
+    // DockConfig remains cached), but the QML engine, layer surface and per-dock
+    // objects do not survive a desktop switch. This is what keeps a session
+    // with many configured desktop-specific docks from keeping all of them
+    // alive at once.
+    for (const QString &id : m_instances.keys()) {
         const bool wantPrimary = (id == primaryDock);
-        if (!alive.contains(id) || m_instances[id].primary != wantPrimary)
+        if (!alive.contains(id) || !wanted.contains(id)
+            || m_instances[id].primary != wantPrimary)
             destroyInstance(id);
     }
 
-    // Incoming first, outgoing second: on a desktop switch that swaps one dock
-    // for another this avoids a frame with no dock at all. (KWin re-lays out
-    // maximized windows on its own if the two reserve different amounts of
-    // space — its work areas are per output, not per desktop.)
-    //
     // Creating a DockWindow loads QML (Dock.qml) synchronously — ~1s per dock
     // on this hardware (measured 2026-08-21: 3 docks * ~1s = 3.6s inside sync()).
     // Doing them back-to-back blocks the event loop for the whole batch, so the
@@ -622,7 +618,6 @@ void DockManager::sync()
     if (!toCreate.isEmpty()) {
         const QString first = toCreate.takeFirst();
         createInstance(first, first == primaryDock);
-        setInstanceOnScreen(first, true);
         int delay = 0;
         for (const QString &id : std::as_const(toCreate)) {
             const bool isPrimary = (id == primaryDock);
@@ -646,31 +641,9 @@ void DockManager::sync()
                 if (!DockConfig::enabledDocks().contains(id))
                     return;
                 createInstance(id, isPrimary);
-                setInstanceOnScreen(id, true);
             });
         }
-        // Already-existing wanted docks still need onScreen=true
-        for (const QString &id : wanted) {
-            if (m_instances.contains(id))
-                setInstanceOnScreen(id, true);
-        }
-    } else {
-        for (const QString &id : wanted)
-            setInstanceOnScreen(id, true);
     }
-    for (const QString &id : alive)
-        if (!wanted.contains(id))
-            setInstanceOnScreen(id, false);
-}
-
-void DockManager::setInstanceOnScreen(const QString &dockId, bool onScreen)
-{
-    auto it = m_instances.find(dockId);
-    if (it == m_instances.end() || it->onScreen == onScreen)
-        return;
-    it->onScreen = onScreen;
-    if (it->window)
-        it->window->setDeskVisible(onScreen);
 }
 
 void DockManager::createInstance(const QString &dockId, bool primary)

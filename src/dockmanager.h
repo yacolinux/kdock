@@ -14,11 +14,11 @@
 //
 // Docks are also filtered by KWin's current **virtual desktop**: each dock
 // carries a (possibly empty) list of desktops in DockConfig::dockDesktops(),
-// and wantedDocks() turns that into the set to show. Unlike a monitor going
-// away, a dock the current desktop does not want is only **hidden**, never
-// destroyed, and it is not built at all until the first time a desktop asks
-// for it — that laziness is the point (a DockWindow carries a whole QML
-// engine).
+// and wantedDocks() turns that into the set to show. A dock the current desktop
+// does not want is not kept as a hidden QML engine: it is destroyed and rebuilt
+// when that desktop becomes current. Its DockConfig remains cached so the
+// persistent layout is untouched, while the expensive live objects are limited
+// to docks that can actually be shown.
 
 #pragma once
 
@@ -275,10 +275,6 @@ private:
         ClockWidget2 *clock2 = nullptr;
         DockWindow *window = nullptr;
         bool primary = false;
-        // False while the current virtual desktop doesn't want this dock: the
-        // instance stays built (and keeps its QML engine) but its surface is
-        // unmapped. See sync().
-        bool onScreen = true;
     };
 
     void migrateFirstRun();
@@ -286,8 +282,6 @@ private:
     // only in what happens to the source once the copy is in place.
     QString cloneToNextMonitor(const QString &dockId, bool keepSource);
     void sync();
-    // Map/unmap an existing dock's surface without destroying the instance.
-    void setInstanceOnScreen(const QString &dockId, bool onScreen);
     Instance buildInstance(const QString &dockId, bool primary);
     void teardownInstance(Instance &inst);
     void createInstance(const QString &dockId, bool primary);
