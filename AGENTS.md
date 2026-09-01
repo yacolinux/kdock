@@ -1825,13 +1825,17 @@ esa config), solo hacen **avanzar**.
   diálogo de KDE, que **previsualiza imágenes**, sin que kdock dependa de KDE Frameworks. La
   miniatura se decodifica con `QImageReader::setScaledSize()`, no cargando el archivo entero.
 
-### Screensaver (`src/screensavermanager.cpp` + `src/screensaverwindow.cpp`, 2026-08-31)
+### Screensaver (`src/screensavermanager.cpp` + `src/screensaverwindow.cpp`, 2026-09-01)
 
-- After Dark se carga en `QWebEngineView` como una superficie layer-shell por monitor. En
-  monitores cuyo `wl_output` llega con `InvertedLandscapeOrientation`, Chromium puede ignorar la
-  transformación de 180 grados y dibujar la escena cabeza abajo. `ScreensaverWindow` lo corrige
-  después de `loadFinished` aplicando esa rotación al documento **solo** para After Dark; el modo
-  wallpaper no pasa por WebEngine y no se modifica.
+- After Dark se carga en `QWebEngineView` como una superficie layer-shell por monitor. La
+  orientación la resuelve el compositor/Qt para el `wl_output`; no se agrega una rotación CSS
+  adicional, porque en una salida `InvertedLandscapeOrientation` eso puede duplicar la
+  transformación y dejar la escena cabeza abajo.
+- La lista de escenas soportadas está compilada (`allAfterDarkPages()`). Cuando se configura una
+  carpeta local, `availableAfterDarkPages()` conserva solamente esas escenas cuyo HTML todavía
+  existe y es legible; la carpeta local es autoritativa, así que borrar una escena evita que vuelva
+  al ciclo y no hace que kdock la descargue de la galería pública. Con la carpeta vacía se usa la
+  colección pública.
 
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.

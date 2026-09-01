@@ -28,7 +28,7 @@
 namespace {
 constexpr uint AnchorAll = 1u | 2u | 4u | 8u;
 
-const QStringList &afterDarkPages()
+const QStringList &allAfterDarkPages()
 {
     static const QStringList pages = {
         QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
@@ -38,6 +38,22 @@ const QStringList &afterDarkPages()
         QStringLiteral("messages.html"), QStringLiteral("messages2.html"),
         QStringLiteral("rainstorm.html"), QStringLiteral("spotlight.html"),
         QStringLiteral("warp.html")};
+    return pages;
+}
+
+QStringList availableAfterDarkPages()
+{
+    const QString local = DockConfig::screensaverAfterDarkPath();
+    if (local.isEmpty())
+        return allAfterDarkPages();
+
+    const QDir directory(local);
+    QStringList pages;
+    for (const QString &page : allAfterDarkPages()) {
+        const QFileInfo file(directory.filePath(page));
+        if (file.isFile() && file.isReadable())
+            pages.append(page);
+    }
     return pages;
 }
 
@@ -63,10 +79,6 @@ ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops 
     setContextMenuPolicy(Qt::NoContextMenu);
     settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessFileUrls, true);
     settings()->setAttribute(QWebEngineSettings::LocalContentCanAccessRemoteUrls, false);
-    connect(this, &QWebEngineView::loadFinished, this, [this](bool ok) {
-        if (ok && m_activeEngine == 1)
-            applyContentOrientation();
-    });
     // QWidget top-levels expose their QWindow lazily. Force that handle before
     // show(), then set the same pre-role properties used by DockWindow; the
     // layer-shell integration reads them when the window gets its shell role.
@@ -161,7 +173,10 @@ if(!images.length){document.body.innerHTML='<div style="height:100%;display:grid
 
 QString ScreensaverWindow::afterDarkHtml(const QString &pageOverride) const
 {
-    const QStringList &pages = afterDarkPages();
+    const QStringList pages = availableAfterDarkPages();
+    if (pages.isEmpty())
+        return {};
+
     QString page = pageOverride;
     if (!pages.contains(page))
         page = pages.at(m_afterDarkIndex % pages.size());
@@ -169,9 +184,9 @@ QString ScreensaverWindow::afterDarkHtml(const QString &pageOverride) const
     const QString local = DockConfig::screensaverAfterDarkPath();
     if (!local.isEmpty()) {
         const QFileInfo selected(QDir(local).filePath(page));
-        if (selected.isFile())
-            return QUrl::fromLocalFile(selected.absoluteFilePath()).toString(QUrl::FullyEncoded);
+        return QUrl::fromLocalFile(selected.absoluteFilePath()).toString(QUrl::FullyEncoded);
     }
+
     return QStringLiteral("https://bryanbraun.github.io/after-dark-css/all/%1")
         .arg(page);
 }
@@ -218,7 +233,13 @@ void ScreensaverWindow::prepareWallpaper()
 
 void ScreensaverWindow::prepareAfterDark(const QString &page)
 {
-    const QStringList &pages = afterDarkPages();
+    const QStringList pages = availableAfterDarkPages();
+    if (pages.isEmpty()) {
+        m_afterDarkIndex = 0;
+        m_afterDarkPage.clear();
+        return;
+    }
+
     const int requested = pages.indexOf(page);
     m_afterDarkIndex = requested >= 0 ? requested : m_monitorIndex % pages.size();
     m_afterDarkPage = pages.at(m_afterDarkIndex);
@@ -227,7 +248,15 @@ void ScreensaverWindow::prepareAfterDark(const QString &page)
 void ScreensaverWindow::advanceContent()
 {
     if (m_activeEngine == 1) {
-        const QStringList &pages = afterDarkPages();
+        const QStringList pages = availableAfterDarkPages();
+        if (pages.isEmpty())
+            return;
+
+        // The local checkout can change while the saver is visible. Rebase the
+        // current scene on the filtered list before advancing so a deleted
+        // page can never re-enter the cycle.
+        const int current = pages.indexOf(m_afterDarkPage);
+        m_afterDarkIndex = current >= 0 ? current : m_afterDarkIndex % pages.size();
         m_afterDarkIndex = (m_afterDarkIndex + 1) % pages.size();
         m_afterDarkPage = pages.at(m_afterDarkIndex);
         load(QUrl(afterDarkHtml(m_afterDarkPage)));
@@ -250,39 +279,6 @@ void ScreensaverWindow::applyLayerProperties()
         handle->setProperty("kdock.exclusiveZone", -1);
         handle->setProperty("kdock.margins", QVariant::fromValue(QMargins()));
     }
-}
-
-void ScreensaverWindow::applyContentOrientation()
-{
-    QScreen *screen = nullptr;
-    for (QScreen *candidate : QGuiApplication::screens()) {
-        if (candidate && candidate->name() == m_screenName) {
-            screen = candidate;
-            break;
-        }
-    }
-    if (!screen)
-        return;
-
-    // Qt reports the wl_output transform through QScreen::orientation().
-    // Chromium's WebEngine widget can miss the 180° output transform on a
-    // layer-shell surface, leaving After Dark upside down only on that
-    // monitor. Compensate in the document; wallpaper mode is not WebEngine and
-    // must remain untouched.
-    int rotation = 0;
-    switch (screen->orientation()) {
-    case Qt::InvertedLandscapeOrientation:
-        rotation = 180;
-        break;
-    default:
-        return;
-    }
-
-    const QString js = QStringLiteral(
-        "document.documentElement.style.transform='rotate(%1deg)';"
-        "document.documentElement.style.transformOrigin='center center';")
-                           .arg(rotation);
-    page()->runJavaScript(js);
 }
 
 void ScreensaverWindow::updateScreen()
