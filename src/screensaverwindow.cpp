@@ -28,11 +28,13 @@
 namespace {
 constexpr uint AnchorAll = 1u | 2u | 4u | 8u;
 
-const QStringList &allAfterDarkPages()
+const QStringList &publicAfterDarkPages()
 {
+    // The public gallery has no directory to enumerate, so its known set is
+    // retained strictly as the fallback when no local After Dark folder was
+    // configured.
     static const QStringList pages = {
-        QStringLiteral("bouncing-ball.html"), QStringLiteral("defrag.html"),
-        QStringLiteral("fade-out.html"),
+        QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
         QStringLiteral("fish.html"),
         QStringLiteral("flying-toasters.html"), QStringLiteral("globe.html"),
         QStringLiteral("hard-rain.html"), QStringLiteral("logo.html"),
@@ -46,16 +48,16 @@ QStringList availableAfterDarkPages()
 {
     const QString local = DockConfig::screensaverAfterDarkPath();
     if (local.isEmpty())
-        return allAfterDarkPages();
+        return publicAfterDarkPages();
 
+    // A local collection is authoritative. Discover the readable scenes from
+    // its top-level all/ folder on every preparation instead of filtering a
+    // compiled whitelist: additions and removals are therefore picked up on
+    // the next kdock start (and also by the change-scene button while running).
     const QDir directory(local);
-    QStringList pages;
-    for (const QString &page : allAfterDarkPages()) {
-        const QFileInfo file(directory.filePath(page));
-        if (file.isFile() && file.isReadable())
-            pages.append(page);
-    }
-    return pages;
+    return directory.entryList({QStringLiteral("*.html")},
+                               QDir::Files | QDir::Readable,
+                               QDir::Name | QDir::IgnoreCase);
 }
 
 QString jsArray(const QStringList &values)
@@ -254,7 +256,7 @@ void ScreensaverWindow::advanceContent()
             return;
 
         // The local checkout can change while the saver is visible. Rebase the
-        // current scene on the filtered list before advancing so a deleted
+        // current scene on the discovered list before advancing so a deleted
         // page can never re-enter the cycle.
         const int current = pages.indexOf(m_afterDarkPage);
         m_afterDarkIndex = current >= 0 ? current : m_afterDarkIndex % pages.size();

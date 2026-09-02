@@ -1837,17 +1837,17 @@ esa config), solo hacen **avanzar**.
   orientación la resuelve el compositor/Qt para el `wl_output`; no se agrega una rotación CSS
   adicional, porque en una salida `InvertedLandscapeOrientation` eso puede duplicar la
   transformación y dejar la escena cabeza abajo.
-- La lista de escenas soportadas está compilada (`allAfterDarkPages()`). Cuando se configura una
-  carpeta local, `availableAfterDarkPages()` conserva solamente esas escenas cuyo HTML todavía
-  existe y es legible; la carpeta local es autoritativa, así que borrar una escena evita que vuelva
-  al ciclo y no hace que kdock la descargue de la galería pública. Con la carpeta vacía se usa la
-  colección pública.
+- Con una carpeta local, `availableAfterDarkPages()` enumera en cada preparación los archivos
+  `*.html` legibles de su nivel superior, ordenados sin distinguir mayúsculas/minúsculas. No hay
+  caché ni recorrido recursivo: agregar o quitar una escena queda reflejado al reiniciar kdock
+  (también al pedir *Cambiar* mientras está visible), y borrar una página no la deja volver al
+  ciclo. La lista compilada `publicAfterDarkPages()` se usa **solo** cuando no hay una carpeta
+  local, porque la galería pública no se puede enumerar.
 - **Defrag** (`after-dark-css/all/defrag.html`, 2026-09-02) es una escena local de estilo DOS:
   dibuja un mapa de clusters fragmentado y mueve bloques hasta agruparlos, con progreso y un ciclo
-  nuevo al terminar. Para que kdock la encuentre con una carpeta After Dark local debe figurar en
-  `allAfterDarkPages()`; para seleccionarla manualmente también se agrega al modelo de
-  `desktop/qml/ControlManager.qml`. El HTML vive fuera de este repositorio, en la colección local
-  configurada por el usuario.
+  nuevo al terminar. La enumeración local la descubre sin agregarla a una lista C++; para
+  seleccionarla manualmente también se agrega al modelo de `desktop/qml/ControlManager.qml`. El
+  HTML vive fuera de este repositorio, en la colección local configurada por el usuario.
 
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.
