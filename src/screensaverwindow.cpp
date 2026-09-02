@@ -31,7 +31,8 @@ constexpr uint AnchorAll = 1u | 2u | 4u | 8u;
 const QStringList &allAfterDarkPages()
 {
     static const QStringList pages = {
-        QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
+        QStringLiteral("bouncing-ball.html"), QStringLiteral("defrag.html"),
+        QStringLiteral("fade-out.html"),
         QStringLiteral("fish.html"),
         QStringLiteral("flying-toasters.html"), QStringLiteral("globe.html"),
         QStringLiteral("hard-rain.html"), QStringLiteral("logo.html"),

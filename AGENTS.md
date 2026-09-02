@@ -1842,6 +1842,12 @@ esa config), solo hacen **avanzar**.
   existe y es legible; la carpeta local es autoritativa, así que borrar una escena evita que vuelva
   al ciclo y no hace que kdock la descargue de la galería pública. Con la carpeta vacía se usa la
   colección pública.
+- **Defrag** (`after-dark-css/all/defrag.html`, 2026-09-02) es una escena local de estilo DOS:
+  dibuja un mapa de clusters fragmentado y mueve bloques hasta agruparlos, con progreso y un ciclo
+  nuevo al terminar. Para que kdock la encuentre con una carpeta After Dark local debe figurar en
+  `allAfterDarkPages()`; para seleccionarla manualmente también se agrega al modelo de
+  `desktop/qml/ControlManager.qml`. El HTML vive fuera de este repositorio, en la colección local
+  configurada por el usuario.
 
 ### Clock2 (`src/clockwidget2.cpp` + `clock2Comp` in `Dock.qml`)
 - A second clock widget (token `clock2`, flag `config.showClock2`) that shows the time like `clock` but with a **larger custom tooltip**: gray `#404040` rounded background, time in yellow `#FFD700` 16px bold, date below in white. Its on-dock font sizes are ~30% larger than `clock` (`iconSize*0.455` / `*0.26`). Bound to the same per-monitor clock format settings as `clock`.

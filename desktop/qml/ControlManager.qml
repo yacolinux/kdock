@@ -782,6 +782,7 @@ Item {
             Repeater {
                 model: [
                     { page: "bouncing-ball.html", label: qsTr("Bouncing ball") },
+                    { page: "defrag.html", label: qsTr("Defrag") },
                     { page: "fade-out.html", label: qsTr("Fade out") },
                     { page: "fish.html", label: qsTr("Fish") },
                     { page: "flying-toasters.html", label: qsTr("Flying toasters") },

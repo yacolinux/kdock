@@ -1285,6 +1285,7 @@ Copiar a Sig. Monitor = Copy to next monitor
 Corre %1 = Corre %1
 Crear dock vacío = Create empty dock
 Dark = Dark
+Defrag = Defrag
 Deja de regenerar solo. Restaura el esquema y el iconset que estaban guardados antes de activarlo. = Deja de regenerar solo. Restaura el esquema y el iconset que estaban guardados antes de activarlo.
 Desactivar = Desactivar
 Desactivar solo en este dock = Desactivar solo en este dock
