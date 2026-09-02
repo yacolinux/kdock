@@ -1,9 +1,10 @@
 // Export/import of the whole kdock configuration as a .zip. The config lives in
 // ~/.local/share/kdock/ as kdock.conf (shared: relanzadores, script runners +
 // their scripts, ...) plus one kdock-<dock>.conf per dock, and the .conf of each
-// accessory binary (previews, tilemenu, controlmanager, weather). Uses QtCore's
-// private QZipWriter/QZipReader so there is no external (zip/unzip) runtime
-// dependency.
+// accessory binary, plus the user-editable translation layers. Clipboard
+// history is intentionally excluded: it is private content, not configuration.
+// Uses QtCore's private QZipWriter/QZipReader so there is no external
+// (zip/unzip) runtime dependency.
 //
 // A *preset* is one of those same archives, kept inside the config directory
 // (~/.local/share/kdock/presets/<name>.zip) so the Settings dialog can list it
@@ -50,13 +51,15 @@ public:
     static bool importPreset(const QString &zipPath, const QString &name,
                              QString *error = nullptr);
 
-    // Zip every kdock*.conf into `zipPath` (+ a small manifest). Returns false
-    // and sets *error on failure.
+    // Zip every kdock configuration file and editable translation layer into
+    // `zipPath` (+ a small manifest). Clipboard history is never included.
+    // Returns false and sets *error on failure.
     static bool exportTo(const QString &zipPath, QString *error = nullptr);
 
     // Restore config from `zipPath`. Validates it contains kdock.conf, backs up
-    // the current config, then replaces the kdock*.conf files. Rejects entries
-    // whose name isn't a plain kdock*.conf (anti zip-slip).
+    // the current config, then replaces the configuration files and, for new
+    // archives, translation layers. Rejects paths outside those known entries
+    // (anti zip-slip).
     static bool importFrom(const QString &zipPath, QString *error = nullptr);
 
     // Whether `zipPath` looks like an archive importFrom() would accept (it

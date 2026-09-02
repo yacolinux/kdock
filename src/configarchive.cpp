@@ -21,29 +21,66 @@ QString ConfigArchive::configDir()
     return QFileInfo(DockConfig::settingsFilePath()).absolutePath();
 }
 
-// The families of settings files that live in the kdock data dir: the docks
-// themselves plus one per accessory binary. The accessories keep their own
-// files, and leaving them out of the backup meant a restore silently dropped
-// the tile layout the user had built.
+// The families of settings files that live in the kdock data dir. Keep this
+// list as the single source for both export and import: a family present at
+// only one end makes a backup look successful while silently not restoring it.
+static const QStringList &configPrefixes()
+{
+    static const QStringList prefixes{QStringLiteral("kdock"),
+                                      QStringLiteral("previews"),
+                                      QStringLiteral("tilemenu"),
+                                      QStringLiteral("controlmanager"),
+                                      QStringLiteral("weather"),
+                                      QStringLiteral("desktop"),
+                                      QStringLiteral("systray"),
+                                      QStringLiteral("clipboard")};
+    return prefixes;
+}
+
 static const QStringList &configGlobs()
 {
-    static const QStringList globs{QStringLiteral("kdock*.conf"),
-                                   QStringLiteral("previews*.conf"),
-                                   QStringLiteral("tilemenu*.conf"),
-                                   QStringLiteral("controlmanager*.conf"),
-                                   QStringLiteral("weather*.conf")};
+    static const QStringList globs = [] {
+        QStringList out;
+        for (const QString &prefix : configPrefixes())
+            out.append(prefix + QStringLiteral("*.conf"));
+        return out;
+    }();
     return globs;
 }
 
 static bool isConfigEntry(const QString &name)
 {
-    // Plain file name, no path separators (anti zip-slip). Every family of
-    // configGlobs() has to be listed here or the entry is exported and then
-    // silently dropped on import — which is exactly what happened to
-    // controlmanager.conf until 2026-08-13.
-    static const QRegularExpression re(
-        QStringLiteral("^(kdock|previews|tilemenu|controlmanager|weather)[\\w.#-]*\\.conf$"));
-    return re.match(name).hasMatch();
+    // Plain file name, no path separators (anti zip-slip).
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\'))
+        || !name.endsWith(QLatin1String(".conf")))
+        return false;
+    for (const QString &prefix : configPrefixes()) {
+        if (name.startsWith(prefix))
+            return true;
+    }
+    return false;
+}
+
+constexpr auto kTranslationsDir = "translations";
+constexpr auto kTranslationsMarker = "translations/.kdock-archive";
+
+static bool isTranslationEntry(const QString &name)
+{
+    const QString prefix = QLatin1String(kTranslationsDir) + QLatin1Char('/');
+    if (!name.startsWith(prefix) || name == QLatin1String(kTranslationsMarker))
+        return false;
+    const QString fileName = name.mid(prefix.size());
+    // Translation names are made by Translations::createFrom(), which permits
+    // only one safe file name. The check also keeps a crafted archive from
+    // escaping the translations directory.
+    return !fileName.isEmpty() && !fileName.contains(QLatin1Char('/'))
+           && !fileName.contains(QLatin1Char('\\'))
+           && fileName.endsWith(QLatin1String(".md"));
+}
+
+static QString translationsDirPath(const QDir &configDir)
+{
+    return configDir.filePath(QLatin1String(kTranslationsDir));
 }
 
 // Which glob an archive entry belongs to, so importing only clears the families
@@ -60,11 +97,16 @@ static QString familyOf(const QString &name)
 
 bool ConfigArchive::exportTo(const QString &zipPath, QString *error)
 {
+    // The dock keeps one QSettings object per live instance. Flush those
+    // pending writes before reading the files below; otherwise exporting from
+    // the settings dialog can miss the change that was just made there.
+    DockConfig::syncAll();
+
     const QDir dir(configDir());
     const QStringList files = dir.entryList(configGlobs(), QDir::Files);
-    if (files.isEmpty()) {
+    if (!files.contains(QStringLiteral("kdock.conf"))) {
         if (error)
-            *error = QStringLiteral("No configuration files found in %1").arg(dir.path());
+            *error = QStringLiteral("No shared configuration file found in %1").arg(dir.path());
         return false;
     }
 
@@ -77,14 +119,36 @@ bool ConfigArchive::exportTo(const QString &zipPath, QString *error)
 
     for (const QString &name : files) {
         QFile f(dir.filePath(name));
-        if (!f.open(QIODevice::ReadOnly))
-            continue;
+        if (!f.open(QIODevice::ReadOnly)) {
+            if (error)
+                *error = QStringLiteral("Cannot read %1").arg(f.fileName());
+            zw.close();
+            return false;
+        }
         zw.addFile(name, f.readAll());
     }
 
+    // The selected language only names a file in kdock.conf; the editable
+    // translation layers themselves live in this directory and must travel
+    // with a complete configuration. The marker lets import distinguish a new
+    // archive with an intentionally empty directory from old archives that
+    // predate translation backups.
+    const QDir translations(translationsDirPath(dir));
+    for (const QString &name : translations.entryList({QStringLiteral("*.md")}, QDir::Files)) {
+        QFile f(translations.filePath(name));
+        if (!f.open(QIODevice::ReadOnly)) {
+            if (error)
+                *error = QStringLiteral("Cannot read %1").arg(f.fileName());
+            zw.close();
+            return false;
+        }
+        zw.addFile(QLatin1String(kTranslationsDir) + QLatin1Char('/') + name, f.readAll());
+    }
+    zw.addFile(QLatin1String(kTranslationsMarker), QByteArray());
+
     // Small manifest for validation / provenance.
     const QString manifest =
-        QStringLiteral("{\n  \"app\": \"kdock\",\n  \"version\": 1,\n  \"exported\": \"%1\"\n}\n")
+        QStringLiteral("{\n  \"app\": \"kdock\",\n  \"version\": 2,\n  \"exported\": \"%1\"\n}\n")
             .arg(QDateTime::currentDateTime().toString(Qt::ISODate));
     zw.addFile(QStringLiteral("kdock-export.json"), manifest.toUtf8());
 
@@ -110,15 +174,23 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
     QList<QPair<QString, QByteArray>> entries;
     QStringList families;
     bool hasShared = false;
+    bool hasTranslations = false;
     for (const QZipReader::FileInfo &fi : zr.fileInfoList()) {
-        if (!fi.isFile || !isConfigEntry(fi.filePath))
+        if (!fi.isFile)
             continue;
-        if (fi.filePath == QLatin1String("kdock.conf"))
-            hasShared = true;
-        const QString family = familyOf(fi.filePath);
-        if (!family.isEmpty() && !families.contains(family))
-            families.append(family);
-        entries.append({fi.filePath, zr.fileData(fi.filePath)});
+        if (isConfigEntry(fi.filePath)) {
+            if (fi.filePath == QLatin1String("kdock.conf"))
+                hasShared = true;
+            const QString family = familyOf(fi.filePath);
+            if (!family.isEmpty() && !families.contains(family))
+                families.append(family);
+            entries.append({fi.filePath, zr.fileData(fi.filePath)});
+        } else if (fi.filePath == QLatin1String(kTranslationsMarker)) {
+            hasTranslations = true;
+        } else if (isTranslationEntry(fi.filePath)) {
+            hasTranslations = true; // Also accept an early archive without the marker.
+            entries.append({fi.filePath, zr.fileData(fi.filePath)});
+        }
     }
     if (!hasShared) {
         if (error)
@@ -133,10 +205,20 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
     const QString backup =
         QStringLiteral("backup-") + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
     const QStringList current = dir.entryList(configGlobs(), QDir::Files);
-    if (!current.isEmpty()) {
+    const QDir translations(translationsDirPath(dir));
+    const QStringList currentTranslations =
+        translations.entryList({QStringLiteral("*.md")}, QDir::Files);
+    if (!current.isEmpty() || !currentTranslations.isEmpty()) {
         dir.mkpath(backup);
         for (const QString &name : current)
             QFile::copy(dir.filePath(name), dir.filePath(backup + QLatin1Char('/') + name));
+        if (!currentTranslations.isEmpty()) {
+            dir.mkpath(backup + QLatin1String("/translations"));
+            for (const QString &name : currentTranslations) {
+                QFile::copy(translations.filePath(name),
+                            dir.filePath(backup + QLatin1String("/translations/") + name));
+            }
+        }
     }
 
     // Clean replace, but only of the families the archive carries: an archive
@@ -145,11 +227,28 @@ bool ConfigArchive::importFrom(const QString &zipPath, QString *error)
     const QStringList doomed = dir.entryList(families, QDir::Files);
     for (const QString &name : doomed)
         QFile::remove(dir.filePath(name));
+    if (hasTranslations) {
+        for (const QString &name : currentTranslations)
+            QFile::remove(translations.filePath(name));
+    }
 
     for (const auto &e : entries) {
-        QFile f(dir.filePath(e.first));
-        if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
-            f.write(e.second);
+        const QString target = isTranslationEntry(e.first)
+                                   ? translationsDirPath(dir) + QLatin1Char('/')
+                                         + e.first.mid(QStringLiteral("translations/").size())
+                                   : dir.filePath(e.first);
+        QDir().mkpath(QFileInfo(target).absolutePath());
+        QFile f(target);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            if (error)
+                *error = QStringLiteral("Cannot write %1").arg(target);
+            return false;
+        }
+        if (f.write(e.second) != e.second.size()) {
+            if (error)
+                *error = QStringLiteral("Cannot write %1").arg(target);
+            return false;
+        }
     }
     return true;
 }

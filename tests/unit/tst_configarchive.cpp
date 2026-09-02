@@ -46,6 +46,24 @@ private:
         return {};
     }
 
+    static void seedTranslation(const QString &name, const QString &marker)
+    {
+        const QString dir = ConfigArchive::configDir() + QStringLiteral("/translations");
+        QDir().mkpath(dir);
+        QFile f(dir + QLatin1Char('/') + name + QStringLiteral(".md"));
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(marker.toUtf8());
+    }
+
+    static QString translationOf(const QString &name)
+    {
+        QFile f(ConfigArchive::configDir() + QStringLiteral("/translations/") + name
+                + QStringLiteral(".md"));
+        if (!f.open(QIODevice::ReadOnly))
+            return {};
+        return QString::fromUtf8(f.readAll());
+    }
+
     // Deja el directorio de config con un juego conocido de archivos.
     static void seedAll(const QString &marker)
     {
@@ -56,6 +74,12 @@ private:
         seed(QStringLiteral("tilemenu.conf"), marker);
         seed(QStringLiteral("controlmanager.conf"), marker);
         seed(QStringLiteral("weather.conf"), marker);
+        seed(QStringLiteral("desktop.conf"), marker);
+        seed(QStringLiteral("desktop-DP-1.conf"), marker);
+        seed(QStringLiteral("systray.conf"), marker);
+        seed(QStringLiteral("clipboard.conf"), marker);
+        seed(QStringLiteral("tilemenu-usage.conf"), marker);
+        seedTranslation(QStringLiteral("custom"), marker);
     }
 
 private slots:
@@ -71,16 +95,24 @@ private slots:
         QVERIFY(ConfigArchive::isConfigArchive(zip));
 
         seedAll(QStringLiteral("B"));
+        seedTranslation(QStringLiteral("stale"), QStringLiteral("B"));
         QVERIFY2(ConfigArchive::importFrom(zip, &err), qPrintable(err));
 
         for (const QString &name : {QStringLiteral("kdock.conf"),
                                     QStringLiteral("kdock-VIRT-1.conf"),
                                     QStringLiteral("previews.conf"),
                                     QStringLiteral("tilemenu.conf"),
+                                    QStringLiteral("tilemenu-usage.conf"),
                                     QStringLiteral("controlmanager.conf"),
-                                    QStringLiteral("weather.conf")}) {
+                                    QStringLiteral("weather.conf"),
+                                    QStringLiteral("desktop.conf"),
+                                    QStringLiteral("desktop-DP-1.conf"),
+                                    QStringLiteral("systray.conf"),
+                                    QStringLiteral("clipboard.conf")}) {
             QCOMPARE(markerOf(name), QStringLiteral("A"));
         }
+        QCOMPARE(translationOf(QStringLiteral("custom")), QStringLiteral("A"));
+        QVERIFY(translationOf(QStringLiteral("stale")).isEmpty());
         QFile::remove(zip);
     }
 

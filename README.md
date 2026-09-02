@@ -637,20 +637,24 @@ La configuración vive en el directorio de datos XDG:
 ```
 ~/.local/share/kdock/
   kdock.conf                  # opciones compartidas (relanzadores, script runners, tema,
-                              #   favoritos de iconsets y esquemas de color…)
+                              #   favoritos, audio y captura de imágenes…)
   kdock-<monitor>[-<n>].conf  # un archivo por dock
-  previews.conf               # kdock-previews (compartido + uno por pantalla)
-  tilemenu.conf               # kdock-tilemenu: opciones y disposición de los mosaicos
-  desktop.conf                # kdock-desktop: lienzo y tarjetas
+  previews*.conf              # kdock-previews (compartido + uno por pantalla)
+  tilemenu*.conf              # kdock-tilemenu: opciones, mosaicos y su uso
+  controlmanager*.conf        # kdock-controlmanager: estado de sus controles
+  desktop*.conf               # kdock-desktop: lienzo y tarjetas, también por pantalla
   systray.conf                # kdock-systray: bandeja residente
   weather.conf                # kdock-weather: ciudades y unidades
   clipboard.conf              # kdock-clipboard: tamaño, Fija y cierre tras copiar
-  clipboard-history.txt
+  translations/*.md           # traducciones personalizadas del usuario
+  clipboard-history.*         # historial privado: no se incluye en los presets
+  clipboard-images/           # imágenes del historial: tampoco se incluyen
 ```
 
-*Configuración → Presets* guarda todo eso como un preset con nombre (`presets/<nombre>.zip`),
-lo aplica de una —reemplaza los `.conf` y reinicia kdock con sus accesorios— y lo exporta o
-importa como un `.zip`.
+*Configuración → Presets* guarda la configuración y las traducciones personalizadas como un
+preset con nombre (`presets/<nombre>.zip`), lo aplica de una —reemplaza esos archivos y reinicia
+kdock con sus accesorios— y lo exporta o importa como un `.zip`. El historial y las imágenes del
+portapapeles se excluyen deliberadamente por privacidad.
 
 ### Script Runners de ejemplo (`scripts/`)
 

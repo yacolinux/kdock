@@ -9,7 +9,7 @@
 //
 // This is deliberately separate from VolumeControl, which stays a tiny
 // default-sink indicator for the dock widget. The single shared preference the
-// two agree on is the >100% ceiling (persisted under kdock/kdock audio group).
+// two agree on is the >100% ceiling (persisted in the shared kdock.conf).
 
 #pragma once
 

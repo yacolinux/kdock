@@ -1,6 +1,7 @@
 #include "audiocontrol.h"
 
 #include "childprocess.h"
+#include "dockconfig.h"
 
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -11,8 +12,18 @@ static const auto kMaxVolumeKey = QStringLiteral("audio/maxVolume");
 
 bool AudioControl::maxVolumeSetting()
 {
-    QSettings s(QStringLiteral("kdock"), QStringLiteral("kdock"));
-    return s.value(kMaxVolumeKey, false).toBool();
+    QSettings shared(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    if (shared.contains(kMaxVolumeKey))
+        return shared.value(kMaxVolumeKey, false).toBool();
+
+    // Older versions put this one setting in the platform-dependent default
+    // QSettings location, where ConfigArchive cannot see it. Adopt it once
+    // into the shared archiveable config rather than losing the user's choice.
+    QSettings legacy(QStringLiteral("kdock"), QStringLiteral("kdock"));
+    const bool value = legacy.value(kMaxVolumeKey, false).toBool();
+    if (legacy.contains(kMaxVolumeKey))
+        shared.setValue(kMaxVolumeKey, value);
+    return value;
 }
 
 AudioControl::AudioControl(QObject *parent)
@@ -501,7 +512,7 @@ void AudioControl::setMaxVolume(bool on)
     if (m_maxVolume == on)
         return;
     m_maxVolume = on;
-    QSettings s(QStringLiteral("kdock"), QStringLiteral("kdock"));
+    QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
     s.setValue(kMaxVolumeKey, on);
 
     // Turning the ceiling back down: clamp anything currently above 100% so the

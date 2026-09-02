@@ -619,20 +619,24 @@ The configuration lives in the XDG data directory:
 ```
 ~/.local/share/kdock/
   kdock.conf                  # shared options (sub-launchers, script runners, theme,
-                              #   iconset and color scheme favorites…)
+                              #   favorites, audio and image capture…)
   kdock-<monitor>[-<n>].conf  # one file per dock
-  previews.conf               # kdock-previews (shared + one per screen)
-  tilemenu.conf               # kdock-tilemenu: options and tile layout
-  desktop.conf                # kdock-desktop: canvas and cards
+  previews*.conf              # kdock-previews (shared + one per screen)
+  tilemenu*.conf              # kdock-tilemenu: options, layout and usage
+  controlmanager*.conf        # kdock-controlmanager: control state
+  desktop*.conf               # kdock-desktop: canvas and cards, including per-screen files
   systray.conf                # kdock-systray: resident tray
   weather.conf                # kdock-weather: cities and units
   clipboard.conf              # kdock-clipboard: size, always-on-top and close-after-copy
-  clipboard-history.txt
+  translations/*.md           # user-customized translations
+  clipboard-history.*         # private history: excluded from presets
+  clipboard-images/           # history images: also excluded
 ```
 
-*Settings → Presets* saves all of that as a named preset (`presets/<name>.zip`), applies one
-in a single click — it replaces the `.conf` files and restarts kdock with its accessories —
-and exports or imports it as a `.zip`.
+*Settings → Presets* saves the configuration and customized translations as a named preset
+(`presets/<name>.zip`), applies one in a single click — it replaces those files and restarts
+kdock with its accessories — and exports or imports it as a `.zip`. Clipboard history and images
+are deliberately excluded for privacy.
 
 ### Example Script Runners (`scripts/`)
 

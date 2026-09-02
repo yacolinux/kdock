@@ -1,5 +1,6 @@
 #include "clipboardhistory.h"
 
+#include "dockconfig.h"
 #include "waylandclipboard.h"
 
 #include <QBuffer>
@@ -98,8 +99,18 @@ void writeSnapshot(const QList<ClipboardHistory::Entry> &entries,
 ClipboardHistory::ClipboardHistory(QObject *parent)
     : QObject(parent)
 {
-    QSettings settings(QStringLiteral("kdock"), QStringLiteral("kdock"));
-    m_captureImages = settings.value(QStringLiteral("clipboard/captureImages"), true).toBool();
+    static const auto captureImagesKey = QStringLiteral("clipboard/captureImages");
+    QSettings shared(DockConfig::settingsFilePath(), QSettings::IniFormat);
+    if (shared.contains(captureImagesKey)) {
+        m_captureImages = shared.value(captureImagesKey, true).toBool();
+    } else {
+        // Migrate the old platform-default QSettings value into the shared
+        // file so complete configuration archives carry it from now on.
+        QSettings legacy(QStringLiteral("kdock"), QStringLiteral("kdock"));
+        m_captureImages = legacy.value(captureImagesKey, true).toBool();
+        if (legacy.contains(captureImagesKey))
+            shared.setValue(captureImagesKey, m_captureImages);
+    }
 
     load();
 
@@ -164,7 +175,7 @@ void ClipboardHistory::setCaptureImages(bool on)
     if (m_captureImages == on)
         return;
     m_captureImages = on;
-    QSettings settings(QStringLiteral("kdock"), QStringLiteral("kdock"));
+    QSettings settings(DockConfig::settingsFilePath(), QSettings::IniFormat);
     settings.setValue(QStringLiteral("clipboard/captureImages"), on);
     emit captureImagesChanged();
 }

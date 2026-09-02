@@ -17,9 +17,11 @@
 // bloquea" de "bloquea en otro lado del ciclo".
 
 #include "audiocontrol.h"
+#include "dockconfig.h"
 #include "sandbox.h"
 
 #include <QElapsedTimer>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QTest>
 #include <QTimer>
@@ -45,6 +47,23 @@ private slots:
     }
 
     void cleanupTestCase() { qunsetenv("KDOCK_FAKE_PACTL_DELAY"); }
+
+    void maxVolumeSettingLivesInTheArchiveableSharedConfig()
+    {
+        static const auto key = QStringLiteral("audio/maxVolume");
+        QSettings shared(DockConfig::settingsFilePath(), QSettings::IniFormat);
+        shared.remove(key);
+        shared.sync();
+
+        AudioControl audio;
+        audio.setMaxVolume(true);
+        shared.sync();
+        QVERIFY(shared.value(key).toBool());
+
+        audio.setMaxVolume(false);
+        shared.sync();
+        QVERIFY(!shared.value(key).toBool());
+    }
 
     // Con pactl lento, ni el constructor ni refresh() pueden quedarse con el
     // hilo. El control positivo (volver a la versión con waitForFinished) da
