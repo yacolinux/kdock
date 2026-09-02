@@ -22,6 +22,8 @@
 #include "sandbox.h"
 
 #include <QFile>
+#include <QGuiApplication>
+#include <QSignalSpy>
 #include <QSettings>
 #include <QTest>
 
@@ -136,6 +138,55 @@ private slots:
         QVERIFY(mgr.copyDockToNextMonitor(src).isEmpty());
         QVERIFY2(DockConfig::enabledDocks().contains(src),
                  "y sobre todo: no se pierde el dock que había");
+        qputenv("KDOCK_TEST_SCREENS", "VIRT-1,VIRT-9");
+    }
+
+    void hotplugCoalescesAndTracksArbitraryScreens()
+    {
+        // No dock lives on these outputs: this is deliberately a topology-only
+        // test, so the empty Shared never constructs a DockWindow.  The names
+        // include characters which prove no connector-name table is involved.
+        QSettings s(DockConfig::settingsFilePath(), QSettings::IniFormat);
+        s.setValue(QStringLiteral("enabledScreens"), QStringLiteral("NOEXISTE-0"));
+        s.setValue(QStringLiteral("knownScreens"), QStringLiteral("NOEXISTE-0"));
+        s.sync();
+        const QString parkedDock = QStringLiteral("USB-C-Á-42");
+        DockConfig::addKnownDock(parkedDock);
+        DockConfig::setDockEnabled(parkedDock, true);
+        {
+            // Desktop 2 keeps the test dock out of the current desktop (0),
+            // while wantedDocks(2) lets us assert the actual lifecycle
+            // selection without building a QML window from the empty Shared.
+            DockConfig cfg(parkedDock);
+            cfg.setDockDesktops({kOtherDesktop});
+        }
+        qputenv("KDOCK_TEST_SCREENS", "DP-1");
+
+        DockManager mgr(m_shared);
+        QSignalSpy topology(&mgr, &DockManager::screenTopologyChanged);
+        QVERIFY(DockConfig::knownScreens().contains(QStringLiteral("DP-1")));
+        QVERIFY(!mgr.wantedDocks(kOtherDesktop).contains(parkedDock));
+
+        // A removal is followed by primary-screen churn on real Wayland
+        // sessions. Both notifications must collapse into one settled sync.
+        qputenv("KDOCK_TEST_SCREENS", "");
+        Q_EMIT qGuiApp->screenRemoved(nullptr);
+        Q_EMIT qGuiApp->primaryScreenChanged(nullptr);
+        QTRY_COMPARE(topology.count(), 1);
+        QVERIFY(!mgr.connectedScreens().contains(QStringLiteral("DP-1")));
+
+        // Any connector name that Qt reports is accepted; there is no fixed
+        // monitor list in the manager.
+        qputenv("KDOCK_TEST_SCREENS", "USB-C-Á-42,HDMI-A-9");
+        Q_EMIT qGuiApp->screenAdded(nullptr);
+        QTRY_COMPARE(topology.count(), 2);
+        const QStringList screens = mgr.connectedScreens();
+        QVERIFY(screens.contains(QStringLiteral("USB-C-Á-42")));
+        QVERIFY(screens.contains(QStringLiteral("HDMI-A-9")));
+        QVERIFY(mgr.wantedDocks(kOtherDesktop).contains(parkedDock));
+        QVERIFY(DockConfig::knownScreens().contains(QStringLiteral("USB-C-Á-42")));
+        QVERIFY(DockConfig::knownScreens().contains(QStringLiteral("HDMI-A-9")));
+
         qputenv("KDOCK_TEST_SCREENS", "VIRT-1,VIRT-9");
     }
 

@@ -266,6 +266,10 @@ signals:
     // Emitted whenever the set of enabled/known docks changes in a way that
     // affects what the settings dialog lists (enabledDocks/knownDocks).
     void dockListChanged();
+    // The compositor's output topology changed.  This is separate from the
+    // persistent dock list: a connected monitor may be new or may simply have
+    // reappeared with an already configured dock.
+    void screenTopologyChanged();
 
 private:
     struct Instance {
@@ -282,6 +286,10 @@ private:
     // only in what happens to the source once the copy is in place.
     QString cloneToNextMonitor(const QString &dockId, bool keepSource);
     void sync();
+    // Qt commonly emits screenAdded/screenRemoved/primaryScreenChanged as one
+    // burst.  Wait one turn, then observe the settled QGuiApplication screen
+    // list once instead of tearing down and rebuilding docks for every edge.
+    void scheduleScreenTopologySync();
     Instance buildInstance(const QString &dockId, bool primary);
     void teardownInstance(Instance &inst);
     void createInstance(const QString &dockId, bool primary);
@@ -299,4 +307,5 @@ private:
     QHash<QString, QString> m_previewSource;  // dstDockId -> srcDockId
     QHash<QString, Instance> m_previews;      // live preview windows (connected)
     QSet<QString> m_previewCreatedFile;       // dstDockIds whose file we created
+    bool m_screenTopologySyncPending = false;
 };

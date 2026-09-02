@@ -175,8 +175,8 @@ bool DesktopLauncher::start(const QStringList &args)
     const QString binary = binaryPath();
     if (binary.isEmpty())
         return false;
-    // startDetached so the canvas outlives a kdock restart. The child gets this
-    // process' environment, which main.cpp has already cleaned of
+    // Detached from the caller; apprestart coordinates it on a whole-dock
+    // exit/restart. The child gets this process' environment, which main.cpp has already cleaned of
     // QT_WAYLAND_SHELL_INTEGRATION.
     return QProcess::startDetached(binary, args);
 }

@@ -496,6 +496,11 @@ int main(int argc, char *argv[])
     // visible in KWin during the restart handoff.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &screensaver,
                      &ScreensaverManager::hideAll);
+    // Resident helpers are separate binaries. A plain application quit does
+    // not reap them, so “Salir” has to use the same coordinated shutdown as a
+    // restart; otherwise the next dock would reuse their stale D-Bus services.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
+                     [] { kdock::stopAccessories(); });
     // The dock's own D-Bus service — register early so `org.kdock.Dock` answers
     // quickly after a restart. Previously it was at the very end, after wallpapers
     // / darkAppearance / previews, so `dockIds` took ~2.8s to appear and the dock
@@ -522,6 +527,7 @@ int main(int argc, char *argv[])
     installQuitSignalHandler(&app, [&desktopWallpapers, &lxqtWallpapers] {
         desktopWallpapers.quit();
         lxqtWallpapers.quit();
+        kdock::stopAccessories();
         ::_exit(0);
     });
     if (Session::isLxqt())

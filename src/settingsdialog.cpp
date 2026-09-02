@@ -7876,6 +7876,12 @@ QWidget *SettingsDialog::createMonitorsTab()
             reloadDocksList();
             reloadMonitorsForSelectedDock();
         });
+        // A monitor can appear/disappear without modifying enabledDocks or
+        // knownDocks. Keep the open Docks tab truthful in that case too.
+        connect(m_manager, &DockManager::screenTopologyChanged, tab, [this] {
+            reloadDocksList();
+            reloadMonitorsForSelectedDock();
+        });
     }
 
     reloadDocksList();

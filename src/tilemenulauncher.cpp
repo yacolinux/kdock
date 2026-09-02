@@ -64,8 +64,8 @@ bool TileMenuLauncher::start(const QStringList &args)
     const QString binary = binaryPath();
     if (binary.isEmpty())
         return false;
-    // startDetached so the menu outlives a kdock restart. The child gets this
-    // process' environment, which main.cpp has already cleaned of
+    // Detached from the caller; apprestart coordinates it on a whole-dock
+    // exit/restart. The child gets this process' environment, which main.cpp has already cleaned of
     // QT_WAYLAND_SHELL_INTEGRATION (see the note there).
     return QProcess::startDetached(binary, args);
 }

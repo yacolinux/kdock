@@ -31,9 +31,12 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
 {
     migrateFirstRun();
 
-    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this] { sync(); });
-    connect(qGuiApp, &QGuiApplication::screenRemoved, this, [this] { sync(); });
-    connect(qGuiApp, &QGuiApplication::primaryScreenChanged, this, [this] { sync(); });
+    connect(qGuiApp, &QGuiApplication::screenAdded,
+            this, &DockManager::scheduleScreenTopologySync);
+    connect(qGuiApp, &QGuiApplication::screenRemoved,
+            this, &DockManager::scheduleScreenTopologySync);
+    connect(qGuiApp, &QGuiApplication::primaryScreenChanged,
+            this, &DockManager::scheduleScreenTopologySync);
 
     // Language change: the strings are already served by the translator, but
     // what is on screen was built with the old ones. Every dock re-evaluates its
@@ -644,6 +647,20 @@ void DockManager::sync()
             });
         }
     }
+}
+
+void DockManager::scheduleScreenTopologySync()
+{
+    if (m_screenTopologySyncPending)
+        return;
+    m_screenTopologySyncPending = true;
+    QTimer::singleShot(0, this, [this] {
+        m_screenTopologySyncPending = false;
+        sync();
+        // Consumers interested in physical outputs (not just persisted dock
+        // settings) must refresh after the settled topology was observed.
+        emit screenTopologyChanged();
+    });
 }
 
 void DockManager::createInstance(const QString &dockId, bool primary)

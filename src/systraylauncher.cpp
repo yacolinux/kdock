@@ -76,9 +76,10 @@ bool SystrayLauncher::start(const QStringList &args)
     const QString binary = binaryPath();
     if (binary.isEmpty())
         return false;
-    // startDetached: the tray is the session's, not a child of this dock, and it
-    // has to survive a dock restart. The child inherits an environment main.cpp
-    // already cleaned of QT_WAYLAND_SHELL_INTEGRATION.
+    // Detached from the call site so hiding the dock's tray button cannot close
+    // the session host. apprestart coordinates its shutdown on a whole-dock
+    // exit/restart. The child inherits an environment main.cpp already cleaned
+    // of QT_WAYLAND_SHELL_INTEGRATION.
     return QProcess::startDetached(binary, args);
 }
 

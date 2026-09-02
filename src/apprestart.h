@@ -1,13 +1,10 @@
 // "Reiniciar" for the whole kdock family, not just the dock process.
 //
 // The resident accessories (kdock-previews, kdock-tilemenu, kdock-controlmanager,
-// kdock-desktop and kdock-clipboard) are separate processes that outlive a kdock restart on
-// purpose — that is what makes them instant on the next click. The price is
-// that restarting the dock alone leaves them running the binary that was on
-// disk when THEY started: right after an install, the old one. The fix the user
-// just installed is simply not there, and the process looks up to date from the
-// outside (2026-08-10: a corner-resize fix was tested against a control panel
-// whose /proc/<pid>/exe already read "(deleted)").
+// kdock-desktop, kdock-clipboard and kdock-systray) are separate processes.
+// They are deliberately resident while kdock runs, but they must not survive a
+// whole-dock exit or restart: otherwise a later launch reuses their old D-Bus
+// services and keeps executing the binary they started from.
 //
 // So "Dock → Reiniciar" goes through here: quit the accessories, wait for their
 // bus names to be released, and only then relaunch this process.
@@ -21,6 +18,12 @@
 #include <QStringList>
 
 namespace kdock {
+
+// Stop every resident accessory without changing its persisted switches. This
+// is the single shutdown path for both “Salir” and “Reiniciar”: request the
+// normal D-Bus quit first, then terminate only the PID that owns one of our
+// still-registered services if it got wedged. Safe to call more than once.
+void stopAccessories();
 
 // Relaunches this process with its own arguments after stopping every resident
 // accessory. Does not return before quitting the application.

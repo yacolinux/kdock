@@ -5,8 +5,9 @@
 // host and watcher for the session and draws the tray in its own window. Unlike
 // weather it must NOT quit on close — the host has to keep collecting items — so
 // closing the window only hides it, and this launcher never asks it to quit
-// except on an explicit user action. The dock's "systray" widget is just a
-// button that toggles that window, the same shape as ControlManagerLauncher.
+// except when the whole kdock family is exiting or restarting. The dock's
+// "systray" widget is just a button that toggles that window, the same shape
+// as ControlManagerLauncher.
 
 #pragma once
 
