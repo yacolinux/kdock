@@ -23,8 +23,16 @@ void DesktopEntryIndex::reload()
     m_installDirToId.clear();
     m_installDirsBuilt = false;
 
-    // Earlier locations (user dirs) take precedence over later ones.
-    const QStringList dirs = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    // Earlier locations (user dirs) take precedence over later ones. Snap's
+    // desktop directory is normally added to XDG_DATA_DIRS by snapd's profile
+    // script, but GUI sessions can keep an older environment after a Snap is
+    // installed or refreshed. Keep the standard directory discoverable even
+    // in that case; app launchers such as Rofi and KRunner already know about
+    // it, so kdock should see the same applications.
+    QStringList dirs = QStandardPaths::standardLocations(QStandardPaths::ApplicationsLocation);
+    const QString snapApplications = QStringLiteral("/var/lib/snapd/desktop/applications");
+    if (QDir(snapApplications).exists() && !dirs.contains(snapApplications))
+        dirs.append(snapApplications);
     for (const QString &dir : dirs) {
         QDirIterator it(dir, {QStringLiteral("*.desktop")}, QDir::Files,
                         QDirIterator::Subdirectories);

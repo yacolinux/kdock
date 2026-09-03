@@ -80,6 +80,31 @@ private slots:
                                     "StartupWMClass=crx__%1\n").arg(kLegacyExtId));
     }
 
+    void snapEntriesAreFoundWithoutSnapInXdgDataDirs()
+    {
+        const QString snapApplications = QStringLiteral("/var/lib/snapd/desktop/applications");
+        if (!QDir(snapApplications).exists())
+            QSKIP("snapd desktop applications directory is not installed");
+
+        // This is the environment inherited by a session whose XDG_DATA_DIRS
+        // predates a Snap installation. The index must still add snapd's
+        // standard directory itself.
+        const QByteArray oldDirs = qgetenv("XDG_DATA_DIRS");
+        qputenv("XDG_DATA_DIRS", QByteArrayLiteral("/usr/share"));
+        DesktopEntryIndex apps;
+        if (oldDirs.isEmpty())
+            qunsetenv("XDG_DATA_DIRS");
+        else
+            qputenv("XDG_DATA_DIRS", oldDirs);
+
+        QVERIFY2(apps.byId(QStringLiteral("firefox_firefox")).isValid(),
+                 "the Snap Firefox launcher must be indexed");
+        QVERIFY2(apps.byId(QStringLiteral("thunderbird_thunderbird")).isValid(),
+                 "the Snap Thunderbird launcher must be indexed");
+        QVERIFY(!apps.byId(QStringLiteral("firefox_firefox")).noDisplay);
+        QVERIFY(!apps.byId(QStringLiteral("thunderbird_thunderbird")).noDisplay);
+    }
+
     void exactAndLastSegmentMatches()
     {
         DesktopEntryIndex apps;
