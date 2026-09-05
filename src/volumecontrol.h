@@ -47,6 +47,8 @@ private:
     bool m_available = false;
     qreal m_volume = 0.0;
     bool m_muted = false;
+    bool m_refreshInFlight = false;
+    bool m_refreshQueued = false;
     QProcess m_subscriber;
     QTimer m_refreshDebounce;
     QElapsedTimer m_subscriberUptime;

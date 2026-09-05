@@ -17,6 +17,9 @@
 // bloquea" de "bloquea en otro lado del ciclo".
 
 #include "audiocontrol.h"
+#include "volumecontrol.h"
+#include <QFile>
+#include <QTemporaryDir>
 #include "dockconfig.h"
 #include "sandbox.h"
 
@@ -40,6 +43,43 @@ class TestAudioControl : public QObject
     Q_OBJECT
 
 private slots:
+    void volumeQueriesAreBoundedAndRecoverAfterTimeout()
+    {
+        QTemporaryDir bin;
+        QVERIFY(bin.isValid());
+        QFile command(bin.filePath(QStringLiteral("wpctl")));
+        QVERIFY(command.open(QIODevice::WriteOnly));
+        command.write("#!/bin/sh\nexec /bin/sleep 30\n");
+        command.close();
+        QVERIFY(command.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        const QByteArray oldPath = qgetenv("PATH");
+        qputenv("PATH", bin.path().toUtf8() + ':' + oldPath);
+        VolumeControl volume;
+        qputenv("PATH", oldPath);
+        for (int i = 0; i < 40; ++i)
+            volume.refresh();
+        // One running query, no matter how many hotplug notifications arrive.
+        QCOMPARE(volume.findChildren<QProcess *>().size(), 1);
+        QTest::qWait(200);
+        QVERIFY(command.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        command.write("#!/bin/sh\necho 'Volume: 0.42 [MUTED]'\n");
+        command.close();
+        // The sleeping child must time out, then the queued refresh must succeed.
+        QTRY_VERIFY_WITH_TIMEOUT(volume.available(), 3000);
+        QCOMPARE(volume.volume(), 0.42);
+        QVERIFY(volume.muted());
+        QVERIFY(command.remove());
+        volume.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!volume.available(), 1500);
+        QVERIFY(command.open(QIODevice::WriteOnly));
+        command.write("#!/bin/sh\necho 'Volume: 0.60'\n");
+        command.close();
+        QVERIFY(command.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        volume.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(volume.available(), 1500);
+        QCOMPARE(volume.volume(), 0.60);
+    }
+
     void initTestCase()
     {
         // Antes de construir AudioControl: el ctor ya dispara un refresh().

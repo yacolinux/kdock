@@ -42,10 +42,33 @@ QString VolumeControl::iconName() const
 
 void VolumeControl::refresh()
 {
+    if (m_wpctl.isEmpty())
+        return;
+    if (m_refreshInFlight) {
+        m_refreshQueued = true;
+        return;
+    }
+    m_refreshInFlight = true;
     auto *p = new QProcess(this);
-    connect(p, &QProcess::finished, this, [this, p](int exitCode) {
+    auto *watchdog = new QTimer(p);
+    watchdog->setSingleShot(true);
+    watchdog->setInterval(800);
+    connect(watchdog, &QTimer::timeout, p, [p] { p->kill(); });
+    // Release the slot only after the child exits, including a watchdog kill.
+    // FailedToStart is the only error that does not also emit finished().
+    const auto finish = [this, p, watchdog](bool success) {
+        watchdog->stop();
+        m_refreshInFlight = false;
+        if (m_refreshQueued) {
+            m_refreshQueued = false;
+            scheduleRefresh();
+        }
         p->deleteLater();
-        if (exitCode != 0) {
+        const QString out = QString::fromUtf8(p->readAllStandardOutput()).trimmed();
+        const QStringList parts = out.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+        bool valid = false;
+        const qreal vol = parts.size() >= 2 ? parts.at(1).toDouble(&valid) : 0.0;
+        if (!success || !valid || parts.first() != QLatin1String("Volume:") || vol < 0) {
             if (m_available) {
                 m_available = false;
                 emit changed();
@@ -53,11 +76,6 @@ void VolumeControl::refresh()
             return;
         }
         // Output: "Volume: 0.85" or "Volume: 0.85 [MUTED]"
-        const QString out = QString::fromUtf8(p->readAllStandardOutput()).trimmed();
-        const QStringList parts = out.split(QLatin1Char(' '), Qt::SkipEmptyParts);
-        if (parts.size() < 2)
-            return;
-        const qreal vol = parts.at(1).toDouble();
         const bool muted = out.contains(QLatin1String("[MUTED]"));
         if (!m_available || !qFuzzyCompare(vol, m_volume) || muted != m_muted) {
             m_available = true;
@@ -65,7 +83,16 @@ void VolumeControl::refresh()
             m_muted = muted;
             emit changed();
         }
+    };
+    connect(p, &QProcess::finished, this, [finish](int code, QProcess::ExitStatus status) {
+        finish(code == 0 && status == QProcess::NormalExit);
     });
+    connect(p, &QProcess::errorOccurred, this, [finish](QProcess::ProcessError error) {
+        if (error == QProcess::FailedToStart)
+            finish(false);
+    });
+    kdock::tieToParent(*p);
+    watchdog->start();
     p->start(m_wpctl, {QStringLiteral("get-volume"), DEFAULT_SINK});
 }
 
