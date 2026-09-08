@@ -32,10 +32,11 @@ const QStringList &publicAfterDarkPages()
 {
     // The public gallery has no directory to enumerate, so its known set is
     // retained strictly as the fallback when no local After Dark folder was
-    // configured.
+    // configured.  fade-out.html is deliberately omitted: it runs a one-shot
+    // 40-second fade and then remains fully black, which makes an idle saver
+    // look as though its renderer failed.
     static const QStringList pages = {
-        QStringLiteral("bouncing-ball.html"), QStringLiteral("fade-out.html"),
-        QStringLiteral("fish.html"),
+        QStringLiteral("bouncing-ball.html"), QStringLiteral("fish.html"),
         QStringLiteral("flying-toasters.html"), QStringLiteral("globe.html"),
         QStringLiteral("hard-rain.html"), QStringLiteral("logo.html"),
         QStringLiteral("messages.html"), QStringLiteral("messages2.html"),
@@ -51,13 +52,17 @@ QStringList availableAfterDarkPages()
         return publicAfterDarkPages();
 
     // A local collection is authoritative. Discover the readable scenes from
-    // its top-level all/ folder on every preparation instead of filtering a
-    // compiled whitelist: additions and removals are therefore picked up on
-    // the next kdock start (and also by the change-scene button while running).
+    // its top-level all/ folder on every preparation: additions and removals
+    // are therefore picked up on the next kdock start (and also by the
+    // change-scene button while running).  The upstream Fade Out demo is the
+    // lone exception: it finishes as a permanent black frame, so it is not a
+    // usable screensaver scene.
     const QDir directory(local);
-    return directory.entryList({QStringLiteral("*.html")},
-                               QDir::Files | QDir::Readable,
-                               QDir::Name | QDir::IgnoreCase);
+    QStringList pages = directory.entryList({QStringLiteral("*.html")},
+                                            QDir::Files | QDir::Readable,
+                                            QDir::Name | QDir::IgnoreCase);
+    pages.removeAll(QStringLiteral("fade-out.html"));
+    return pages;
 }
 
 QString jsArray(const QStringList &values)

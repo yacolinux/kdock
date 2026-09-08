@@ -1317,7 +1317,6 @@ Esquema de color de KDE = KDE color scheme
 Este dock es más viejo que el modo automático: reiniciálo para manejarlo desde acá. = Este dock es más viejo que el modo automático: reiniciálo para manejarlo desde acá.
 Este equipo no tiene Wi-Fi = Este equipo no tiene Wi-Fi
 Este panel = Este panel
-Fade out = Fade out
 Favorito: lo pone al principio de la lista = Favorite: moves it to the top of the list
 Fija = Fija
 Fijo = Fijo

@@ -24,7 +24,7 @@ static QByteArray demarshalAy(const QVariant &v)
 {
     if (!v.canConvert<QDBusArgument>())
         return v.toByteArray();
-    QDBusArgument a = v.value<QDBusArgument>();
+    const QDBusArgument a = v.value<QDBusArgument>();
     QByteArray out;
     a >> out;
     return out;
@@ -35,7 +35,7 @@ static QString firstMountPoint(const QVariant &v)
 {
     if (!v.canConvert<QDBusArgument>())
         return {};
-    QDBusArgument a = v.value<QDBusArgument>();
+    const QDBusArgument a = v.value<QDBusArgument>();
     a.beginArray();
     QString result;
     while (!a.atEnd()) {
@@ -93,7 +93,8 @@ void DisksControl::rescan()
     }
 
     ManagedObjects objs;
-    reply.arguments().first().value<QDBusArgument>() >> objs;
+    const QDBusArgument arg = reply.arguments().constFirst().value<QDBusArgument>();
+    arg >> objs;
 
     QVariantList volumes;
     for (auto it = objs.constBegin(); it != objs.constEnd(); ++it) {

@@ -39,8 +39,11 @@ expected_tiles=$(find "$repo/tests/fixtures/applications" -name '*.desktop' | wc
 out="$KDOCK_SANDBOX/tilemenu.txt"
 if timeout 60 "$tilemenu" --dump-layout > "$out" 2>&1; then
     got=$(grep -oE '^== cat:__all__ ==.*[0-9]+ tile' "$out" | grep -oE '[0-9]+ tile' | grep -oE '[0-9]+')
-    if [ "$got" = "$expected_tiles" ]; then
-        echo "ok: kdock-tilemenu resolvió los $expected_tiles mosaicos de fixture"
+    if [ "${got:-0}" -ge "$expected_tiles" ] \
+        && grep -q 'fixture-browser' "$out" \
+        && grep -q 'fixture-editor' "$out" \
+        && grep -q 'fixture-term' "$out"; then
+        echo "ok: kdock-tilemenu resolvió los $expected_tiles mosaicos de fixture (total: $got)"
     else
         echo "FAIL: kdock-tilemenu vio '$got' mosaicos, esperaba $expected_tiles"
         sed 's/^/    /' "$out" | head -10

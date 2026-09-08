@@ -62,6 +62,10 @@ for case in "${CASES[@]}"; do
     # pantalla se llama "screen". Escribir solo una de las dos no se ve.
     printf "[General]\nautohide=false\n%b\n" "$keys" > "$XDG_DATA_HOME/kdock/kdock.conf"
     cp "$XDG_DATA_HOME/kdock/kdock.conf" "$XDG_DATA_HOME/kdock/kdock-screen.conf"
+    # The systray helper defaults to resident. Keep this QML-only smoke test
+    # isolated from the session's real StatusNotifierWatcher and its D-Bus
+    # traffic; the helper has its own dedicated test.
+    printf 'preload=false\n' > "$XDG_DATA_HOME/kdock/systray.conf"
 
     log="$KDOCK_SANDBOX/stderr.log"
     geom="$KDOCK_SANDBOX/geometry.txt"
@@ -72,7 +76,7 @@ for case in "${CASES[@]}"; do
     # presupuesto es generoso porque un runner sin GPU tarda el triple; como es
     # espera por condición, en una máquina rápida no cuesta nada.
     "$here/../lib/xvfb-app.sh" --log "$log" --settle 25 --screen "${SCREEN_W}x${SCREEN_H}" \
-        --ready 'xwininfo -root -children | grep "\"kdock\": (\"kdock\"" | grep -qv " 160x160+"' \
+        --ready 'xwininfo -root -children | grep "\"kdock\": (\"kdock\" \"kdock\")" | grep -qv " 160x160+"' \
         --out "$geom" \
         --inspect 'xwininfo -root -children; echo "--- pantallas:"; xdpyinfo | grep -A2 "^screen #"' \
         -- "$kdock" || true
@@ -89,7 +93,7 @@ for case in "${CASES[@]}"; do
 
     # La ventana buena es la de ("kdock" "kdock"): hay tres que se llaman kdock.
     # 1920x68+0+0 -> ancho 1920, alto 68
-    size=$(grep '"kdock": ("kdock"' "$geom" 2>/dev/null \
+    size=$(grep '"kdock": ("kdock" "kdock")' "$geom" 2>/dev/null \
            | grep -oE '[0-9]+x[0-9]+\+[0-9-]+\+[0-9-]+' | head -1)
     if [ -z "$size" ]; then
         problems+=("no apareció la ventana del dock: el QML no llegó a instanciarse")

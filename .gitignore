@@ -31,3 +31,7 @@ HISTORY.md
 # Trabajo en curso, por ahora sin commitear: el Script Runner de LXQt. Se
 # descomenta cuando se integre de verdad.
 scripts/next-qt-wall.sh
+
+# Registro local de privacidad. Resume exposiciones ya publicadas y reglas de
+# higiene; no debe subirse al repositorio.
+PRIVACY.md
