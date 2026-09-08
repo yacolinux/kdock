@@ -52,6 +52,22 @@ LxqtWallpapers::LxqtWallpapers(VirtualDesktops *desktops, QObject *parent)
             [this](QScreen *) { onScreensChanged(); });
     connect(qGuiApp, &QGuiApplication::screenRemoved, this,
             [this](QScreen *) { onScreensChanged(); });
+
+    // LXQt starts PCManFM-Qt from autostart independently of kdock.  If its
+    // service appears after start() has already tried desktopManager(false),
+    // that one D-Bus call is lost and PCManFM creates its desktop on top of our
+    // wallpaper surface.  Keep watching the service for the lifetime of the
+    // engine so a late start (and an unexpected restart) is put back into
+    // desktop-manager-off mode as soon as it owns the name.
+    if (QDBusConnectionInterface *iface = QDBusConnection::sessionBus().interface()) {
+        connect(iface, &QDBusConnectionInterface::serviceOwnerChanged, this,
+                [this](const QString &service, const QString &, const QString &newOwner) {
+                    if (service == kPcmanfmService && !newOwner.isEmpty()
+                        && m_active && m_suppressed) {
+                        setPcmanfmDesktop(false);
+                    }
+                });
+    }
 }
 
 LxqtWallpapers::~LxqtWallpapers()
