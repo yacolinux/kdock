@@ -62,18 +62,26 @@ ScreensaverManager::ScreensaverManager(VirtualDesktops *desktops, QObject *paren
 
 ScreensaverManager::~ScreensaverManager()
 {
+    shutdown();
+}
+
+void ScreensaverManager::shutdown()
+{
     if (m_configTimer)
         m_configTimer->stop();
-    hideAll();
-    // QWebEngineView tears down renderer/GPU state asynchronously. At this
-    // point the application's event loop is already stopping, so deleting a
-    // window synchronously can abort inside QWebEnginePagePrivate::~. The
-    // native surfaces have been hidden/destroyed above; let Qt reclaim the
-    // widgets if another event turn is available, otherwise process exit will
-    // reclaim them safely.
-    for (ScreensaverWindow *window : std::as_const(m_windows))
-        window->deleteLater();
-    m_windows.clear();
+    delete m_idle;
+    m_idle = nullptr;
+
+    // These are top-level widgets, not children of this manager.  deleteLater()
+    // used to leave them alive after app.exec() had already stopped dispatching
+    // events.  Qt WebEngine then destroyed its default profile first and aborts
+    // when it finds the surviving QWebEnginePage. Preserve the native surface
+    // until the view has released its renderer and graphics resources.
+    const auto windows = std::exchange(m_windows, {});
+    for (ScreensaverWindow *window : windows) {
+        window->hideSaver();
+        delete window;
+    }
 }
 
 void ScreensaverManager::ensureIdleNotification()

@@ -119,6 +119,11 @@ public:
     };
 
     explicit DockManager(const Shared &shared, QObject *parent = nullptr);
+    ~DockManager() override;
+
+    // QHash only stores raw pointers. Tear its top-level views down while the
+    // QML context objects they use are still alive.
+    void shutdown();
 
     // Names of all currently connected monitors.
     QStringList connectedScreens() const;
@@ -308,4 +313,5 @@ private:
     QHash<QString, Instance> m_previews;      // live preview windows (connected)
     QSet<QString> m_previewCreatedFile;       // dstDockIds whose file we created
     bool m_screenTopologySyncPending = false;
+    bool m_shuttingDown = false;
 };

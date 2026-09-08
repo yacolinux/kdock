@@ -3,6 +3,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QSet>
 #include <QSettings>
 #include <QStandardPaths>
@@ -158,6 +160,12 @@ QString IconProvider::resolveInTheme(const QString &themeId, const QString &name
 
 QPixmap IconProvider::requestPixmap(const QString &id, QSize *size, const QSize &requestedSize)
 {
+    // QML can ask an image provider from more than one loader thread. Both the
+    // per-provider path cache and themeInfo()'s process-wide cache are mutable,
+    // so serialize the whole lookup instead of allowing concurrent QHash rehashes.
+    static QMutex cacheMutex;
+    const QMutexLocker locker(&cacheMutex);
+
     // "name@rev[@theme]": the revision busts the cache on theme changes, the
     // optional theme resolves this icon against another icon set (see header).
     const QString name = id.section(QLatin1Char('@'), 0, 0);

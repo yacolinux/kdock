@@ -46,6 +46,9 @@ public:
 
     void request(const QString &uuid, const QSize &target) override;
     void cancel(const QString &uuid) override;
+    // Stop an in-flight D-Bus/pipe capture before the event loop goes away.
+    // The notifier owns a live file descriptor and cannot safely outlive it.
+    void shutdown();
 
 private:
     struct Request {
@@ -60,12 +63,13 @@ private:
     // both halves are in.
     void tryComplete();
     void abortCurrent(const QString &reason);
-    void cleanupCurrent();
+    void cleanupCurrent(bool deleteNotifierNow = false);
 
     QList<Request> m_queue;
 
     // In-flight capture state.
     bool m_busy = false;
+    bool m_stopping = false;
     Request m_current;
     int m_readFd = -1;
     QSocketNotifier *m_notifier = nullptr;

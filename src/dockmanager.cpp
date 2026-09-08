@@ -67,6 +67,33 @@ DockManager::DockManager(const Shared &shared, QObject *parent)
     sync();
 }
 
+DockManager::~DockManager()
+{
+    shutdown();
+}
+
+void DockManager::shutdown()
+{
+    if (m_shuttingDown)
+        return;
+    m_shuttingDown = true;
+
+    const auto instances = std::exchange(m_instances, {});
+    const auto previews = std::exchange(m_previews, {});
+    const auto destroyInstances = [this](const QHash<QString, Instance> &set) {
+        for (Instance inst : set) {
+            if (inst.window)
+                inst.window->shutdown();
+            teardownInstance(inst);
+        }
+    };
+    destroyInstances(instances);
+    destroyInstances(previews);
+
+    const auto configs = std::exchange(m_configs, {});
+    qDeleteAll(configs);
+}
+
 QString DockManager::primaryScreenName() const
 {
     QScreen *p = QGuiApplication::primaryScreen();
@@ -579,6 +606,8 @@ void DockManager::migrateFirstRun()
 
 void DockManager::sync()
 {
+    if (m_shuttingDown)
+        return;
     const QString primaryDock = primaryDockId();
     const QStringList connected = connectedScreens();
 

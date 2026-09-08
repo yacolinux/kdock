@@ -152,6 +152,10 @@ public:
     // Relaunch kdock with the same CLI arguments, then quit this instance.
     Q_INVOKABLE void restart();
 
+    // Final application teardown. Unlike normal per-dock removal, no user
+    // handler can still be on the stack, so the QML tree may go away now.
+    void shutdown();
+
     // Toggle keyboard focus for the layer surface (and its popups). The dock
     // is normally keyboard-inert ("none"); widgets that need text input (the
     // app menu search) switch it to "exclusive" while open.

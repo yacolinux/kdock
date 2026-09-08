@@ -86,9 +86,8 @@ PreviewWindow::PreviewWindow(PreviewConfig *config, Theme *theme, PreviewModel *
     rootContext()->setContextProperty(QStringLiteral("previewWindow"), this);
     rootContext()->setContextProperty(QStringLiteral("apps"), m_apps);
 
-    // Content drives the surface size, exactly like DockWindow: the QML root
-    // takes its stretched dimension from Window.width/height (what the
-    // compositor configured) and its cross-axis one from config.stripThicknessPx.
+    // QML must own the cross-axis size (effectiveThicknessPx). Letting the
+    // view overwrite both root dimensions stretches the cards on full strips.
     setResizeMode(QQuickView::SizeViewToRootObject);
     setSource(QUrl(QStringLiteral("qrc:/qml/PreviewStrip.qml")));
 }

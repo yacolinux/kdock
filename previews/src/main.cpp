@@ -160,6 +160,8 @@ int main(int argc, char *argv[])
     Translations translations(Translations::BaseOnly);
 
     PreviewManager manager;
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &manager,
+                     &PreviewManager::shutdown);
     QObject::connect(&translations, &Translations::changed, &manager,
                      [&manager] { manager.retranslate(); });
     PreviewsService service(&manager);

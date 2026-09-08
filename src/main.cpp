@@ -95,11 +95,8 @@ void onQuitSignal(int)
 // without this, being killed on desktop 2 would leave our static image up until
 // the next run put it back (DesktopWallpapers::start).
 //
-// `onQuit` runs on the event loop and is expected **not to return** — see the
-// call site: unwinding the whole application here would tear the QQmlEngines
-// down under live bindings and flood the journal with ~1800 "property of null"
-// warnings on every logout, which is precisely what a SIGTERM used to avoid by
-// killing the process outright.
+// `onQuit` runs on the event loop. The normal aboutToQuit hooks now close the
+// helpers and destroy QML trees before their context objects are destroyed.
 void installQuitSignalHandler(QCoreApplication *app, std::function<void()> onQuit)
 {
     if (::socketpair(AF_UNIX, SOCK_STREAM, 0, g_quitSignalFd) != 0)
@@ -261,6 +258,10 @@ int main(int argc, char *argv[])
         qputenv("QT_WAYLAND_SHELL_INTEGRATION", "kdock-layershell");
     }
 
+    // QQuickViews and the WebEngine QQuickWidget must share a stable GL
+    // context; otherwise hiding the embedded view can invalidate textures
+    // that WebEngine still needs to release when quitting.
+    QCoreApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
     QApplication app(argc, argv);
 
     // Qt has now loaded our layer-shell integration. Drop the variable so the
@@ -490,17 +491,18 @@ int main(int argc, char *argv[])
 
     DockManager manager(shared);
     autoColors.setManager(&manager);
+    // Stop resident processes before GUI cleanup: a renderer failure must not
+    // prevent the remaining helpers from receiving their quit request.
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
+                     [] { kdock::stopAccessories(); });
     // ScreensaverWindow owns top-level Wayland surfaces outside DockManager.
     // Release them while the event loop is still alive; waiting for the stack
     // destructor after app.exec() returns can leave a stale xdg/layer surface
     // visible in KWin during the restart handoff.
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &screensaver,
-                     &ScreensaverManager::hideAll);
-    // Resident helpers are separate binaries. A plain application quit does
-    // not reap them, so “Salir” has to use the same coordinated shutdown as a
-    // restart; otherwise the next dock would reuse their stale D-Bus services.
-    QObject::connect(&app, &QCoreApplication::aboutToQuit, &app,
-                     [] { kdock::stopAccessories(); });
+                     &ScreensaverManager::shutdown);
+    QObject::connect(&app, &QCoreApplication::aboutToQuit, &manager,
+                     &DockManager::shutdown);
     // The dock's own D-Bus service — register early so `org.kdock.Dock` answers
     // quickly after a restart. Previously it was at the very end, after wallpapers
     // / darkAppearance / previews, so `dockIds` took ~2.8s to appear and the dock
@@ -522,14 +524,8 @@ int main(int argc, char *argv[])
                      &DesktopWallpapers::quit);
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &lxqtWallpapers,
                      &LxqtWallpapers::quit);
-    // On a signal (logout, `kill`) put KDE's wallpaper back and then leave the
-    // same way we used to: immediately, without unwinding. See the helper.
-    installQuitSignalHandler(&app, [&desktopWallpapers, &lxqtWallpapers] {
-        desktopWallpapers.quit();
-        lxqtWallpapers.quit();
-        kdock::stopAccessories();
-        ::_exit(0);
-    });
+    // Signals and the Quit button must exercise the same cleanup sequence.
+    installQuitSignalHandler(&app, [] { QCoreApplication::quit(); });
     if (Session::isLxqt())
         lxqtWallpapers.start();
     else

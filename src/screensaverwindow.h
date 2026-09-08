@@ -3,6 +3,7 @@
 #include <QWebEngineView>
 
 class QScreen;
+class QCloseEvent;
 class QResizeEvent;
 class QToolButton;
 class VirtualDesktops;
@@ -24,6 +25,7 @@ public:
     void refreshConfig();
 
 protected:
+    void closeEvent(QCloseEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
@@ -38,7 +40,6 @@ private:
     QString currentWallpaperFolder() const;
     int currentWallpaperDesktop() const;
     void applyLayerProperties();
-    void destroySurface();
 
     void resizeEvent(QResizeEvent *event) override;
 

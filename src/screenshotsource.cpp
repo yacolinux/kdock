@@ -36,7 +36,7 @@ ScreenShotSource::ScreenShotSource(QObject *parent)
 
 ScreenShotSource::~ScreenShotSource()
 {
-    cleanupCurrent();
+    shutdown();
 }
 
 bool ScreenShotSource::available() const
@@ -47,7 +47,7 @@ bool ScreenShotSource::available() const
 
 void ScreenShotSource::request(const QString &uuid, const QSize &target)
 {
-    if (uuid.isEmpty())
+    if (m_stopping || uuid.isEmpty())
         return;
 
     // Coalesce: a card asking again before its turn only updates the target.
@@ -76,9 +76,21 @@ void ScreenShotSource::cancel(const QString &uuid)
     // on its side.
 }
 
+void ScreenShotSource::shutdown()
+{
+    if (m_stopping)
+        return;
+    m_stopping = true;
+    m_queue.clear();
+    // Unlike the normal completion path, shutdown cannot rely on a later event
+    // turn to delete the notifier: its fd is about to be closed and Qt would
+    // otherwise keep polling an invalid socket during application teardown.
+    cleanupCurrent(true);
+}
+
 void ScreenShotSource::pump()
 {
-    if (m_busy || m_queue.isEmpty())
+    if (m_stopping || m_busy || m_queue.isEmpty())
         return;
     startCapture(m_queue.takeFirst());
 }
@@ -158,6 +170,10 @@ void ScreenShotSource::startCapture(const Request &req)
         QDBusConnection::sessionBus().asyncCall(call), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this](QDBusPendingCallWatcher *call) {
+                if (m_stopping) {
+                    call->deleteLater();
+                    return;
+                }
                 const QDBusPendingReply<QVariantMap> reply = *call;
                 m_replyDone = true;
                 if (reply.isError()) {
@@ -187,6 +203,8 @@ void ScreenShotSource::startCapture(const Request &req)
 
 void ScreenShotSource::tryComplete()
 {
+    if (m_stopping)
+        return;
     // The reply carries the geometry of what is in the pipe, and the pipe tells
     // us when it is all there: both halves are needed.
     if (!m_pipeDone || !m_replyDone)
@@ -240,17 +258,22 @@ void ScreenShotSource::tryComplete()
 
 void ScreenShotSource::abortCurrent(const QString &reason)
 {
+    if (m_stopping)
+        return;
     const QString uuid = m_current.uuid;
     cleanupCurrent();
     emit thumbnailFailed(uuid, reason);
     pump();
 }
 
-void ScreenShotSource::cleanupCurrent()
+void ScreenShotSource::cleanupCurrent(bool deleteNotifierNow)
 {
     if (m_notifier) {
         m_notifier->setEnabled(false);
-        m_notifier->deleteLater();
+        if (deleteNotifierNow)
+            delete m_notifier;
+        else
+            m_notifier->deleteLater();
         m_notifier = nullptr;
     }
     if (m_readFd >= 0) {

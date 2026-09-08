@@ -14,6 +14,7 @@
 #include <QElapsedTimer>
 #include <QProcess>
 #include <QThread>
+#include <QTimer>
 
 #include <csignal>
 #include <unistd.h>
@@ -134,5 +135,6 @@ void kdock::restartAll(const QStringList &extraArgs)
     }
     args += extraArgs;
     QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
-    QCoreApplication::quit();
+    // Return from the QML menu handler before aboutToQuit deletes its view.
+    QTimer::singleShot(0, QCoreApplication::instance(), &QCoreApplication::quit);
 }

@@ -35,6 +35,7 @@ class PreviewManager : public QObject
     Q_OBJECT
 public:
     explicit PreviewManager(QObject *parent = nullptr);
+    ~PreviewManager() override;
 
     QStringList connectedScreens() const;
     // Monitors the settings panel should offer: connected plus every one ever
@@ -59,6 +60,9 @@ public:
     PreviewConfig *configFor(const QString &screenName);
 
     void showSettings();
+    // Called while QApplication is still alive.  PreviewWindow is a top-level
+    // QQuickView, so QObject parent ownership does not cover it.
+    void shutdown();
 
     // Language changed (kdock wrote it to the shared conf): re-evaluate every
     // qsTr() of the strips and rebuild the settings panel, which is Qt Widgets
@@ -94,4 +98,5 @@ private:
     QHash<QString, PreviewConfig *> m_configs; // cached, by screen name
     QHash<QString, Instance> m_instances;      // only for shown strips
     QSet<QString> m_captureFailWarned;         // one warning per window, not per try
+    bool m_shuttingDown = false;
 };

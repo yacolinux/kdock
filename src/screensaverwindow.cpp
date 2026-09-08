@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <QDir>
+#include <QCloseEvent>
 #include <QEvent>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -16,6 +17,7 @@
 #include <QMargins>
 #include <QRandomGenerator>
 #include <QScreen>
+#include <QScopeGuard>
 #include <QResizeEvent>
 #include <QToolButton>
 #include <QUrl>
@@ -81,6 +83,17 @@ ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops 
     , m_desktops(desktops)
     , m_monitorIndex(qMax(0, monitorIndex))
 {
+    // Qt WebEngine 6.10's native GBM texture cleanup can abort when restoring
+    // an EGL context (ScopedGLContextForCleanup). Use its non-GBM path for
+    // this embedded view. Restore the environment before launching other apps.
+    const bool gbmWorkaround = QString::fromLatin1(qVersion()).startsWith(QLatin1String("6.10."))
+                              && !qEnvironmentVariableIsSet("QTWEBENGINE_FORCE_USE_GBM");
+    if (gbmWorkaround)
+        qputenv("QTWEBENGINE_FORCE_USE_GBM", "0");
+    const auto restoreGbm = qScopeGuard([gbmWorkaround] {
+        if (gbmWorkaround)
+            qunsetenv("QTWEBENGINE_FORCE_USE_GBM");
+    });
     setWindowTitle(QStringLiteral("kdock Screensaver"));
     setWindowFlags(Qt::FramelessWindowHint | Qt::Tool);
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -142,6 +155,16 @@ ScreensaverWindow::ScreensaverWindow(const QString &screenName, VirtualDesktops 
 ScreensaverWindow::~ScreensaverWindow()
 {
     qApp->removeEventFilter(this);
+}
+
+void ScreensaverWindow::closeEvent(QCloseEvent *event)
+{
+    // QApplication::quit closes widgets BEFORE aboutToQuit. WebEngineView's
+    // close handler discards the page immediately, bypassing our ordered
+    // shutdown and triggering Qt's native texture cleanup on a live renderer.
+    // Hide here; the manager owns and deletes the page at aboutToQuit.
+    hideSaver();
+    event->accept();
 }
 
 int ScreensaverWindow::currentWallpaperDesktop() const
@@ -350,25 +373,11 @@ void ScreensaverWindow::hideSaver()
 {
     hide();
     stop();
-    // Hiding a QWidget only unmaps its platform surface. On Wayland, keeping
-    // the QWaylandWindow around lets a stale layer/xdg role survive a restart
-    // or a monitor selection change; KWin may then show the old 640x480
-    // surface as a small normal window. Drop the role and native window so
-    // the next activation is forced through the screensaver layer-shell path.
-    destroySurface();
+    // Keep the native window until QWebEngineView releases its renderer.
+    // Resetting/destroying it here invalidates the GL surface while the page
+    // still owns render resources, causing an abort when that page is deleted.
     m_activeEngine = -1;
     m_changeButton->hide();
-}
-
-void ScreensaverWindow::destroySurface()
-{
-    QWindow *handle = windowHandle();
-    if (!handle)
-        return;
-
-    if (auto *waylandWindow = dynamic_cast<QtWaylandClient::QWaylandWindow *>(handle->handle()))
-        waylandWindow->reset();
-    handle->destroy();
 }
 
 void ScreensaverWindow::refreshConfig()

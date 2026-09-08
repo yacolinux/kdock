@@ -17,6 +17,8 @@
 #include <QScreen>
 #include <QTimer>
 
+#include <utility>
+
 PreviewManager::PreviewManager(QObject *parent)
     : QObject(parent)
     , m_theme(new Theme(this))
@@ -62,6 +64,42 @@ PreviewManager::PreviewManager(QObject *parent)
 
     migrateFirstRun();
     sync();
+}
+
+PreviewManager::~PreviewManager()
+{
+    shutdown();
+}
+
+void PreviewManager::shutdown()
+{
+    if (m_shuttingDown)
+        return;
+    m_shuttingDown = true;
+
+    if (m_source)
+        m_source->shutdown();
+
+    // PreviewWindow has no QObject parent (QQuickView is a QWindow), while its
+    // QML bindings refer to objects owned by this manager.  Clear and destroy
+    // the QML tree before those context objects disappear; deleteLater() is too
+    // late once the application's event loop has begun to exit.
+    const auto instances = std::exchange(m_instances, {});
+    for (const Instance &inst : instances) {
+        if (inst.window) {
+            inst.window->hide();
+            inst.window->setSource(QUrl());
+            inst.window->destroy();
+            delete inst.window;
+        }
+        delete inst.model;
+    }
+
+    if (m_dialog) {
+        m_dialog->hide();
+        delete m_dialog;
+        m_dialog = nullptr;
+    }
 }
 
 ThumbnailSource *PreviewManager::source() const
@@ -149,6 +187,8 @@ void PreviewManager::migrateFirstRun()
 
 void PreviewManager::sync()
 {
+    if (m_shuttingDown)
+        return;
     const QStringList connected = connectedScreens();
     for (const QString &screen : connected)
         PreviewConfig::addKnownScreen(screen);

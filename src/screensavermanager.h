@@ -56,6 +56,10 @@ public:
     // configured monitor list, just like activating one named monitor.
     Q_INVOKABLE void activateAll(int engine = -1, const QString &page = QString());
     void hideAll();
+    // Tear down the QWebEngine views while QApplication and its WebEngine
+    // profile are still alive.  This is deliberately separate from hideAll():
+    // a hidden QWidget still owns a QWebEnginePage.
+    void shutdown();
     void reload();
 
 private slots:
