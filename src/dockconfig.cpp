@@ -1277,6 +1277,7 @@ void DockConfig::load()
     m_compact = m_settings.value(QStringLiteral("compact"), false).toBool();
     m_alignment = m_settings.value(QStringLiteral("alignment"), Center).toInt();
     m_showAppIcons = m_settings.value(QStringLiteral("showAppIcons"), true).toBool();
+    m_appRows = qBound(1, m_settings.value(QStringLiteral("appRows"), 1).toInt(), 2);
     m_showVolume = m_settings.value(QStringLiteral("showVolume"), true).toBool();
     m_showSystray = m_settings.value(QStringLiteral("showSystray"), false).toBool();
     m_relanzadoresHidden = m_settings.value(QStringLiteral("relanzadoresHidden")).toStringList();
@@ -1636,6 +1637,27 @@ void DockConfig::setWidgetApps(const QString &token, const QStringList &ids)
     emit dockThicknessChanged();
 }
 
+int DockConfig::widgetAppRows(const QString &token) const
+{
+    if (!isAppsWidgetToken(token))
+        return 1;
+    // One lane is the historic shape. New widgets must not unexpectedly make
+    // an existing dock twice as thick after an upgrade.
+    return qBound(1, m_settings.value(token + QStringLiteral("/appRows"), 1).toInt(), 2);
+}
+
+void DockConfig::setWidgetAppRows(const QString &token, int rows)
+{
+    rows = qBound(1, rows, 2);
+    if (!isAppsWidgetToken(token) || widgetAppRows(token) == rows)
+        return;
+    m_settings.setValue(token + QStringLiteral("/appRows"), rows);
+    emit widgetAppRowsChanged(token);
+    // A second lane grows the dock across its edge. This signal is what makes
+    // DockWindow update layer-shell's exclusive zone in the same frame.
+    emit dockThicknessChanged();
+}
+
 bool DockConfig::widgetOnlyPinned(const QString &token) const
 {
     if (!isAppsWidgetToken(token))
@@ -1843,6 +1865,19 @@ void DockConfig::setShowAppIcons(bool show)
     emit showAppIconsChanged();
     // The apps block leaves (or comes back to) the cross axis, so the dock —
     // and with it the layer-shell exclusive zone — has to resize.
+    emit dockThicknessChanged();
+}
+
+void DockConfig::setAppRows(int rows)
+{
+    rows = qBound(1, rows, 2);
+    if (m_appRows == rows)
+        return;
+    m_appRows = rows;
+    m_settings.setValue(QStringLiteral("appRows"), rows);
+    emit appRowsChanged();
+    // See setWidgetAppRows(): this is not merely visual, it changes the
+    // cross-axis extent and therefore the Wayland exclusive zone.
     emit dockThicknessChanged();
 }
 
@@ -2670,7 +2705,21 @@ int DockConfig::dockThickness() const
     // of the formula, so a widgets-only dock is as thin as its widgets — unless
     // a selectable-apps widget is drawing app cells of its own, which are the
     // same size and would be cut off by the exclusive zone otherwise.
-    const int appThickness = drawsAppCells() ? appCellThickness() : 0;
+    int appThickness = 0;
+    if (drawsAppCells()) {
+        // All app blocks share the same cross-axis. The dock must reserve the
+        // widest requested one: its own Apps block when enabled, plus every
+        // selectable-apps widget even when the regular block is hidden.
+        int lanes = m_showAppIcons ? m_appRows : 0;
+        for (const QString &token : m_widgetOrder) {
+            if (isAppsWidgetToken(token))
+                lanes = qMax(lanes, widgetAppRows(token));
+        }
+        // drawsAppCells() guarantees at least one visible app block; retain a
+        // defensive floor for hand-edited configurations.
+        lanes = qMax(1, lanes);
+        appThickness = lanes * appCellThickness() + (lanes - 1) * m_spacing;
+    }
     return qMax(m_iconSize, qMax(appThickness, widgetCellThickness()))
            + (m_compact ? 12 : 20);
 }

@@ -48,6 +48,9 @@ class DockConfig : public QObject
     Q_PROPERTY(bool compact READ compact WRITE setCompact NOTIFY compactChanged)
     Q_PROPERTY(int alignment READ alignment WRITE setAlignment NOTIFY alignmentChanged)
     Q_PROPERTY(bool showAppIcons READ showAppIcons WRITE setShowAppIcons NOTIFY showAppIconsChanged)
+    // Number of lanes in the dock's own apps block. A horizontal dock turns
+    // them into rows; a vertical one turns them into columns.
+    Q_PROPERTY(int appRows READ appRows WRITE setAppRows NOTIFY appRowsChanged)
     Q_PROPERTY(bool showVolume READ showVolume WRITE setShowVolume NOTIFY showVolumeChanged)
     // Per-dock visibility of the systray launcher button (token `systray`). The
     // tray itself lives in kdock-systray; this only decides which docks draw the
@@ -728,6 +731,10 @@ public:
     // toward the thickness (see dockThickness()). The "apps" token stays in
     // widgetOrder, so its place comes back untouched.
     bool showAppIcons() const { return m_showAppIcons; }
+    // One or two lanes for the dock's own apps block. Selectable-apps widgets
+    // deliberately have their own setting below: a compact fixed launcher
+    // group need not have the same layout as the full running-apps block.
+    int appRows() const { return m_appRows; }
     bool showVolume() const { return m_showVolume; }
     bool showSystray() const { return m_showSystray; }
     // Per-dock relanzador visibility. The primary dock uses a *hidden* list
@@ -955,6 +962,7 @@ public:
     void setCompact(bool compact);
     void setAlignment(int alignment);
     void setShowAppIcons(bool show);
+    void setAppRows(int rows);
     void setShowVolume(bool show);
     void setShowSystray(bool show);
     void setRelanzadoresHidden(const QStringList &ids);
@@ -1082,6 +1090,11 @@ public:
     // The .desktop ids this widget draws as launchers (its own "pinned").
     Q_INVOKABLE QStringList widgetApps(const QString &token) const;
     Q_INVOKABLE void setWidgetApps(const QString &token, const QStringList &ids);
+    // One or two lanes for this selectable-apps widget. In a horizontal dock
+    // they are rows; in a vertical dock they are columns. Kept per instance so
+    // independent launcher groups can stay compact.
+    Q_INVOKABLE int widgetAppRows(const QString &token) const;
+    Q_INVOKABLE void setWidgetAppRows(const QString &token, int rows);
     // "Only pinned": drop the running windows that are not one of the
     // launchers above, so the widget is a fixed set of icons.
     Q_INVOKABLE bool widgetOnlyPinned(const QString &token) const;
@@ -1142,6 +1155,7 @@ signals:
     // Both carry the token: every appsel model is connected to them and each
     // one only cares about its own.
     void widgetAppsChanged(const QString &token);
+    void widgetAppRowsChanged(const QString &token);
     void widgetOnlyPinnedChanged(const QString &token);
     void widgetExcludeOthersChanged(const QString &token);
     void widgetExcludeMonitorChanged(const QString &token);
@@ -1191,6 +1205,7 @@ signals:
     void compactChanged();
     void alignmentChanged();
     void showAppIconsChanged();
+    void appRowsChanged();
     void showVolumeChanged();
     void showSystrayChanged();
     void relanzadoresHiddenChanged();
@@ -1354,6 +1369,7 @@ private:
     int m_widgetNamesRevision = 0;
     int m_gapRevision = 0;
     bool m_showAppIcons = true;
+    int m_appRows = 1;
     bool m_showSystray = false;
     QStringList m_relanzadoresHidden;
     QStringList m_relanzadoresShown;

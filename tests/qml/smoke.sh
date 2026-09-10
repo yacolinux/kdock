@@ -45,6 +45,8 @@ CASES=(
   "vertical-izq|edge=2\ndockLength=100|-1|$SCREEN_H"
   "flotante|edge=0\ndockLength=0\nalignment=1|-1|-1"
   "etiquetas-2-renglones|edge=0\ndockLength=100\niconLabelMode=1\nlabelLines=2\nlabelBold=true|$SCREEN_W|-1"
+  "dos-filas-apps|edge=0\ndockLength=100\nappRows=2|$SCREEN_W|-1"
+  "dos-filas-appsel|edge=0\ndockLength=100\nshowAppIcons=false\nwidgetOrder=appsel1\n[appsel1]\nappRows=2|$SCREEN_W|-1"
   "sin-iconos-de-apps|edge=0\ndockLength=100\nshowAppIcons=false|$SCREEN_W|-1"
   "compacto-dodge|edge=0\ndockLength=100\ncompact=true\nhideMode=2|$SCREEN_W|-1"
   "ventanas-abajo-es|edge=3\ndockLength=100\nhideMode=3\nlanguage=spanish|-1|$SCREEN_H"

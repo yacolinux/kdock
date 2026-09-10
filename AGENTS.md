@@ -160,7 +160,7 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
   (`clearAppsWidget()`), o el próximo widget que reuse el número heredaría sus apps.
 - **Config por instancia**, en su propio grupo del `.conf` del dock: `[appsel1] apps=…` (los
   `.desktop` que dibuja, o sea su "pinned"), `onlyPinned` (**default true**), `excludeOthers`
-  (default false) y `excludeMonitor` (default false). El nombre sale del
+  (default false), `excludeMonitor` (default false) y `appRows` (1 o 2, default 1). El nombre sale del
   mecanismo de siempre (`widgetNames/appsel1`), así que *Renombrar…* en la solapa Diseño anda sin
   nada nuevo. `setWidgetApps()` hace `sync()`: la lista se edita anclando desde el propio dock, y
   un logout no desenrolla (ver el handler de SIGTERM).
@@ -173,6 +173,14 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
   del dock); **no dibuja los dos separadores estáticos** del bloque de apps (sus índices no
   significan nada en otra lista); y con `onlyPinned` no le da fila a ninguna ventana que no sea
   de sus apps (`acceptsStrayWindows()`, mirado en `rebuild()` y en `placeWindow()`).
+- **Dos filas de apps** (2026-09-10): `appRows` del dock decide una o dos filas para el bloque
+  nativo **Apps**; cada `appsel<n>` tiene su propio `widgetAppRows(token)`, por lo que un grupo
+  corto de lanzadores puede conservar una fila junto a un bloque de ventanas en dos. El mismo
+  `appsComp` lo traduce a dos filas para un dock horizontal y dos columnas para uno vertical;
+  el orden sigue siendo de lectura, izquierda→derecha y luego la siguiente fila.
+  `dockThickness()` toma el máximo de los bloques visibles y reserva
+  `lanes * appCellThickness() + (lanes - 1) * spacing`, así la zona exclusiva siempre incluye
+  la segunda calle. Los setters acotan 1..2, persisten y emiten `dockThicknessChanged()`.
 - **Bloque de sobrantes** (`excludeOthers`, 2026-08-13): con el filtro prendido el widget **no le
   da fila a ninguna ventana cuya app esté en la lista de otro appsel** del mismo dock
   (`DockConfig::appsPinnedElsewhere(token)`, en minúsculas porque esa es la forma de las claves
@@ -282,7 +290,8 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
 - **Grosor**: `DockConfig::drawsAppCells()` (apps block **o** algún appsel) reemplazó a
   `showAppIcons` en `dockThickness()` y en `root.labelVisible` de `Dock.qml`. Sin eso, un dock con
   el bloque nativo apagado le reservaba a la zona exclusiva el alto de sus widgets y el widget
-  dibujaba celdas de apps más altas. Por lo mismo `measureLabels()` mide los nombres de **todos**
+  dibujaba celdas de apps más altas. Con dos filas, la fórmula además toma el `appRows` más alto
+  de los bloques que dibuja. Por lo mismo `measureLabels()` mide los nombres de **todos**
   los modelos (`config.appsWidgetTokens()` + `dockWindow.appsModelFor`), no solo los del bloque.
 - **UI**: *Diseño → "Agregar Apps Seleccionables"* lo inserta (y *Quitar separador* lo saca:
   ambos botones lo aceptan, y *Renombrar…* también, que es la única excepción a "separador =
@@ -292,7 +301,9 @@ tener **más de uno**, y para eso cada instancia tiene su token numerado.
   va en un **renglón propio** debajo de los tres filtros: un `QHBoxLayout` de casilleros no se
   achica por debajo de sus etiquetas, y la cuarta llevaba el ancho mínimo del panel de 701 a 862
   px contra un diálogo de 785 — o sea barra de scroll horizontal (medido con la sonda que linkea
-  los `.o`, ver `CLAUDE.md`).
+  los `.o`, ver `CLAUDE.md`). El combo *One/Two rows* del bloque Apps está en General; cada panel
+  Apps Seleccionables tiene el suyo en su segunda fila y el mismo selector aparece en el menú
+  contextual de cualquier ícono del bloque correspondiente.
 - **Traducción**: el token pelado `appsel` está en `defaultWidgetLabel()` solo para eso — es la
   clave del catálogo (sección `Widgets`), y `translatedWidgetLabel()` le pega el número. Los
   tokens de instancia no pueden estar en el catálogo porque no existen hasta que el usuario los

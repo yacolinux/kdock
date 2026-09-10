@@ -21,6 +21,7 @@
 #include <QDir>
 #include <QFile>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTest>
 
 namespace {
@@ -122,6 +123,41 @@ private slots:
         QVERIFY(!cfg.widgetOnlyPinned(b));
         // Y nada de esto tocó los anclados del dock.
         QCOMPARE(cfg.pinned(), dockPinned);
+    }
+
+    void eachInstanceOwnsItsRowsAndTheWidestOneSetsDockThickness()
+    {
+        const QString id = freshDockId("rows");
+        DockConfig cfg(id);
+        // Isolate the selectable widgets: the regular Apps block otherwise
+        // owns one lane and masks their first lane in the max() formula.
+        cfg.setShowAppIcons(false);
+        cfg.setIconSize(48);
+        cfg.setSpacing(8);
+        const QString a = cfg.insertAppsWidget(0);
+        const QString b = cfg.insertAppsWidget(1);
+        QCOMPARE(cfg.widgetAppRows(a), 1);
+        QCOMPARE(cfg.widgetAppRows(b), 1);
+
+        const int oneLane = cfg.dockThickness();
+        QSignalSpy thicknessSpy(&cfg, &DockConfig::dockThicknessChanged);
+        cfg.setWidgetAppRows(a, 2);
+        QCOMPARE(cfg.widgetAppRows(a), 2);
+        QCOMPARE(cfg.widgetAppRows(b), 1);
+        QCOMPARE(cfg.dockThickness(), oneLane + cfg.appCellThickness() + cfg.spacing());
+        QCOMPARE(thicknessSpy.count(), 1);
+
+        // The persisted values are clamped to exactly the two layouts QML
+        // draws, and removing the widget clears its whole INI group before the
+        // number is recycled.
+        cfg.setWidgetAppRows(a, 99);
+        QCOMPARE(cfg.widgetAppRows(a), 2);
+        cfg.setWidgetAppRows(a, -4);
+        QCOMPARE(cfg.widgetAppRows(a), 1);
+        cfg.setWidgetAppRows(a, 2);
+        cfg.removeSectionAt(cfg.widgetOrder().indexOf(a));
+        QCOMPARE(cfg.insertAppsWidget(0), a);
+        QCOMPARE(cfg.widgetAppRows(a), 1);
     }
 
     void removingAWidgetForgetsItsGroup()

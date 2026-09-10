@@ -803,6 +803,29 @@ QWidget *SettingsDialog::createGeneralTab()
     });
     form->addRow(tr("Íconos de apps:"), showAppIcons);
 
+    auto *appRows = new QComboBox(tab);
+    appRows->addItem(tr("One row"), 1);
+    appRows->addItem(tr("Two rows"), 2);
+    appRows->setCurrentIndex(qMax(0, appRows->findData(m_config->appRows())));
+    appRows->setToolTip(
+        tr("One or two lanes for the Apps block. On a horizontal dock they are rows; "
+           "on a vertical dock they are columns. Each Selectable apps widget has its "
+           "own setting in the Widgets tab and in its right-click menu."));
+    connect(appRows, &QComboBox::currentIndexChanged, this,
+            [this, appRows](int index) {
+                m_config->setAppRows(appRows->itemData(index).toInt());
+            });
+    // The same choice is available from an app icon's context menu, so the
+    // dialog follows it instead of keeping a stale selection open.
+    connect(m_config, &DockConfig::appRowsChanged, appRows, [this, appRows] {
+        const int index = appRows->findData(m_config->appRows());
+        if (index >= 0 && index != appRows->currentIndex()) {
+            const QSignalBlocker blocker(appRows);
+            appRows->setCurrentIndex(index);
+        }
+    });
+    form->addRow(tr("Apps layout:"), appRows);
+
     m_alignment = new QComboBox(tab);
     m_alignment->addItems({tr("Start (left/top)"), tr("Center"), tr("End (right/bottom)")});
     m_alignment->setCurrentIndex(m_config->alignment());
@@ -2378,7 +2401,22 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     connect(preview, &QCheckBox::toggled, this,
             [this, token](bool on) { m_config->setWidgetAppPreview(token, on); });
 
+    auto *appRows = new QComboBox(box);
+    appRows->addItem(tr("One row"), 1);
+    appRows->addItem(tr("Two rows"), 2);
+    appRows->setCurrentIndex(qMax(0, appRows->findData(m_config->widgetAppRows(token))));
+    appRows->setToolTip(
+        tr("One or two lanes for this widget. On a horizontal dock they are rows; "
+           "on a vertical dock they are columns. It is independent from the Apps "
+           "block and from the other Selectable apps widgets."));
+    connect(appRows, &QComboBox::currentIndexChanged, this,
+            [this, token, appRows](int index) {
+                m_config->setWidgetAppRows(token, appRows->itemData(index).toInt());
+            });
+
     auto *ungroupRow = new QHBoxLayout;
+    ungroupRow->addWidget(new QLabel(tr("Rows:"), box));
+    ungroupRow->addWidget(appRows);
     ungroupRow->addWidget(ungroup);
     ungroupRow->addWidget(preview);
     ungroupRow->addStretch();
@@ -2414,6 +2452,16 @@ QWidget *SettingsDialog::createAppsWidgetPanel(const QString &token)
     follow(&DockConfig::widgetExcludeMonitorChanged, excludeMonitor, &DockConfig::widgetExcludeMonitor);
     follow(&DockConfig::widgetUngroupWindowsChanged, ungroup, &DockConfig::widgetUngroupWindows);
     follow(&DockConfig::widgetAppPreviewChanged, preview, &DockConfig::widgetAppPreview);
+    connect(m_config, &DockConfig::widgetAppRowsChanged, box,
+            [this, token, appRows](const QString &changed) {
+                if (changed != token)
+                    return;
+                const int index = appRows->findData(m_config->widgetAppRows(token));
+                if (index >= 0 && index != appRows->currentIndex()) {
+                    const QSignalBlocker blocker(appRows);
+                    appRows->setCurrentIndex(index);
+                }
+            });
     syncFlags();
 
     auto *list = new QListWidget(box);

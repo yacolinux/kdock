@@ -385,6 +385,41 @@ private slots:
         QVERIFY(cfg.dockThickness() > 0);
     }
 
+    void appRowsAreBoundedPersistedAndReserveTheSecondLane()
+    {
+        // Two app rows change the cross axis, so this is also a test of the
+        // exclusive-zone formula. The standard apps block owns this setting;
+        // selectable widgets exercise their independent counterpart below.
+        const QString id = freshDockId("app-rows");
+        {
+            DockConfig cfg(id);
+            cfg.setIconSize(48);
+            cfg.setSpacing(8);
+            cfg.setIconLabelMode(DockConfig::IconOnly);
+            QCOMPARE(cfg.appRows(), 1);
+
+            const int oneLane = cfg.dockThickness();
+            QSignalSpy thicknessSpy(&cfg, &DockConfig::dockThicknessChanged);
+            cfg.setAppRows(2);
+            QCOMPARE(cfg.appRows(), 2);
+            QCOMPARE(cfg.dockThickness(), oneLane + cfg.appCellThickness() + cfg.spacing());
+            QCOMPARE(thicknessSpy.count(), 1);
+
+            // A hand-edited config and a QML caller cannot grow the dock past
+            // the two layouts the grid implements.
+            cfg.setAppRows(99);
+            QCOMPARE(cfg.appRows(), 2);
+        }
+        {
+            // A second config proves this was a QSettings value, not just the
+            // in-memory value used by the active dock.
+            DockConfig cfg(id);
+            QCOMPARE(cfg.appRows(), 2);
+            cfg.setAppRows(-4);
+            QCOMPARE(cfg.appRows(), 1);
+        }
+    }
+
     void qsettingsMapsGeneralToTheRootLevel()
     {
         // La trampa que costó meses: QSettings mapea la sección [General] de un

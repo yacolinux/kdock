@@ -2062,7 +2062,25 @@ Item {
             // which is only the apps block's.
             property string sectionToken: ""
             readonly property var appsModel: dockWindow.appsModelFor(sectionToken)
-            columns: root.horizontal ? Math.max(1, dockRepeater.count) : 1
+            // Two lanes make a horizontal dock use two rows and a vertical one
+            // use two columns. The regular Apps block and each selectable-apps
+            // widget keep their own value: a short fixed launcher group can
+            // stay compact beside a two-row running-apps block.
+            property int laneRevision: 0
+            readonly property int laneCount: sectionToken === "" ? config.appRows
+                                                                  : (laneRevision,
+                                                                     config.widgetAppRows(sectionToken))
+            function setLaneCount(count) {
+                if (sectionToken === "")
+                    config.appRows = count
+                else
+                    config.setWidgetAppRows(sectionToken, count)
+            }
+            // Grid fills left-to-right. Dividing the number of columns in half
+            // makes horizontal docks wrap after the first row; vertical docks
+            // instead use two fixed columns and grow along their edge.
+            columns: root.horizontal ? Math.max(1, Math.ceil(dockRepeater.count / laneCount))
+                                     : laneCount
             spacing: root.spacingPx
             // No-ops while every cell is the same size (icon-only mode); they
             // keep the static separators centered once labels make the app
@@ -2084,6 +2102,17 @@ Item {
                 function onRowsRemoved() { root.scheduleLabelMeasure() }
                 function onModelReset() { root.scheduleLabelMeasure() }
                 function onDataChanged() { root.scheduleLabelMeasure() }
+            }
+
+            // widgetAppRows() is a Q_INVOKABLE lookup into the widget's INI
+            // group, so its token-bearing signal is the dependency that makes
+            // the laneCount binding live while the settings dialog is open.
+            Connections {
+                target: config
+                function onWidgetAppRowsChanged(token) {
+                    if (token === appsGrid.sectionToken)
+                        appsGrid.laneRevision++
+                }
             }
 
             Repeater {
@@ -2474,6 +2503,26 @@ Item {
                             }
 
                             MenuSeparator { visible: config.groupWindows && delegateRoot.windowCount > 0 }
+                            Menu {
+                                title: qsTr("App rows")
+                                // Read by SubMenuDelegate, which builds the
+                                // parent-menu row for this submenu.
+                                property string menuIcon: "view-grid"
+                                IconMenuItem {
+                                    text: qsTr("One row")
+                                    iconName: "view-list-icons"
+                                    checkable: true
+                                    checked: appsGrid.laneCount === 1
+                                    onTriggered: appsGrid.setLaneCount(1)
+                                }
+                                IconMenuItem {
+                                    text: qsTr("Two rows")
+                                    iconName: "view-grid"
+                                    checkable: true
+                                    checked: appsGrid.laneCount === 2
+                                    onTriggered: appsGrid.setLaneCount(2)
+                                }
+                            }
                             IconMenuItem {
                                 text: qsTr("Open new instance")
                                 iconName: "list-add"
