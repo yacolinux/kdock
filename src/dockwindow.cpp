@@ -620,18 +620,27 @@ DockWindow::~DockWindow()
 
 void DockWindow::shutdown()
 {
-    hide();
-    // The QML tree refers to process-wide context objects. Drop it while those
-    // objects still exist, rather than letting QApplication dismantle bindings
-    // after their owners have already disappeared.
-    setSource(QUrl());
-    destroy();
+    releaseQml();
 
     if (m_dialog) {
         m_dialog->hide();
         delete m_dialog;
         m_dialog = nullptr;
     }
+}
+
+void DockWindow::releaseQml()
+{
+    if (m_qmlReleased)
+        return;
+    m_qmlReleased = true;
+
+    hide();
+    // The QML tree refers to process-wide context objects. Drop it while those
+    // objects still exist, rather than letting QApplication dismantle bindings
+    // after their owners have already disappeared.
+    setSource(QUrl());
+    destroy();
 }
 
 void DockWindow::openSettings()

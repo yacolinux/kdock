@@ -760,6 +760,15 @@ DockManager::Instance DockManager::buildInstance(const QString &dockId, bool pri
 
 void DockManager::teardownInstance(Instance &inst)
 {
+    // QQuickView's destructor is too late for a dock that is being replaced:
+    // Popup.Window surfaces and their scenegraph resources can remain alive
+    // while the next desktop's dock is constructed. Drop the QML tree and the
+    // layer surface while all per-dock context objects still exist. shutdown()
+    // already did this for the final application teardown; releaseQml() is
+    // idempotent so the common path is safe in both cases.
+    if (inst.window)
+        inst.window->releaseQml();
+
     // Delete the per-instance objects we created explicitly.
     delete inst.window;
     delete inst.clock2;

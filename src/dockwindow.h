@@ -156,6 +156,13 @@ public:
     // handler can still be on the stack, so the QML tree may go away now.
     void shutdown();
 
+    // Release the QML scene and native layer surface before the manager deletes
+    // this instance during a desktop/monitor transition.  The settings dialog
+    // is deliberately left to the destructor: a dock can be removed from its
+    // own dialog handler, so deleting that dialog synchronously would destroy
+    // the object whose stack frame is still running.
+    void releaseQml();
+
     // Toggle keyboard focus for the layer surface (and its popups). The dock
     // is normally keyboard-inert ("none"); widgets that need text input (the
     // app menu search) switch it to "exclusive" while open.
@@ -231,6 +238,7 @@ private:
     QList<QRect> m_contentRects; // panel pills for the outer-halo input region
     bool m_primary = false;
     bool m_screenChangePending = false;
+    bool m_qmlReleased = false;
     // wl_output the current layer surface was bound to (as a raw pointer value).
     // Tracked here because QWindow::screen() is unreliable right after a
     // layer-surface recreation and would otherwise wedge the dock on one output.
