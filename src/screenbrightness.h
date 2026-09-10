@@ -14,6 +14,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QTimer>
 #include <QVariantList>
 
 class ScreenBrightness : public QObject
@@ -60,11 +61,17 @@ signals:
 private slots:
     void onBrightnessChanged(const QString &name, int brightness);
     void onRangeChanged(const QString &name, int maxBrightness);
+    void scheduleRefresh();
+    void retryRefresh();
+    void onPrepareForSleep(bool sleeping);
 
 private:
     void connectSignals();
     int indexOf(const QString &name) const;
+    void scheduleRetry();
 
     bool m_available = false;
     QVariantList m_displays;
+    QTimer m_refreshTimer;
+    int m_refreshAttempt = 0;
 };
